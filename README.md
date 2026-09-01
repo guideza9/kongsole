@@ -1,4 +1,4 @@
-# Kong CE Control Plane
+# Kongsole
 
 M0 of `docs/DESIGN.md` (rev 4): foundation, connection registry, and the
 admin-path guard. See `PRODUCT.md` for product context and `docs/DESIGN.md`
