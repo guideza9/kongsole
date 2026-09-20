@@ -973,6 +973,46 @@ RSpec.describe "Entities (web)", type: :request do
         expect(response.body).not_to include(private_key_pem.lines[1].strip)
       end
 
+      it "does not echo unquoted key text through the JSON parse error banner" do
+        sign_in
+        body_text = private_key_pem.lines[1..-2].map(&:strip).join[0, 60]
+
+        post entities_path, params: { type: "certificate", payload_json: "{\"cert\":\"c\",\"key\": #{body_text}}" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("isn&#39;t valid JSON")
+        expect(response.body).to match(/line \d+ column \d+/)
+        expect(response.body).not_to include(body_text[0, 20])
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "does not echo unquoted key text through the parse error banner of the certificate editor" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+        body_text = private_key_pem.lines[1..-2].map(&:strip).join[0, 60]
+
+        patch entity_path(certificate), params: { payload_json: "{\"key\": #{body_text}}" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include(body_text[0, 20])
+      end
+
+      it "blanks a key or key_alt that is an array or object, not just a string" do
+        sign_in
+        headless = private_key_pem.lines[1..-2].map(&:strip).join
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: [ headless[800, 80], headless[900, 80] ], key_alt: { "x" => headless[1000, 80] } }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        # Offsets past the modulus: the cert on screen legitimately carries the public half.
+        [ 800, 900, 1000 ].each { |offset| expect(response.body).not_to include(headless[offset, 40]) }
+        expect(ChangePlan.count).to eq(0)
+      end
+
       it "proposes an SNI under its certificate, carrying the reference" do
         sign_in
         create_certificate

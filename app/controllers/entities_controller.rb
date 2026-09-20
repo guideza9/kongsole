@@ -32,7 +32,8 @@ class EntitiesController < ApplicationController
   # What a key reference looks like, ignoring case: the seeded NAME placeholder
   # has this shape (so it may stay on screen) yet is not key material.
   REFERENCE_SHAPE = %r{\A\{vault://env/[a-z0-9][a-z0-9_-]*\}\z}i
-  KEY_MATERIAL_REMOVED = "[private key removed]".freeze
+  UNPARSED_KEY_VALUE = /("key(?:_alt)?"\s*:\s*)("(?:[^"\\]|\\.)*"?|[^,}\]]*)/
+  KEY_MATERIAL_REMOVED ="[private key removed]".freeze
 
   def index
     @filters = params.permit(:q, :tags, :sort).to_h.symbolize_keys
@@ -212,16 +213,29 @@ class EntitiesController < ApplicationController
     parsed = begin
       JSON.parse(text)
     rescue JSON::ParserError
-      return Kong::CertificateKeyPolicy.scrub(text)
+      return blank_unparsed_key_values(Kong::CertificateKeyPolicy.scrub(text))
     end
     JSON.pretty_generate(blank_key_material(parsed))
+  end
+
+  # Text that isn't JSON can't be walked, so the value after each "key" /
+  # "key_alt" is found textually -- quoted (possibly unterminated) or bare up to
+  # the next delimiter -- and emptied unless it is a key reference.
+  def blank_unparsed_key_values(text)
+    text.gsub(UNPARSED_KEY_VALUE) do
+      prefix = Regexp.last_match(1)
+      value = Regexp.last_match(2)
+      quoted = value.delete_prefix('"').delete_suffix('"')
+      keep = REFERENCE_SHAPE.match?(quoted) || quoted.sub(/(?:\\[nr]|\s)+\z/, "") == KEY_MATERIAL_REMOVED
+      keep ? "#{prefix}#{value}" : "#{prefix}\"\""
+    end
   end
 
   def blank_key_material(node)
     case node
     when Hash
       node.to_h do |field, value|
-        blank = Kong::CertificateKeyPolicy::KEY_FIELDS.include?(field) && value.is_a?(String) && !key_reference_shaped?(value)
+        blank = Kong::CertificateKeyPolicy::KEY_FIELDS.include?(field) && !value.nil? && !key_reference_shaped?(value)
         [ field, blank ? blank_key_value(value) : blank_key_material(value) ]
       end
     when Array then node.map { |value| blank_key_material(value) }
@@ -233,11 +247,11 @@ class EntitiesController < ApplicationController
   # A whole-value PEM shows as the removal notice (so the operator sees why it
   # went); anything else that is not a reference is simply emptied.
   def blank_key_value(value)
-    Kong::CertificateKeyPolicy.scrub(value).strip == KEY_MATERIAL_REMOVED ? KEY_MATERIAL_REMOVED : ""
+    value.is_a?(String) && Kong::CertificateKeyPolicy.scrub(value).strip == KEY_MATERIAL_REMOVED ? KEY_MATERIAL_REMOVED : ""
   end
 
   def key_reference_shaped?(value)
-    Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value)
+    value.is_a?(String) && (Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value))
   end
 
   def render_new_with_error(message)
