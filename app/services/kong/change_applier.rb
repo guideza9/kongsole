@@ -135,7 +135,15 @@ module Kong
       response = @client.patch(member_path, body: body)
       raw = parse(response)
       entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
-      refresh_parent_certificate(entity.parent_kong_id) if @change_plan.entity_type == "sni"
+      refresh_parents_after_sni_update(entity) if @change_plan.entity_type == "sni"
+    end
+
+    # Re-pointing an SNI moves it between certificates: the new parent gains a
+    # name/SNI and the old one loses it, so both need refreshing.
+    def refresh_parents_after_sni_update(entity)
+      refresh_parent_certificate(entity.parent_kong_id)
+      previous = @change_plan.before.dig("certificate", "id")
+      refresh_parent_certificate(previous) if previous.present? && previous != entity.parent_kong_id
     end
 
     def execute_delete!

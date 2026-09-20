@@ -33,13 +33,13 @@ module Api
 
         render json: serialize_plan(plan), status: :created
       rescue Kong::ChangePlanner::InvalidChange => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
       rescue Kong::ChangeGuardrails::Violation => e
-        render json: { error: e.message }, status: :forbidden
+        render json: { error: safe_message(e.message) }, status: :forbidden
       rescue Kong::Client::EntityNotFound
         render json: { error: "entity not found" }, status: :not_found
       rescue Kong::Client::Error => e
-        render json: { error: "Kong rejected this request: #{e.message}" }, status: :bad_gateway
+        render json: { error: safe_message("Kong rejected this request: #{e.message}") }, status: :bad_gateway
       end
 
       def apply
@@ -63,11 +63,11 @@ module Api
       rescue ActiveRecord::RecordNotFound
         render json: { error: "change plan not found" }, status: :not_found
       rescue Kong::ChangeGuardrails::Violation => e
-        render json: { error: e.message }, status: :forbidden
+        render json: { error: safe_message(e.message) }, status: :forbidden
       rescue Kong::Client::Error => e
-        render json: { error: "Kong rejected this request: #{e.message}" }, status: :bad_gateway
+        render json: { error: safe_message("Kong rejected this request: #{e.message}") }, status: :bad_gateway
       rescue NotImplementedError => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
       end
 
       private
@@ -80,6 +80,12 @@ module Api
       def env_acknowledged?
         value = params[:acknowledge_env_vars]
         value == true || (value.is_a?(String) && %w[true 1].include?(value))
+      end
+
+      # Kong's and the planner's messages can quote the document they refused,
+      # which for a certificate may hold a private key: same scrub as the web.
+      def safe_message(message)
+        Kong::CertificateKeyPolicy.scrub(message)
       end
 
       def raw_attributes

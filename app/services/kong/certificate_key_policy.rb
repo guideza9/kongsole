@@ -25,7 +25,9 @@ module Kong
     # material, and the \z alternative keeps the scan linear.
     PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)/m
     PRIVATE_KEY_MARKER = /-----BEGIN [A-Z ]*PRIVATE KEY-----/
-    DEEP_SCAN_TYPES = %w[certificate ca_certificate].freeze
+    # The certificate family. Deliberately not every type: plugins and services
+    # legitimately carry other PEMs (e.g. client certificates).
+    DEEP_SCAN_TYPES = %w[certificate ca_certificate sni].freeze
     EXAMPLE = "{vault://env/cert-payments-key}".freeze
 
     def self.applies_to?(entity_type)

@@ -128,6 +128,23 @@ RSpec.describe Kong::CertificateKeyPolicy do
         expect_rejected({ "meta" => { "k" => pem_key } }, "meta.k", operation: "update", apply_mode: "pr")
       end
 
+      it "also applies to an sni (part of the certificate family), in any apply mode, without echoing the key" do
+        %w[direct pr].each do |mode|
+          expect_rejected({ "name" => "a.example", "meta" => { "k" => pem_key } }, "meta.k", entity_type: "sni", apply_mode: mode)
+          expect_rejected({ "name" => pem_key }, "name", entity_type: "sni", apply_mode: mode, operation: "create")
+          expect { check({ "name" => "a.example", "extra" => { pem_key => 1 } }, entity_type: "sni", apply_mode: mode) }
+            .to raise_error(described_class::Rejected) { |e|
+              expect(e.message).not_to include(secret_body)
+              expect(e.message).not_to include("PRIVATE")
+            }
+        end
+      end
+
+      it "still leaves other entity types (plugins, services) alone" do
+        expect { check({ "config" => { "k" => pem_key } }, entity_type: "plugin") }.not_to raise_error
+        expect { check({ "client_certificate" => pem_key }, entity_type: "service") }.not_to raise_error
+      end
+
       it "recognises algorithm-specific private key headers" do
         rsa = "-----BEGIN RSA PRIVATE KEY-----\n#{secret_body}\n-----END RSA PRIVATE KEY-----"
         expect_rejected({ "x" => rsa }, "x")

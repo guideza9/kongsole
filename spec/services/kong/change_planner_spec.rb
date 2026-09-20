@@ -512,6 +512,18 @@ RSpec.describe Kong::ChangePlanner do
         expect(ChangePlan.count).to eq(0)
       end
 
+      it "rejects a private key hidden in an SNI payload -- also on a PR-mode connection, where Kong's schema check is skipped" do
+        pem_key = "-----BEGIN PRIVATE KEY-----\nSNIKEYSENTINEL0123\n-----END PRIVATE KEY-----\n"
+        [ "direct", "pr" ].each do |mode|
+          connection.update!(apply_mode: mode)
+          [ { "name" => "a.example", "extra" => { "k" => pem_key } }, { "name" => "a.example", "extra" => { pem_key => 1 } } ].each do |attrs|
+            expect { sni_planner(operation: "create", parent_kong_id: cert_id, attributes: attrs).call }
+              .to raise_error(Kong::CertificateKeyPolicy::Rejected) { |e| expect(e.message).not_to include("SNIKEYSENTINEL") }
+          end
+        end
+        expect(ChangePlan.count).to eq(0)
+      end
+
       it "carries the certificate reference in the create body, and validates with it" do
         validate = stub_request(:post, validate_snis).to_return(ok)
 

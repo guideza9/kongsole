@@ -619,6 +619,33 @@ RSpec.describe Kong::ChangeApplier do
         expect(KongEntity.find_by(kong_id: sni_id)).to be_present
       end
 
+      it "refreshes both the old and the new certificate when an SNI update re-points it" do
+        other_id = "ffffffff-0000-0000-0000-00000000000f"
+        create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: other_id, name: "new.example")
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
+          parent_type: "certificate", parent_kong_id: cert_id)
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "update", target_kong_id: sni_id,
+          parent_kong_id: cert_id,
+          before: { "id" => sni_id, "name" => "pay.example.internal", "certificate" => { "id" => cert_id }, "updated_at" => 1_700_000_000 },
+          after: { "id" => sni_id, "name" => "pay.example.internal", "certificate" => { "id" => other_id }, "updated_at" => 1_700_000_000 },
+          diff: { "certificate" => { "from" => { "id" => cert_id }, "to" => { "id" => other_id } } },
+          base_updated_at: Time.zone.at(1_700_000_000))
+        moved = { id: sni_id, name: "pay.example.internal", certificate: { id: other_id }, updated_at: 1_700_000_001 }
+        stub_request(:get, "https://kong-admin.internal/snis/#{sni_id}")
+          .to_return(status: 200, body: moved.merge(certificate: { id: cert_id }, updated_at: 1_700_000_000).to_json)
+        stub_request(:patch, "https://kong-admin.internal/snis/#{sni_id}").to_return(status: 200, body: moved.to_json)
+        old_refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}")
+          .to_return(status: 200, body: created_cert.merge(snis: []).to_json)
+        new_refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{other_id}")
+          .to_return(status: 200, body: created_cert.merge(id: other_id, snis: [ "pay.example.internal" ]).to_json)
+
+        applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(new_refetch).to have_been_requested
+        expect(old_refetch).to have_been_requested
+      end
+
       it "soft-deletes a deleted certificate's SNIs, which Kong removes with it" do
         create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
           parent_type: "certificate", parent_kong_id: cert_id)

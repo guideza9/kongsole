@@ -122,6 +122,17 @@ module EntitiesHelper
     end
   end
 
+  # The cached certificate metadata is data we parsed once and stored, not
+  # something to trust: an unreadable timestamp shows a dash rather than
+  # failing the whole detail page.
+  def certificate_time(value)
+    return "—" if value.blank?
+
+    Time.iso8601(value).to_fs(:long)
+  rescue ArgumentError, TypeError
+    "—"
+  end
+
   # Caps a row to one line of tags so every row holds the same height --
   # a long tag list wrapping to two or three lines breaks the table's
   # rhythm far worse than a "+N" overflow marker does.

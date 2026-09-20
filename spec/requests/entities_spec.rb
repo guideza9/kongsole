@@ -789,6 +789,17 @@ RSpec.describe "Entities (web)", type: :request do
       expect(response.body).to include("CERT_PAY_KEY")
     end
 
+    it "still renders the detail page when the cached not_before is garbage" do
+      sign_in
+      certificate = create_certificate
+      certificate.update!(data: certificate.data.merge("_metadata" => metadata.merge("not_before" => "not a date")))
+
+      get entity_path(certificate)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("CN=pay.example.internal,O=Spec")
+    end
+
     it "warns when Kong still holds a plaintext key, since the tool can never have set it" do
       sign_in
       certificate = create_certificate(key: "[REDACTED]")
@@ -1168,6 +1179,28 @@ RSpec.describe "Entities (web)", type: :request do
         expect(response.body).to include("key_alt")
         expect(response.body).not_to include("BEGIN PRIVATE KEY")
         expect(ChangePlan.count).to eq(0)
+      end
+
+      it "keeps the [REDACTED] key marker through a re-render, and resubmitting what it shows is not refused by the key policy" do
+        sign_in
+        certificate = create_certificate(key: "[REDACTED]")
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem[:cert_pem], key: "[REDACTED]", snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+        validate = stub_request(:post, "https://kong-admin.test/schemas/certificates/validate")
+        validate.to_return(status: 400, body: { message: "schema violation", fields: { tags: "expected an array" } }.to_json)
+          .then.to_return(ok)
+
+        patch entity_path(certificate), params: { payload_json: { key: "[REDACTED]", key_alt: "[REDACTED]", tags: "oops" }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        shown = Nokogiri::HTML(response.body).at_css("textarea[name=payload_json]").text
+        expect(JSON.parse(shown)).to include("key" => "[REDACTED]", "key_alt" => "[REDACTED]")
+
+        patch entity_path(certificate), params: { payload_json: JSON.parse(shown).merge("tags" => [ "ok" ]).to_json }
+
+        expect(response.body).not_to include("can&#39;t be set from here")
+        expect(response).to redirect_to(change_plan_path(ChangePlan.last))
       end
 
       it "opens the certificate editor on the live document, with the reference and no plaintext hint about redaction" do

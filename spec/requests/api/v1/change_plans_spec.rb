@@ -311,6 +311,19 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(ChangePlan.count).to eq(0)
     end
 
+    it "scrubs a private key block out of Kong's schema-violation message, like the web does" do
+      stub_request(:post, "https://kong-admin.test/schemas/certificates/validate").to_return(
+        status: 400, body: { message: "schema violation", fields: { cert: "bad #{fixture[:key_pem]}" } }.to_json
+      )
+
+      plan_cert({ cert: fixture[:cert_pem], key: ref })
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)["error"]).to include("private key removed")
+      expect(response.body).not_to include("PRIVATE KEY")
+      expect(response.body).not_to include(fixture[:key_pem].lines[1].strip)
+    end
+
     it "returns 422 for a decK placeholder on a direct-mode connection" do
       plan_cert({ cert: fixture[:cert_pem], key: '${{ env "DECK_CERT_A" }}' })
 
@@ -367,6 +380,19 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
 
         expect(response).to have_http_status(:ok)
         expect(plan.reload.status).to eq("applied")
+      end
+
+      it "scrubs a private key block out of an error raised while applying" do
+        allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+          .and_raise(Kong::ChangeGuardrails::Violation, "refused: #{fixture[:key_pem]}")
+
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name, acknowledge_env_vars: true },
+          headers: auth(token), as: :json
+
+        expect(response).to have_http_status(:forbidden)
+        expect(JSON.parse(response.body)["error"]).to include("private key removed")
+        expect(response.body).not_to include("PRIVATE KEY")
+        expect(response.body).not_to include(fixture[:key_pem].lines[1].strip)
       end
 
       it "does not treat the string \"false\" as an acknowledgement" do

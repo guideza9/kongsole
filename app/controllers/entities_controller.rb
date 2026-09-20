@@ -259,8 +259,13 @@ class EntitiesController < ApplicationController
     value.is_a?(String) && Kong::CertificateKeyPolicy.scrub(value).strip == KEY_MATERIAL_REMOVED ? KEY_MATERIAL_REMOVED : ""
   end
 
+  # Kong::Redactor::MARK is what a plaintext key Kong holds looks like in the
+  # editor; it is not key material and the policy accepts it back, so it must
+  # round-trip rather than be emptied.
   def key_reference_shaped?(value)
-    value.is_a?(String) && (Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value))
+    return false unless value.is_a?(String)
+
+    value == Kong::Redactor::MARK || Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value)
   end
 
   def render_new_with_error(message)
