@@ -41,6 +41,12 @@
   </p>
 <% end %>
 
+<% if @dependent_snis.present? %>
+  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+    Deleting this certificate also removes its <%= @dependent_snis.size %> SNI<%= "s" unless @dependent_snis.size == 1 %>: <%= @dependent_snis.map(&:name).join(", ") %>
+  </p>
+<% end %>
+
 <div class="max-w-2xl grid gap-4">
   <%
     # What "changed from original" means per operation -- shared by the
@@ -118,6 +124,20 @@
 
   <% if @change_plan.status == "pending" && !@change_plan.expired? %>
     <%= form_with url: apply_change_plan_path(@change_plan), method: :post, class: "panel p-4 grid gap-4" do %>
+<% if @env_vars.present? %>
+  <div class="grid gap-2">
+    <label class="flex items-start gap-2 text-sm" style="color: var(--color-ink)">
+      <input type="checkbox" name="acknowledge_env_vars" value="1" required class="mt-0.5" style="accent-color: var(--color-accent)" />
+      <span>
+        I confirm <span class="font-mono"><%= @env_vars.join(", ") %></span>
+        <%= @env_vars.size == 1 ? "is" : "are" %> set in the environment of every Kong node on <%= current_connection.name %>.
+      </span>
+    </label>
+    <p class="text-xs" style="color: var(--color-ink-faint)">
+      Kong doesn't check this. If a variable is missing, TLS for this certificate's hostnames fails until it is set.
+    </p>
+  </div>
+<% end %>
       <% if @requires_confirmation_name %>
         <div>
           <label class="block text-sm font-medium mb-1" style="color: var(--color-danger)">

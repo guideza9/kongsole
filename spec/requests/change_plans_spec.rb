@@ -1,6 +1,7 @@
 require "rails_helper"
 require "open3"
 require "tmpdir"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe "ChangePlans (web)", type: :request do
   let(:connection) { create(:kong_connection, admin_url: "https://kong-admin.test", credential_mode: "session") }
@@ -259,6 +260,109 @@ RSpec.describe "ChangePlans (web)", type: :request do
 
       get change_plan_path(plan)
       expect(response.body).to include("Pushed to branch")
+    end
+  end
+
+  describe "certificates and SNIs (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:sni_id) { "eeeeeeee-0000-0000-0000-00000000000e" }
+    let(:ref) { "{vault://env/cert-pay-key}" }
+    let(:fixture) { PemFixtures.self_signed(days: 60) }
+    let(:created_cert) do
+      { id: cert_id, cert: fixture[:cert_pem], key: ref, snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000 }
+    end
+
+    def create_cert_plan
+      create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "create", target_kong_id: nil,
+        before: {}, after: { "cert" => fixture[:cert_pem], "key" => ref, "snis" => [ "pay.example.internal" ] },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+    end
+
+    it "asks the operator to confirm the env var Kong will read before applying a vault-referenced key" do
+      sign_in
+
+      get change_plan_path(create_cert_plan)
+
+      expect(response.body).to include("CERT_PAY_KEY")
+      expect(response.body).to include('name="acknowledge_env_vars"')
+      expect(response.body).to include("Kong doesn").and include("check")
+    end
+
+    it "shows no such checkbox for an edit that leaves the key alone, or once applied" do
+      sign_in
+      tags_plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+        before: { "id" => cert_id, "key" => ref, "tags" => [] }, after: { "id" => cert_id, "key" => ref, "tags" => [ "core" ] },
+        diff: { "tags" => { "from" => [], "to" => [ "core" ] } })
+      applied = create_cert_plan.tap { |p| p.update!(status: "applied") }
+
+      get change_plan_path(tags_plan)
+      expect(response.body).not_to include("acknowledge_env_vars")
+      get change_plan_path(applied)
+      expect(response.body).not_to include("acknowledge_env_vars")
+    end
+
+    it "refuses to apply without the acknowledgement, says which variable, and touches nothing" do
+      sign_in
+      plan = create_cert_plan
+
+      post apply_change_plan_path(plan)
+
+      expect(response).to redirect_to(change_plan_path(plan))
+      expect(flash[:alert]).to include("CERT_PAY_KEY")
+      expect(plan.reload.status).to eq("pending")
+      expect(WebMock).not_to have_requested(:post, "https://kong-admin.test/certificates")
+    end
+
+    it "applies once the box is ticked, and records the confirmation in the audit event" do
+      sign_in
+      plan = create_cert_plan
+      post_cert = stub_request(:post, "https://kong-admin.test/certificates").to_return(status: 201, body: created_cert.to_json)
+
+      post apply_change_plan_path(plan), params: { acknowledge_env_vars: "1" }
+
+      expect(post_cert).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      expect(AuditEvent.last.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+    end
+
+    it "lands on the certificate's page after an SNI is added, where the new SNI now shows" do
+      sign_in
+      certificate = create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: cert_id, name: "pay.example.internal")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+        parent_kong_id: cert_id, before: {}, after: { "name" => "api.example.internal", "certificate" => { "id" => cert_id } },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+      stub_request(:post, "https://kong-admin.test/snis")
+        .to_return(status: 201, body: { id: sni_id, name: "api.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+      stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}")
+        .to_return(status: 200, body: created_cert.merge(snis: %w[api.example.internal pay.example.internal]).to_json)
+
+      post apply_change_plan_path(plan)
+
+      expect(response).to redirect_to(entity_path(certificate))
+    end
+
+    it "warns that deleting a certificate also removes its SNIs" do
+      sign_in
+      %w[a.example b.example].each do |host|
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", name: host, parent_type: "certificate", parent_kong_id: cert_id)
+      end
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+        before: { "id" => cert_id, "snis" => %w[a.example b.example], "tags" => [] })
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("also removes its 2 SNIs").and include("a.example")
+    end
+
+    it "titles a certificate plan by its first SNI, and asks a protected one to be confirmed by that name" do
+      sign_in
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+        before: { "id" => cert_id, "snis" => %w[b.example a.example], "tags" => [ "protected" ] })
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("Delete a.example")
+      expect(response.body).to include("Type <span class=\"font-mono\">a.example</span>")
     end
   end
 end
