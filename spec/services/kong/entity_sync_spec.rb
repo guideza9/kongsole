@@ -1,4 +1,5 @@
 require "rails_helper"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe Kong::EntitySync do
   # Kong entity ids are always real UUIDs -- kong_entities.kong_id is a uuid
@@ -375,9 +376,158 @@ RSpec.describe Kong::EntitySync do
     end
   end
 
+  describe "certificates, SNIs and CA certificates (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:sni_id) { "eeeeeeee-0000-0000-0000-00000000000e" }
+    let(:ca_id) { "ffffffff-0000-0000-0000-00000000000f" }
+    let(:fixture) { PemFixtures.self_signed(cn: "pay.example.internal", days: 45, sans: %w[pay.example.internal]) }
+    let(:cert_sync) { described_class.new(connection: connection, client: client, entity_type: "certificate") }
+
+    def stub_list(path, data)
+      stub_request(:get, "https://kong-admin.internal/#{path}").with(query: { size: "100" })
+        .to_return(status: 200, body: { data: data, offset: nil }.to_json)
+    end
+
+    def kong_cert(overrides = {})
+      { id: cert_id, cert: fixture[:cert_pem], key: "{vault://env/cert-pay-key}", snis: %w[pay.example.internal api.example.internal],
+        tags: [ "core" ], created_at: 1_700_000_000, updated_at: 1_700_000_100 }.merge(overrides)
+    end
+
+    it "names a certificate by its first SNI (sorted) and keys it by the sorted SNI list" do
+      stub_list("certificates", [ kong_cert(snis: %w[b.example a.example]) ])
+
+      cert_sync.call
+
+      row = KongEntity.find_by(kong_id: cert_id)
+      expect(row.entity_type).to eq("certificate")
+      expect(row.name).to eq("a.example")
+      expect(row.logical_key).to eq("a.example,b.example")
+      expect(row.parent_type).to be_nil
+    end
+
+    it "falls back to the fingerprint's first 12 characters when the certificate has no SNI" do
+      stub_list("certificates", [ kong_cert(snis: []) ])
+
+      cert_sync.call
+
+      row = KongEntity.find_by(kong_id: cert_id)
+      expect(row.name).to eq(fixture[:der_sha256][0..11])
+      expect(row.logical_key).to eq(fixture[:der_sha256])
+    end
+
+    it "caches metadata and the not_after column, and never the PEM" do
+      stub_list("certificates", [ kong_cert(cert_alt: fixture[:cert_pem]) ])
+
+      cert_sync.call
+
+      row = KongEntity.find_by(kong_id: cert_id)
+      expect(row.not_after).to be_within(5.seconds).of(45.days.from_now)
+      expect(row.data).not_to have_key("cert")
+      expect(row.data).not_to have_key("cert_alt")
+      expect(row.data["_metadata"]).to include("fingerprint_sha256" => fixture[:der_sha256], "sans" => [ "DNS:pay.example.internal" ])
+      expect(row.data.to_json).not_to include("BEGIN CERTIFICATE")
+      expect(row.expiry_status).to eq("ok") # 45 days out is beyond the 30-day warning tier
+    end
+
+    it "keeps a vault reference readable but redacts a plaintext key that Kong hands back" do
+      stub_list("certificates", [
+        kong_cert,
+        kong_cert(id: "99999999-0000-0000-0000-000000000009", snis: [ "legacy.example" ], key: fixture[:key_pem])
+      ])
+
+      cert_sync.call
+
+      expect(KongEntity.find_by(kong_id: cert_id).data["key"]).to eq("{vault://env/cert-pay-key}")
+      legacy = KongEntity.find_by(kong_id: "99999999-0000-0000-0000-000000000009")
+      expect(legacy.data["key"]).to eq("[REDACTED]")
+      expect(legacy.data.to_json).not_to include("PRIVATE KEY")
+    end
+
+    it "never fails a sync over a certificate whose PEM will not parse" do
+      stub_list("certificates", [ kong_cert(cert: "garbage"), kong_cert(id: "88888888-0000-0000-0000-000000000008", snis: [ "ok.example" ]) ])
+
+      result = cert_sync.call
+
+      expect(result.synced_count).to eq(2)
+      broken = KongEntity.find_by(kong_id: cert_id)
+      expect(broken.not_after).to be_nil
+      expect(broken.expiry_status).to be_nil
+      expect(broken.data["_metadata"].keys).to eq([ "parse_error" ])
+      expect(broken.name).to eq("api.example.internal") # named from the SNI list, which needs no PEM
+    end
+
+    it "re-syncing updates not_after and the digest when the certificate is replaced" do
+      stub_list("certificates", [ kong_cert ])
+      cert_sync.call
+      first = KongEntity.find_by(kong_id: cert_id)
+
+      renewed = PemFixtures.self_signed(cn: "pay.example.internal", days: 365)
+      stub_list("certificates", [ kong_cert(cert: renewed[:cert_pem]) ])
+      cert_sync.call
+
+      second = KongEntity.find_by(kong_id: cert_id)
+      expect(second.not_after).to be > first.not_after + 300.days
+      expect(second.digest).not_to eq(first.digest)
+      expect(KongEntity.where(kong_id: cert_id).count).to eq(1)
+    end
+
+    it "syncs an SNI by hostname, parented to its certificate" do
+      stub_list("snis", [ { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, tags: [] } ])
+
+      described_class.new(connection: connection, client: client, entity_type: "sni").call
+
+      row = KongEntity.find_by(kong_id: sni_id)
+      expect(row.name).to eq("pay.example.internal")
+      expect(row.logical_key).to eq("pay.example.internal")
+      expect(row.parent_type).to eq("certificate")
+      expect(row.parent_kong_id).to eq(cert_id)
+      expect(row.not_after).to be_nil
+    end
+
+    it "syncs a CA certificate by its cert_digest, with metadata and expiry" do
+      digest = "9852b7219ac320e83b0cddcc132766331667e7b290477751e5397eeb5aef4dd5"
+      stub_list("ca_certificates", [ { id: ca_id, cert: fixture[:cert_pem], cert_digest: digest, tags: [] } ])
+
+      described_class.new(connection: connection, client: client, entity_type: "ca_certificate").call
+
+      row = KongEntity.find_by(kong_id: ca_id)
+      expect(row.name).to eq(digest[0..11])
+      expect(row.logical_key).to eq(digest)
+      expect(row.not_after).to be_within(5.seconds).of(45.days.from_now)
+      expect(row.data).not_to have_key("cert")
+    end
+
+    it "soft-deletes a certificate that is no longer in Kong" do
+      gone = create(:kong_entity, kong_connection: connection, entity_type: "certificate",
+        kong_id: "77777777-0000-0000-0000-000000000007", name: "old.example")
+      stub_list("certificates", [ kong_cert ])
+
+      result = cert_sync.call
+
+      expect(result.removed_count).to eq(1)
+      expect(gone.reload.deleted_at).to be_present
+    end
+
+    it "orders certificates before their SNIs in the connection sync" do
+      order = described_class::TYPES_IN_SYNC_ORDER
+
+      expect(order.index("certificate")).to be < order.index("sni")
+      expect(order.last(3)).to eq(%w[certificate sni ca_certificate])
+    end
+
+    it "re-syncs a single certificate through sync_one (used after an SNI write)" do
+      stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}")
+        .to_return(status: 200, body: kong_cert(snis: [ "new.example" ]).to_json)
+
+      entity = described_class.sync_one(connection: connection, client: client, entity_type: "certificate", kong_id: cert_id)
+
+      expect(entity.name).to eq("new.example")
+    end
+  end
+
   describe ".sync_connection" do
     it "syncs every entity type in dependency order (services/consumers/upstreams before their children)" do
-      %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
+      %w[services consumers routes key-auths basic-auths plugins upstreams certificates snis ca_certificates].each do |path|
         stub_request(:get, "https://kong-admin.internal/#{path}")
           .with(query: { size: "100" })
           .to_return(status: 200, body: { data: [], offset: nil }.to_json)
@@ -386,14 +536,14 @@ RSpec.describe Kong::EntitySync do
       result = described_class.sync_connection(connection: connection, client: client)
 
       expect(result.synced_count).to eq(0)
-      %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
+      %w[services consumers routes key-auths basic-auths plugins upstreams certificates snis ca_certificates].each do |path|
         expect(WebMock).to have_requested(:get, "https://kong-admin.internal/#{path}").with(query: { size: "100" })
       end
     end
 
     it "syncs upstreams before targets, so a just-created upstream's targets are fetched in the same run" do
       upstream_id = "aaaaaaaa-0000-0000-0000-00000000000a"
-      %w[services consumers routes key-auths basic-auths plugins].each do |path|
+      %w[services consumers routes key-auths basic-auths plugins certificates snis ca_certificates].each do |path|
         stub_request(:get, "https://kong-admin.internal/#{path}")
           .with(query: { size: "100" })
           .to_return(status: 200, body: { data: [], offset: nil }.to_json)

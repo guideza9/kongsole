@@ -110,6 +110,15 @@ RSpec.describe "Entities (web)", type: :request do
     stub_request(:get, "https://kong-admin.test/upstreams")
       .with(query: { size: "100" })
       .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    stub_request(:get, "https://kong-admin.test/certificates")
+      .with(query: { size: "100" })
+      .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    stub_request(:get, "https://kong-admin.test/snis")
+      .with(query: { size: "100" })
+      .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    stub_request(:get, "https://kong-admin.test/ca_certificates")
+      .with(query: { size: "100" })
+      .to_return(status: 200, body: { data: [], offset: nil }.to_json)
 
     post sync_entities_path
 
@@ -119,7 +128,7 @@ RSpec.describe "Entities (web)", type: :request do
 
   it "returns to the tab Sync now was clicked from, not always services" do
     sign_in
-    %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
+    %w[services consumers routes key-auths basic-auths plugins upstreams certificates snis ca_certificates].each do |path|
       stub_request(:get, "https://kong-admin.test/#{path}")
         .with(query: { size: "100" })
         .to_return(status: 200, body: { data: [], offset: nil }.to_json)
@@ -132,7 +141,7 @@ RSpec.describe "Entities (web)", type: :request do
 
   it "falls back to services if Sync now somehow posts an unknown type" do
     sign_in
-    %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
+    %w[services consumers routes key-auths basic-auths plugins upstreams certificates snis ca_certificates].each do |path|
       stub_request(:get, "https://kong-admin.test/#{path}")
         .with(query: { size: "100" })
         .to_return(status: 200, body: { data: [], offset: nil }.to_json)
@@ -527,7 +536,7 @@ RSpec.describe "Entities (web)", type: :request do
     describe "syncing" do
       it "syncs upstreams and their targets from the Sync now button" do
         sign_in
-        %w[services consumers key-auths basic-auths plugins].each do |path|
+        %w[services consumers key-auths basic-auths plugins certificates snis ca_certificates].each do |path|
           stub_request(:get, "https://kong-admin.test/#{path}").with(query: { size: "100" })
             .to_return(status: 200, body: { data: [], offset: nil }.to_json)
         end

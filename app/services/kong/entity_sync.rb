@@ -13,7 +13,11 @@ module Kong
     # it's attached to, and needs those already synced. upstream/target come
     # after: a target is listed per synced upstream (Kong has no global
     # /targets), so upstreams must already be in the read-model.
-    TYPES_IN_SYNC_ORDER = %w[service consumer route keyauth_credential basicauth_credential plugin upstream target].freeze
+    # certificate/sni/ca_certificate go last: an SNI's parent is a certificate,
+    # so certificates precede them (M5b).
+    TYPES_IN_SYNC_ORDER = %w[service consumer route keyauth_credential basicauth_credential plugin upstream target
+                             certificate sni ca_certificate].freeze
+    CERTIFICATE_TYPES = %w[certificate ca_certificate].freeze
 
     Result = Struct.new(:synced_count, :removed_count, keyword_init: true) do
       def +(other)
@@ -59,8 +63,10 @@ module Kong
 
     def upsert(raw)
       redacted = Kong::Redactor.call(@entity_type, raw)
+      metadata = certificate_metadata(raw)
+      data = metadata ? cached_certificate_data(redacted[:data], metadata) : redacted[:data]
       now = Time.current
-      identity = identify(raw)
+      identity = identify(raw, metadata)
 
       entity = KongEntity.find_or_initialize_by(
         kong_connection: @connection, entity_type: @entity_type, kong_id: raw.fetch("id")
@@ -76,7 +82,8 @@ module Kong
         kong_updated_at: from_kong_timestamp(raw["updated_at"]),
         enabled: raw["enabled"],
         is_admin_path: @connection.admin_path?(raw.fetch("id")),
-        data: redacted[:data],
+        not_after: Kong::CertificateMetadata.not_after_time(metadata),
+        data: data,
         digest: redacted[:digest],
         synced_at: now,
         deleted_at: nil
@@ -128,7 +135,7 @@ module Kong
     # synced name (falling back to the parent id's first 8 chars if that
     # parent hasn't been synced yet) -- never on a credential's own `key`/
     # `password`, which is exactly what Kong::Redactor strips.
-    def identify(raw)
+    def identify(raw, metadata = nil)
       case @entity_type
       when "service"
         { name: raw["name"], logical_key: raw["name"], parent_type: nil, parent_kong_id: nil }
@@ -153,6 +160,13 @@ module Kong
         parent_id = raw.dig("upstream", "id")
         name = raw["target"]
         { name: name, logical_key: "#{parent_name_for(parent_id)}/#{name}", parent_type: "upstream", parent_kong_id: parent_id }
+      when "certificate"
+        identify_certificate(raw, metadata)
+      when "sni"
+        { name: raw["name"], logical_key: raw["name"], parent_type: "certificate", parent_kong_id: raw.dig("certificate", "id") }
+      when "ca_certificate"
+        digest = raw["cert_digest"] || metadata&.dig("fingerprint_sha256") || raw.fetch("id")
+        { name: digest[0..11], logical_key: digest, parent_type: nil, parent_kong_id: nil }
       else
         raise ArgumentError, "no identity rule for entity_type #{@entity_type.inspect}"
       end
@@ -170,6 +184,25 @@ module Kong
       scope_label = scope_type ? "#{scope_type}:#{parent_id[0..7]}" : "global"
       name = raw["name"]
       { name: name, logical_key: "#{name}@#{scope_label}", parent_type: scope_type, parent_kong_id: parent_id }
+    end
+
+    def certificate_metadata(raw)
+      Kong::CertificateMetadata.parse(raw["cert"]) if CERTIFICATE_TYPES.include?(@entity_type)
+    end
+
+    # docs/DESIGN.md section 8: cache metadata, not the certificate body.
+    def cached_certificate_data(data, metadata)
+      data.except("cert", "cert_alt").merge("_metadata" => metadata)
+    end
+
+    # DESIGN section 7: first SNI (sorted), else fingerprint[0..11]; the
+    # logical_key is the sorted SNI set, else the whole fingerprint.
+    def identify_certificate(raw, metadata)
+      snis = Array(raw["snis"]).sort
+      fingerprint = metadata&.dig("fingerprint_sha256")
+      fallback = fingerprint ? fingerprint[0..11] : raw.fetch("id")[0..7]
+      key = snis.any? ? snis.join(",") : (fingerprint || raw.fetch("id"))
+      { name: snis.first || fallback, logical_key: key, parent_type: nil, parent_kong_id: nil }
     end
 
     def parent_name_for(parent_kong_id)
