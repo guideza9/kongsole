@@ -109,18 +109,18 @@ class EntitiesController < ApplicationController
     # round trip -- a redirect would hand back the unedited document and
     # throw away however long they spent in the textarea.
     @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
-    @payload_error = e.message
+    @payload_error = safe_message(e.message)
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangePlanner::SchemaViolation, Kong::CertificateKeyPolicy::Rejected => e
-    return redirect_to(edit_entity_path(@entity), alert: e.message) if params[:payload_json].blank?
+    return redirect_to(edit_entity_path(@entity), alert: safe_message(e.message)) if params[:payload_json].blank?
 
     # Kong refused the document itself: keep the operator's JSON on screen
     # with Kong's per-field message, same as an unparseable payload.
     @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
-    @payload_error = e.message
+    @payload_error = safe_message(e.message)
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangeGuardrails::Violation => e
-    redirect_to edit_entity_path(@entity), alert: e.message
+    redirect_to edit_entity_path(@entity), alert: safe_message(e.message)
   rescue Kong::Client::Error => e
     redirect_to edit_entity_path(@entity), alert: "Couldn't read the current state from Kong: #{e.message}"
   end
@@ -218,10 +218,26 @@ class EntitiesController < ApplicationController
     rescue JSON::ParserError
       nil
     end
-    return JSON.pretty_generate(blank_key_material(parsed)) if parsed.is_a?(Hash)
+    return JSON.pretty_generate(blank_key_material(parsed)) if parsed.is_a?(Hash) && !key_material_in_names?(parsed)
 
     @payload_withheld = true
     JSON.pretty_generate(yield)
+  end
+
+  # A field *name* can carry key material too (the policy's deep scan treats it
+  # so), and names are not rewritten here: such a document is withheld whole.
+  def key_material_in_names?(node)
+    case node
+    when Hash
+      node.any? { |name, value| Kong::CertificateKeyPolicy.scrub(name) != name.to_s || key_material_in_names?(value) }
+    when Array then node.any? { |value| key_material_in_names?(value) }
+    else false
+    end
+  end
+
+  # Kong's and the planner's messages can quote the document they refused.
+  def safe_message(message)
+    Kong::CertificateKeyPolicy.scrub(message)
   end
 
   def blank_key_material(node)
@@ -249,7 +265,7 @@ class EntitiesController < ApplicationController
 
   def render_new_with_error(message)
     @payload_json = echoed_payload(@creatable_type) { seed_payload }
-    @payload_error = message
+    @payload_error = safe_message(message)
     render :new, status: :unprocessable_entity
   end
 
@@ -302,7 +318,7 @@ class EntitiesController < ApplicationController
     body = response.body
     raw = body.is_a?(String) ? JSON.parse(body) : body
     Kong::Redactor.call(@entity.entity_type, raw)[:data].except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
-  rescue Kong::Client::Error
+  rescue Kong::Client::Error, JSON::ParserError
     @payload_stale = true
     @entity.data.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
   end

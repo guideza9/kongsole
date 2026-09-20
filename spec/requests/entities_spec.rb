@@ -960,6 +960,79 @@ RSpec.describe "Entities (web)", type: :request do
         end
       end
 
+      {
+        "at the top level" => { "-----BEGIN PRIVATE KEY-----NAMESENTINEL2" => 1, "key" => "{vault://env/cert-x-key}" },
+        "inside an snis array" => { "key" => "{vault://env/cert-x-key}", "snis" => [ { "-----BEGIN PRIVATE KEY-----NAMESENTINEL2" => 1 } ] },
+        "inside an snis hash" => { "key" => "{vault://env/cert-x-key}", "snis" => { "-----BEGIN PRIVATE KEY-----NAMESENTINEL2" => 1 } }
+      }.each do |where, document|
+        it "withholds a document with key material in a field name, #{where} (create)" do
+          sign_in
+
+          post entities_path, params: { type: "certificate", payload_json: document.to_json }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.body).not_to include("NAMESENTINEL2")
+          expect(response.body).to include("wasn't kept")
+          expect(ChangePlan.count).to eq(0)
+        end
+
+        it "withholds a document with key material in a field name, #{where} (update)" do
+          sign_in
+          certificate = create_certificate
+          stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+            id: cert_id, cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [], tags: [], updated_at: 1_700_000_000
+          }.to_json)
+
+          patch entity_path(certificate), params: { payload_json: document.to_json }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.body).not_to include("NAMESENTINEL2")
+          expect(response.body).to include("wasn't kept")
+        end
+      end
+
+      it "scrubs a private key block out of Kong's own error message" do
+        sign_in
+        stub_request(:post, "https://kong-admin.test/schemas/certificates/validate").to_return(
+          status: 400, body: { message: "schema violation", fields: { cert: "bad #{private_key_pem}" } }.to_json
+        )
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}" }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("private key removed")
+        expect(response.body).not_to include("BEGIN PRIVATE KEY")
+        expect(response.body).not_to include(private_key_pem.lines[1].strip)
+      end
+
+      it "falls back to the cached document when Kong answers the editor's fetch with non-JSON" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(
+          status: 200, body: "<html>proxy error</html>", headers: { "Content-Type" => "text/html" }
+        )
+
+        patch entity_path(certificate), params: { payload_json: '{"key": HEADLESSSENTINEL0123456789' }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include("HEADLESSSENTINEL")
+        expect(response.body).to include("wasn't kept")
+      end
+
+      it "opens the editor from the cached document when Kong answers with non-JSON" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(
+          status: 200, body: "<html>proxy error</html>", headers: { "Content-Type" => "text/html" }
+        )
+
+        get edit_entity_path(certificate)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("{vault://env/cert-pay-key}")
+      end
+
       it "withholds unparseable text from the certificate editor too, showing the live document" do
         sign_in
         certificate = create_certificate
