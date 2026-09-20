@@ -131,6 +131,12 @@ module EntitiesHelper
     entity.tags.first(MAX_INLINE_TAGS)
   end
 
+  # "ca_certificate" reads badly in a heading; every other creatable type's
+  # raw name is already fine.
+  def creatable_type_name(type)
+    { "ca_certificate" => "CA certificate" }.fetch(type.to_s, type.to_s)
+  end
+
   def hidden_tag_count(entity)
     [ entity.tags.size - MAX_INLINE_TAGS, 0 ].max
   end

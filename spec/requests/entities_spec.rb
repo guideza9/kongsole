@@ -820,5 +820,208 @@ RSpec.describe "Entities (web)", type: :request do
 
       expect(response.body).not_to include("Key reference")
     end
+
+    describe "forms" do
+      let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+      let(:pem) { PemFixtures.self_signed(days: 60) }
+      let(:private_key_pem) { pem[:key_pem] }
+
+      it "opens a certificate form seeded with a key placeholder that must be edited, and explains the reference" do
+        sign_in
+
+        get new_entity_path(type: "certificate")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("New certificate")
+        expect(response.body).to include("{vault://env/cert-NAME-key}")
+        expect(response.body).to include("CERT_PAYMENTS_KEY")
+        expect(response.body).to include("can't be pasted") # static template text, not user content, so not HTML-escaped
+      end
+
+      it "mentions the decK placeholder only on a PR-mode connection" do
+        sign_in
+        get new_entity_path(type: "certificate")
+        expect(response.body).not_to include("DECK_")
+
+        connection.update!(apply_mode: "pr")
+        get new_entity_path(type: "certificate")
+        expect(response.body).to include("DECK_")
+      end
+
+      it "opens CA certificate and SNI forms" do
+        sign_in
+        create_certificate
+
+        get new_entity_path(type: "ca_certificate")
+        expect(response.body).to include("New CA certificate")
+        expect(response.body).not_to include("&quot;key&quot;")
+
+        get new_entity_path(type: "sni", parent_kong_id: cert_id)
+        expect(response.body).to include("certificate: pay.example.internal")
+      end
+
+      it "sends an SNI form with no known certificate back to the certificate list" do
+        sign_in
+
+        get new_entity_path(type: "sni", parent_kong_id: cert_id)
+
+        expect(response).to redirect_to(entities_path(type: "certificate"))
+      end
+
+      it "offers New certificate and New CA certificate buttons on their own tabs only" do
+        sign_in
+
+        get entities_path(type: "certificate")
+        expect(response.body).to include("New certificate")
+        get entities_path(type: "ca_certificate")
+        expect(response.body).to include("New CA certificate")
+        get entities_path(type: "service")
+        expect(response.body).not_to include("New certificate")
+      end
+
+      it "proposes a certificate whose key is a vault reference" do
+        sign_in
+        validate = stub_request(:post, "https://kong-admin.test/schemas/certificates/validate").to_return(ok)
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [ "pay.example.internal" ] }.to_json }
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.entity_type).to eq("certificate")
+        expect(plan.after["key"]).to eq("{vault://env/cert-pay-key}")
+        expect(validate).to have_been_requested
+      end
+
+      it "refuses a pasted private key: 422, a fix in the message, no plan, no Kong call, and the key is not echoed back" do
+        sign_in
+
+        post entities_path, params: { type: "certificate", payload_json: { cert: pem[:cert_pem], key: private_key_pem }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("{vault://env/")
+        expect(response.body).to include("private key removed")
+        expect(response.body).not_to include("PRIVATE KEY")
+        expect(response.body).not_to include(private_key_pem.lines[1].strip)
+        expect(ChangePlan.count).to eq(0)
+        expect(WebMock).not_to have_requested(:post, /schemas/)
+      end
+
+      it "refuses the unedited seed, whose NAME placeholder is not a valid reference" do
+        sign_in
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: "{vault://env/cert-NAME-key}", snis: [], tags: [] }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "refuses a decK placeholder on a direct-mode connection" do
+        sign_in
+
+        post entities_path, params: { type: "certificate", payload_json: { cert: pem[:cert_pem], key: '${{ env "DECK_CERT_A" }}' }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("PR mode")
+      end
+
+      it "does not echo a private key even when the JSON is malformed" do
+        sign_in
+        broken = "{ \"key\": \"#{private_key_pem.gsub("\n", '\n')}\" oops"
+
+        post entities_path, params: { type: "certificate", payload_json: broken }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include("BEGIN PRIVATE KEY")
+        expect(response.body).to include("private key removed")
+      end
+
+      it "does not echo a key pasted without its BEGIN line, in key or key_alt" do
+        sign_in
+        body_lines = private_key_pem.lines[1..-2].map(&:strip).join
+        headless = "#{body_lines}\n-----END PRIVATE KEY-----"
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: headless, key_alt: body_lines }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include(body_lines[0, 40])
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "keeps a reference-shaped key on the re-rendered editor and still blanks anything else" do
+        sign_in
+        secret = "not-a-reference-#{SecureRandom.hex(8)}"
+
+        post entities_path, params: { type: "certificate",
+          payload_json: { cert: pem[:cert_pem], key: "{vault://env/cert-NAME-key}", key_alt: secret }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("{vault://env/cert-NAME-key}")
+        expect(response.body).not_to include(secret)
+      end
+
+      it "does not echo a key sitting in an unparseable body's PEM block even without a closing quote" do
+        sign_in
+        truncated = "{ \"key\": \"#{private_key_pem.lines.first(3).join}"
+
+        post entities_path, params: { type: "certificate", payload_json: truncated }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include("BEGIN PRIVATE KEY")
+        expect(response.body).not_to include(private_key_pem.lines[1].strip)
+      end
+
+      it "proposes an SNI under its certificate, carrying the reference" do
+        sign_in
+        create_certificate
+        stub_request(:post, "https://kong-admin.test/schemas/snis/validate").to_return(ok)
+
+        post entities_path, params: { type: "sni", parent_kong_id: cert_id, payload_json: { name: "api.example.internal" }.to_json }
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.after).to eq({ "name" => "api.example.internal", "certificate" => { "id" => cert_id } })
+      end
+
+      it "proposes a CA certificate" do
+        sign_in
+        stub_request(:post, "https://kong-admin.test/schemas/ca_certificates/validate").to_return(ok)
+
+        post entities_path, params: { type: "ca_certificate", payload_json: { cert: pem[:cert_pem] }.to_json }
+
+        expect(ChangePlan.last.entity_type).to eq("ca_certificate")
+      end
+
+      it "refuses a PEM typed into key_alt from the certificate editor, and re-renders without it" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+
+        patch entity_path(certificate), params: { payload_json: { key_alt: private_key_pem }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("key_alt")
+        expect(response.body).not_to include("BEGIN PRIVATE KEY")
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "opens the certificate editor on the live document, with the reference and no plaintext hint about redaction" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+
+        get edit_entity_path(certificate)
+
+        expect(response.body).to include("{vault://env/cert-pay-key}")
+        expect(response.body).to include("reference")
+        expect(response.body).not_to include("can&#39;t be set here")
+      end
+    end
   end
 end

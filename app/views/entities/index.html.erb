@@ -10,6 +10,10 @@
       <%= link_to "New global plugin", new_plugin_path, class: "btn-primary px-3.5 py-2 text-sm" %>
     <% elsif @type == "upstream" %>
       <%= link_to "New upstream", new_entity_path(type: "upstream"), class: "btn-primary px-3.5 py-2 text-sm" %>
+    <% elsif @type == "certificate" %>
+      <%= link_to "New certificate", new_entity_path(type: "certificate"), class: "btn-primary px-3.5 py-2 text-sm" %>
+    <% elsif @type == "ca_certificate" %>
+      <%= link_to "New CA certificate", new_entity_path(type: "ca_certificate"), class: "btn-primary px-3.5 py-2 text-sm" %>
     <% end %>
     <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-secondary px-3.5 py-2 text-sm cursor-pointer" %>
   </div>

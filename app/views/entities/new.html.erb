@@ -1,6 +1,6 @@
-<% content_for :title, "New #{@creatable_type}" %>
+<% content_for :title, "New #{creatable_type_name(@creatable_type)}" %>
 
-<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">New <%= @creatable_type %></h1>
+<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">New <%= creatable_type_name(@creatable_type) %></h1>
 <p class="text-sm mb-6" style="color: var(--color-ink-soft)">
   <% if @parent %>
     <span class="font-mono"><%= @parent.entity_type %>: <%= @parent.name %></span> ·
@@ -23,6 +23,24 @@
     </nav>
   <% end %>
 
+  <% if @creatable_type == "certificate" %>
+    <section class="panel p-4 text-sm" style="color: var(--color-ink-soft)">
+      <h2 class="section-label mb-2">Private key</h2>
+      <p>
+        A private key can't be pasted here. Set it as an environment variable on every Kong node, then reference it:
+        <code class="font-mono">{vault://env/cert-payments-key}</code> makes Kong read
+        <code class="font-mono">CERT_PAYMENTS_KEY</code>.
+        <% if current_connection.apply_mode == "pr" %>
+          In PR mode you can also use <code class="font-mono">${{ env "DECK_CERT_PAYMENTS_KEY" }}</code>, filled in by CI.
+        <% end %>
+      </p>
+      <p class="mt-2">
+        Kong doesn't check that the variable exists — if it is missing, TLS for this certificate's hostnames fails.
+        You'll be asked to confirm it is set before this is applied.
+      </p>
+    </section>
+  <% end %>
+
   <%= form_with url: entities_path, method: :post, data: { controller: "json-editor" } do %>
     <input type="hidden" name="type" value="<%= @creatable_type %>" />
     <% if @parent %>
@@ -30,7 +48,7 @@
     <% end %>
 
     <section class="panel p-4">
-      <h2 class="section-label mb-3"><%= @creatable_type.capitalize %> document</h2>
+      <h2 class="section-label mb-3"><%= creatable_type_name(@creatable_type).sub(/\A./, &:upcase) %> document</h2>
       <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
         Kong checks this against its own schema when you press Review, and reports any field it rejects.
       </p>

@@ -16,8 +16,23 @@ class EntitiesController < ApplicationController
 
   # The types this controller has a "New" flow for (docs/DESIGN.md section 15
   # M5). Everything else is created through PluginsController or the API/MCP.
-  CREATABLE_TYPES = %w[upstream target].freeze
+  CREATABLE_TYPES = %w[upstream target certificate ca_certificate sni].freeze
   TARGET_SEED = { "target" => "", "weight" => 100, "tags" => [] }.freeze
+  # The certificate seed's key is *deliberately* an invalid reference (upper
+  # case fails Kong::CertificateKeyPolicy): submitted unedited it is refused,
+  # rather than creating a certificate pointing at a variable nobody set.
+  CERTIFICATE_SEED = {
+    "cert" => "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "key" => "{vault://env/cert-NAME-key}",
+    "snis" => [],
+    "tags" => []
+  }.freeze
+  CA_CERTIFICATE_SEED = { "cert" => "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n", "tags" => [] }.freeze
+  SNI_SEED = { "name" => "", "tags" => [] }.freeze
+  # What a key reference looks like, ignoring case: the seeded NAME placeholder
+  # has this shape (so it may stay on screen) yet is not key material.
+  REFERENCE_SHAPE = %r{\A\{vault://env/[a-z0-9][a-z0-9_-]*\}\z}i
+  KEY_MATERIAL_REMOVED = "[private key removed]".freeze
 
   def index
     @filters = params.permit(:q, :tags, :sort).to_h.symbolize_keys
@@ -93,15 +108,15 @@ class EntitiesController < ApplicationController
     # Re-render rather than redirect so the operator's edit survives the
     # round trip -- a redirect would hand back the unedited document and
     # throw away however long they spent in the textarea.
-    @payload_json = params[:payload_json]
+    @payload_json = echoed_payload(@entity.entity_type)
     @payload_error = e.message
     render :edit, status: :unprocessable_entity
-  rescue Kong::ChangePlanner::SchemaViolation => e
+  rescue Kong::ChangePlanner::SchemaViolation, Kong::CertificateKeyPolicy::Rejected => e
     return redirect_to(edit_entity_path(@entity), alert: e.message) if params[:payload_json].blank?
 
     # Kong refused the document itself: keep the operator's JSON on screen
     # with Kong's per-field message, same as an unparseable payload.
-    @payload_json = params[:payload_json]
+    @payload_json = echoed_payload(@entity.entity_type)
     @payload_error = e.message
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangeGuardrails::Violation => e
@@ -164,7 +179,7 @@ class EntitiesController < ApplicationController
   # scope. An unknown parent bounces back to the list to pick one.
   def set_parent
     definition = Kong::EntityTypes.fetch(@creatable_type)
-    return unless definition.nested?
+    return unless definition.requires_parent?
 
     @parent = KongEntity.active.find_by(
       kong_connection: current_connection, entity_type: definition.parent_type, kong_id: params[:parent_kong_id]
@@ -176,13 +191,57 @@ class EntitiesController < ApplicationController
   end
 
   def seed_payload
-    return Kong::UpstreamPresets.seed(params[:preset]) if @creatable_type == "upstream"
+    case @creatable_type
+    when "upstream" then Kong::UpstreamPresets.seed(params[:preset])
+    when "target" then TARGET_SEED.deep_dup
+    when "certificate" then CERTIFICATE_SEED.deep_dup
+    when "ca_certificate" then CA_CERTIFICATE_SEED.deep_dup
+    when "sni" then SNI_SEED.deep_dup
+    end
+  end
 
-    TARGET_SEED.deep_dup
+  # The text an error page puts back in the editor. A private key someone
+  # pasted must not round-trip through our HTML. A marker scrub alone misses a
+  # key pasted without its BEGIN line, so for the certificate types every
+  # key / key_alt value that is not a key *reference* is blanked too; text that
+  # is not JSON falls back to the marker scrub alone.
+  def echoed_payload(entity_type)
+    text = params[:payload_json].to_s
+    return Kong::CertificateKeyPolicy.scrub(text) unless entity_type.to_s.in?(Kong::CertificateKeyPolicy::DEEP_SCAN_TYPES)
+
+    parsed = begin
+      JSON.parse(text)
+    rescue JSON::ParserError
+      return Kong::CertificateKeyPolicy.scrub(text)
+    end
+    JSON.pretty_generate(blank_key_material(parsed))
+  end
+
+  def blank_key_material(node)
+    case node
+    when Hash
+      node.to_h do |field, value|
+        blank = Kong::CertificateKeyPolicy::KEY_FIELDS.include?(field) && value.is_a?(String) && !key_reference_shaped?(value)
+        [ field, blank ? blank_key_value(value) : blank_key_material(value) ]
+      end
+    when Array then node.map { |value| blank_key_material(value) }
+    when String then Kong::CertificateKeyPolicy.scrub(node)
+    else node
+    end
+  end
+
+  # A whole-value PEM shows as the removal notice (so the operator sees why it
+  # went); anything else that is not a reference is simply emptied.
+  def blank_key_value(value)
+    Kong::CertificateKeyPolicy.scrub(value).strip == KEY_MATERIAL_REMOVED ? KEY_MATERIAL_REMOVED : ""
+  end
+
+  def key_reference_shaped?(value)
+    Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value)
   end
 
   def render_new_with_error(message)
-    @payload_json = params[:payload_json]
+    @payload_json = echoed_payload(@creatable_type)
     @payload_error = message
     render :new, status: :unprocessable_entity
   end
