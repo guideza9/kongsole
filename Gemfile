@@ -43,7 +43,7 @@ gem "thruster", require: false
 gem "image_processing", "~> 1.2"
 
 # HTTP client for the Kong Admin API, with retry/backoff middleware
-gem "faraday", "~> 2.9"
+gem "faraday", "~> 2.14"
 gem "faraday-retry", "~> 2.2"
 
 group :development, :test do
