@@ -1,0 +1,42 @@
+<% content_for :title, "Expiring certificates" %>
+
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+  <div>
+    <h1 class="text-xl font-semibold" style="color: var(--color-ink)">Expiring certificates</h1>
+    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">
+      Certificates and CA certificates on <%= current_connection.name %> that expire within <%= @days %> days, expired ones included.
+      <% if @last_synced_at %>Last synced <%= time_ago_in_words(@last_synced_at) %> ago.<% else %>This connection has never synced.<% end %>
+    </p>
+  </div>
+  <nav class="flex gap-1 text-sm" aria-label="Window">
+    <% CertificatesController::WINDOWS.each do |window| %>
+      <%= link_to "#{window} days", expiring_certificates_path(days: window),
+            class: "px-2.5 py-1 rounded #{'font-semibold' if @days == window}",
+            style: @days == window ? "color: var(--color-ink); background: var(--color-surface-subtle)" : "color: var(--color-ink-soft)" %>
+    <% end %>
+  </nav>
+</div>
+
+<% if @entities.empty? %>
+  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+    Nothing expires within <%= @days %> days<%= @last_synced_at ? "" : " — this connection has never synced, so nothing is known yet" %>.
+  </div>
+<% else %>
+  <div class="overflow-x-auto panel">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left"><th class="section-label px-3 py-2">Name</th><th class="section-label px-3 py-2">Kind</th><th class="section-label px-3 py-2">Expires</th><th class="section-label px-3 py-2">On</th></tr>
+      </thead>
+      <tbody>
+        <% @entities.each do |entity| %>
+          <tr style="border-top: 1px solid var(--color-border)">
+            <td class="px-3 py-2.5 font-semibold"><%= link_to entity.name, entity_path(entity) %></td>
+            <td class="px-3 py-2.5" style="color: var(--color-ink-soft)"><%= entity_type_label(entity.entity_type, count: 1) %></td>
+            <td class="px-3 py-2.5"><span class="inline-flex flex-wrap items-center gap-1.5"><%= expiry_badge(entity) %> <span class="text-xs" style="color: var(--color-ink-soft)"><%= expiry_when(entity) %></span></span></td>
+            <td class="px-3 py-2.5 font-mono text-xs"><%= entity.not_after.to_date %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

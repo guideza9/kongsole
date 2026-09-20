@@ -24,6 +24,9 @@ Rails.application.routes.draw do
   end
 
   resources :plugins, only: %i[new create]
+  resources :certificates, only: [] do
+    collection { get :expiring }
+  end
 
   resources :change_plans, only: %i[index show] do
     member { post :apply }
