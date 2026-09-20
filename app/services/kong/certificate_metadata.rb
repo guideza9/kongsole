@@ -19,7 +19,7 @@ module Kong
         "fingerprint_sha256" => OpenSSL::Digest::SHA256.hexdigest(cert.to_der),
         "sans" => subject_alt_names(cert)
       }
-    rescue OpenSSL::X509::CertificateError, TypeError, ArgumentError => e
+    rescue OpenSSL::OpenSSLError, TypeError, ArgumentError => e
       # The class name only -- an OpenSSL message can quote the input.
       { "parse_error" => e.class.name }
     end

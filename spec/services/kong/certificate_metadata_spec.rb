@@ -48,6 +48,16 @@ RSpec.describe Kong::CertificateMetadata do
 
       expect(meta["parse_error"]).not_to include("SECRETISH")
     end
+
+    it "reports a parse_error, not an exception, when a malformed extension raises an OpenSSL error" do
+      pem = PemFixtures.self_signed(cn: "pay.example.internal", days: 30, sans: %w[pay.example.internal])[:cert_pem]
+      allow_any_instance_of(OpenSSL::X509::Certificate).to receive(:extensions).and_raise(OpenSSL::X509::ExtensionError)
+
+      meta = described_class.parse(pem)
+
+      expect(meta.keys).to eq([ "parse_error" ])
+      expect(meta["parse_error"]).to eq("OpenSSL::X509::ExtensionError")
+    end
   end
 
   describe ".not_after_time" do
