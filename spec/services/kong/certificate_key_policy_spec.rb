@@ -136,6 +136,41 @@ RSpec.describe Kong::CertificateKeyPolicy do
       expect(described_class.scrub(text)).not_to include("MIIEvQIBADANBgkqhkiG9w0B")
     end
 
+    it "removes a truncated block (BEGIN and some base64, no END) through the end of input" do
+      body = "before\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0B\nabc"
+
+      expect(described_class.scrub(body)).to eq("before\n[private key removed]")
+    end
+
+    it "removes a block whose END line is cut off or malformed" do
+      [ "-----END PRIVATE KE", "-----END PRIVATE KEY----", "-----END PRIVATE" ].each do |tail|
+        scrubbed = described_class.scrub("x\n-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0B\n#{tail}")
+        expect(scrubbed).to eq("x\n[private key removed]"), "tail #{tail.inspect}"
+      end
+    end
+
+    it "removes a truncated block in the JSON-escaped form (literal backslash-n)" do
+      text = '{"key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0B\nabc'
+
+      scrubbed = described_class.scrub(text)
+      expect(scrubbed).to eq('{"key": "[private key removed]')
+      expect(scrubbed).not_to include("MIIEvQIBADANBgkqhkiG9w0B")
+    end
+
+    it "preserves text after a terminated block and scrubs each block separately" do
+      two = "a\n#{pem_key}b\n#{pem_key}c"
+
+      expect(described_class.scrub(two)).to eq("a\n[private key removed]\nb\n[private key removed]\nc")
+    end
+
+    it "handles many BEGIN markers without an END in linear time" do
+      body = "-----BEGIN PRIVATE KEY-----\n" * 20_000
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(described_class.scrub(body)).to eq("[private key removed]")
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+    end
+
     it "leaves a certificate (public) block and ordinary text alone" do
       cert = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"
       expect(described_class.scrub(cert)).to eq(cert)

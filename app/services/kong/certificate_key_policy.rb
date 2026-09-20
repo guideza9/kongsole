@@ -19,7 +19,11 @@ module Kong
     KEY_FIELDS = %w[key key_alt].freeze
     VAULT_REFERENCE = %r{\A\{vault://env/([a-z0-9][a-z0-9_-]*)\}\z}
     DECK_REFERENCE = /\A\$\{\{ env "(DECK_[A-Z0-9_]+)" \}\}\z/
-    PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/m
+    # A block ends at its END line, or -- for a truncated paste or a cut-off /
+    # malformed END line -- at the end of input. A truncated block therefore
+    # swallows the rest of the input; that is intended: half a key is still key
+    # material, and the \z alternative keeps the scan linear.
+    PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)/m
     EXAMPLE = "{vault://env/cert-payments-key}".freeze
 
     def self.applies_to?(entity_type)
