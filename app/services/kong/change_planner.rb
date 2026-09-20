@@ -39,6 +39,9 @@ module Kong
 
     def call
       Kong::ChangeGuardrails.check_write_access!(connection: @connection)
+      Kong::CertificateKeyPolicy.check!(
+        @attributes, entity_type: @entity_type, apply_mode: @connection.apply_mode, operation: @operation
+      )
       Kong::ChangeGuardrails.check_plugin_immutable!(
         connection: @connection, entity_type: @entity_type,
         target: @operation == "create" ? nil : { "id" => @target_kong_id },
@@ -80,14 +83,17 @@ module Kong
     private
 
     # A nested type (target) can't build any Admin API path without its
-    # parent. A create must be told it; an update/delete may omit it, in which
-    # case the read-model's own record of that entity is the authority.
+    # parent; a flat child (sni) needs it in the create body. An update/delete
+    # may omit it -- the read-model's own record is the authority, and for a
+    # flat child a missing one is fine (no path depends on it; the applier only
+    # uses it to refresh the parent afterwards).
     def resolve_parent_kong_id
-      return @parent_kong_id unless @definition.nested?
       return @parent_kong_id if @parent_kong_id.present?
+      return nil unless @definition.requires_parent?
 
       found = @operation == "create" ? nil : cached_parent_kong_id
       return found if found.present?
+      return nil if !@definition.nested? && @operation != "create"
 
       remedy = @operation == "create" ? "pick a #{@definition.parent_type}" : "sync this connection first, then retry"
       raise MissingParent, "can't tell which #{@definition.parent_type} this #{@entity_type} belongs to -- #{remedy}"
@@ -107,9 +113,12 @@ module Kong
     # requires it and the form body doesn't carry it.
     def validate_against_kong_schema!(after)
       return unless @definition.schema_name && after
+      # PR mode reads Kong through a read-only route, which answers any POST
+      # with the router's 404; `deck gateway validate` covers PR mode in CI.
+      return if @connection.apply_mode == "pr"
 
       body = after.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
-      body = body.merge(@definition.parent_type => { "id" => @parent_kong_id }) if @definition.nested?
+      body = body.merge(@definition.parent_type => { "id" => @parent_kong_id }) if @definition.requires_parent? && @parent_kong_id.present?
       @client.post("/schemas/#{@definition.schema_name}/validate", body: body)
     rescue Kong::Client::UnexpectedResponse => e
       raise unless e.response&.status == 400
@@ -173,10 +182,18 @@ module Kong
     # genuinely new secret still has it applied.
     def compute_after(before)
       case @operation
-      when "create" then Kong::Redactor.prune_marked(@attributes)
+      when "create" then with_parent_reference(Kong::Redactor.prune_marked(@attributes))
       when "update" then Kong::Redactor.prune_marked(before.merge(@attributes))
       when "delete" then nil
       end
+    end
+
+    # An SNI's create body carries `certificate: {id}` -- the only way Kong
+    # learns the parent, since the path is flat.
+    def with_parent_reference(attributes)
+      return attributes unless @definition.parent_in_body && @parent_kong_id.present?
+
+      attributes.merge(@definition.parent_type => { "id" => @parent_kong_id })
     end
 
     def compute_diff(before, after)

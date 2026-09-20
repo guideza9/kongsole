@@ -1,4 +1,5 @@
 require "rails_helper"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe Kong::ChangePlanner do
   PLANNER_SVC_1 = "11111111-1111-1111-1111-111111111111"
@@ -355,6 +356,165 @@ RSpec.describe Kong::ChangePlanner do
 
       expect(plan).to be_persisted
       expect(plan.entity_type).to eq("plugin")
+    end
+  end
+
+  describe "certificates and SNIs (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:pem) { PemFixtures.self_signed(days: 60)[:cert_pem] }
+    let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+    let(:validate_certs) { "https://kong-admin.internal/schemas/certificates/validate" }
+    let(:validate_snis) { "https://kong-admin.internal/schemas/snis/validate" }
+
+    def cert_planner(**overrides)
+      planner(entity_type: "certificate", **overrides)
+    end
+
+    describe "certificate key policy" do
+      it "proposes a create whose key is a vault reference, validating it with Kong" do
+        validate = stub_request(:post, validate_certs).to_return(ok)
+
+        plan = cert_planner(operation: "create",
+          attributes: { "cert" => pem, "key" => "{vault://env/cert-pay-key}", "snis" => [ "pay.example.internal" ] }).call
+
+        expect(plan).to be_persisted
+        expect(plan.after["key"]).to eq("{vault://env/cert-pay-key}")
+        expect(validate.with(body: hash_including("key" => "{vault://env/cert-pay-key}"))).to have_been_requested
+      end
+
+      it "rejects a PEM key before any request reaches Kong, never persisting or echoing it" do
+        pem_key = PemFixtures.self_signed[:key_pem]
+
+        expect {
+          cert_planner(operation: "create", attributes: { "cert" => pem, "key" => pem_key }).call
+        }.to raise_error(Kong::CertificateKeyPolicy::Rejected) { |e|
+          expect(e).to be_a(Kong::ChangePlanner::InvalidChange)
+          expect(e.message).not_to include("PRIVATE KEY")
+        }
+        expect(ChangePlan.count).to eq(0)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "rejects a create with no key at all" do
+        expect {
+          cert_planner(operation: "create", attributes: { "cert" => pem }).call
+        }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /needs a key/)
+      end
+
+      it "rejects a decK placeholder on a direct-mode connection" do
+        expect {
+          cert_planner(operation: "create", attributes: { "cert" => pem, "key" => '${{ env "DECK_CERT_A" }}' }).call
+        }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /direct/)
+      end
+
+      it "rejects a PEM smuggled into key_alt on update, too" do
+        expect {
+          cert_planner(operation: "update", target_kong_id: cert_id,
+            attributes: { "key_alt" => "-----BEGIN PRIVATE KEY-----\nA\n-----END PRIVATE KEY-----" }).call
+        }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /key_alt/)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "proposes a tags-only update without touching key policy, keeping the live reference readable" do
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem, key: "{vault://env/cert-pay-key}", snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+        stub_request(:post, validate_certs).to_return(ok)
+
+        plan = cert_planner(operation: "update", target_kong_id: cert_id, attributes: { "tags" => [ "core" ] }).call
+
+        expect(plan.diff).to eq({ "tags" => { "from" => [], "to" => [ "core" ] } })
+        expect(plan.before["key"]).to eq("{vault://env/cert-pay-key}")
+      end
+
+      it "redacts a plaintext key Kong hands back and never carries it into after" do
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem, key: "-----BEGIN PRIVATE KEY-----\nLEGACY\n-----END PRIVATE KEY-----", snis: [], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+        stub_request(:post, validate_certs).to_return(ok)
+
+        plan = cert_planner(operation: "update", target_kong_id: cert_id, attributes: { "tags" => [ "x" ] }).call
+
+        expect(plan.before["key"]).to eq("[REDACTED]")
+        expect(plan.after).not_to have_key("key")
+        expect(plan.to_json).not_to include("LEGACY")
+      end
+    end
+
+    describe "PR-mode connections" do
+      it "accepts a decK placeholder and makes no schema POST (a read-only route would 404 it)" do
+        connection.update!(apply_mode: "pr", access_level: "ro")
+
+        plan = cert_planner(operation: "create", attributes: { "cert" => pem, "key" => '${{ env "DECK_CERT_A" }}' }).call
+
+        expect(plan.apply_mode).to eq("pr")
+        expect(plan.after["key"]).to eq('${{ env "DECK_CERT_A" }}')
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "skips the schema POST for the M5a types too -- upstreams and targets in PR mode" do
+        connection.update!(apply_mode: "pr", access_level: "ro")
+
+        plan = planner(entity_type: "upstream", operation: "create", attributes: { "name" => "orders" }).call
+
+        expect(plan).to be_persisted
+        expect(WebMock).not_to have_requested(:post, /schemas/)
+      end
+    end
+
+    describe "sni" do
+      def sni_planner(**overrides)
+        planner(entity_type: "sni", **overrides)
+      end
+
+      it "requires a certificate on create" do
+        expect {
+          sni_planner(operation: "create", attributes: { "name" => "pay.example.internal" }).call
+        }.to raise_error(Kong::ChangePlanner::MissingParent, /certificate/)
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "carries the certificate reference in the create body, and validates with it" do
+        validate = stub_request(:post, validate_snis).to_return(ok)
+
+        plan = sni_planner(operation: "create", parent_kong_id: cert_id, attributes: { "name" => "pay.example.internal" }).call
+
+        expect(plan.after).to eq({ "name" => "pay.example.internal", "certificate" => { "id" => cert_id } })
+        expect(plan.parent_kong_id).to eq(cert_id)
+        expect(validate.with(body: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } })).to have_been_requested
+      end
+
+      it "plans an SNI delete without needing the parent for any path, but records it from the read-model when known" do
+        sni_id = "eeeeeeee-0000-0000-0000-00000000000e"
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
+          parent_type: "certificate", parent_kong_id: cert_id)
+        stub_request(:get, "https://kong-admin.internal/snis/#{sni_id}")
+          .to_return(status: 200, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+
+        plan = sni_planner(operation: "delete", target_kong_id: sni_id).call
+
+        expect(plan.parent_kong_id).to eq(cert_id)
+      end
+
+      it "still plans an SNI delete when the read-model has never seen it (parent unknown is fine for a flat child)" do
+        sni_id = "eeeeeeee-0000-0000-0000-00000000000e"
+        stub_request(:get, "https://kong-admin.internal/snis/#{sni_id}")
+          .to_return(status: 200, body: { id: sni_id, name: "x.example", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+
+        plan = sni_planner(operation: "delete", target_kong_id: sni_id).call
+
+        expect(plan).to be_persisted
+        expect(plan.parent_kong_id).to be_nil
+      end
+    end
+
+    it "plans a CA certificate create, validated, with no key policy involved" do
+      validate = stub_request(:post, "https://kong-admin.internal/schemas/ca_certificates/validate").to_return(ok)
+
+      plan = planner(entity_type: "ca_certificate", operation: "create", attributes: { "cert" => pem }).call
+
+      expect(plan).to be_persisted
+      expect(validate).to have_been_requested
     end
   end
 end
