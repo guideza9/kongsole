@@ -470,6 +470,8 @@ audit_events   # append-only — actor = username + operator
 
 **ผลพลอยได้:** dashboard cert หมดอายุข้ามทุก connection + MCP tool `kong_certs_expiring`
 
+**ผลการ spike (M5b, Kong 3.7.1):** `{vault://env/cert-x-key}` อ่านตัวแปร `CERT_X_KEY` (ตัวพิมพ์ใหญ่, `-` → `_`) และ Kong เก็บ/คืนค่า reference ตามที่ส่งมา ไม่เคยคืน PEM · **Kong ไม่ตรวจ reference ตอนเขียน** — ตัวแปรที่ไม่มีอยู่หรือ key ที่ไม่ตรงกับ cert ก็ได้ 201 และ TLS ของ hostname นั้นจะล้ม (`tlsv1 alert internal error`) ตอนใช้งานจริง → tool จึงบังคับให้ยืนยันว่าตัวแปรมีอยู่ก่อน apply และบันทึกลง audit · tool ไม่รับ private key ในรูป PEM ทุกช่องทาง
+
 ---
 
 ## 9. API contract — filter, ordering, keyset

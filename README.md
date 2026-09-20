@@ -59,6 +59,27 @@ section 15, M5), in **direct mode**:
   raises `NotImplementedError` and stays pending. Certificates, SNIs and the
   private-key-on-env handling are M5b.
 
+## Certificates, SNIs and CA certificates (M5b)
+
+`certificate`, `sni` and `ca_certificate` are managed like every other type, in direct mode
+(`docs/DESIGN.md` section 8; design and Kong 3.7 findings in
+`docs/superpowers/specs/2026-09-21-m5b-certificates-snis-design.md`).
+
+- **A private key is never accepted.** A certificate's `key` is a reference:
+  `{vault://env/cert-payments-key}` makes Kong read `CERT_PAYMENTS_KEY` from its own
+  environment, so the key is in neither git nor Kong's database. A pasted PEM is rejected
+  with an error (never silently dropped); the API answers 422. In PR mode a decK
+  placeholder `${{ env "DECK_CERT_PAYMENTS_KEY" }}` is also accepted (rendering is M5c).
+- **Kong does not validate a vault reference**, and a missing variable makes TLS for that
+  hostname fail. So applying a certificate whose key reference is new or changed requires
+  confirming the variable exists on every Kong node (a checkbox on the review page,
+  `acknowledge_env_vars` for `kong_apply`); the confirmation is recorded in the audit event.
+- The read-model caches certificate **metadata** (subject, issuer, expiry, fingerprint,
+  SANs), not the PEM. **Certificates → Expiring soon** lists what expires within 7/30/90
+  days on the current connection; the MCP tool `kong_certs_expiring` covers every connection
+  the token can reach.
+- Run `bin/rails db:migrate` — M5b adds `audit_events.context`.
+
 ## Setup
 
 ```bash
