@@ -54,7 +54,7 @@ RSpec.describe Kong::CertificateKeyPolicy do
       described_class.check!(attrs, entity_type: entity_type, apply_mode: apply_mode, operation: operation)
     end
 
-    it "is a no-op for any type but certificate, even with a PEM in a key field" do
+    it "does not apply the key/key_alt rules to other types" do
       expect { check({ "key" => pem_key }, entity_type: "keyauth_credential") }.not_to raise_error
       expect { check({ "key" => "not-a-reference" }, entity_type: "ca_certificate") }.not_to raise_error
     end
@@ -141,6 +141,44 @@ RSpec.describe Kong::CertificateKeyPolicy do
         cert = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----\n"
         expect { check({ "cert" => cert, "key" => "{vault://env/a}", "cert_alt" => cert }, operation: "create") }.not_to raise_error
         expect { check({ "cert" => cert }, entity_type: "ca_certificate") }.not_to raise_error
+      end
+
+      describe "a private key used as a Hash key" do
+        it "rejects a PEM key with a benign value, for certificate and ca_certificate" do
+          %w[certificate ca_certificate].each do |type|
+            expect { check({ pem_key => 1 }, entity_type: type) }.to raise_error(described_class::Rejected) { |e|
+              expect(e.message).not_to include(secret_body)
+              expect(e.message).not_to include("BEGIN")
+            }
+          end
+        end
+
+        it "rejects a nested PEM key holding a PEM value without echoing either" do
+          %w[certificate ca_certificate].each do |type|
+            expect { check({ pem_key => { pem_key => pem_key } }, entity_type: type) }.to raise_error(described_class::Rejected) { |e|
+              expect(e.message).not_to include(secret_body)
+              expect(e.message).not_to include("BEGIN")
+              expect(e.message).not_to include("PRIVATE")
+            }
+          end
+        end
+
+        it "still names the ordinary segments of the path around a removed key" do
+          expect { check({ "foo" => { pem_key => [ "x" ], "ok" => { "bar" => pem_key } } }) }
+            .to raise_error(described_class::Rejected, /foo\.\[key removed\]/) { |e| expect(e.message).not_to include(secret_body) }
+          expect { check({ "foo" => { "ok" => { pem_key => 1 } }, "n" => 1 }, entity_type: "ca_certificate") }
+            .to raise_error(described_class::Rejected, /foo\.ok\.\[key removed\]/)
+        end
+
+        it "keeps naming a normal path" do
+          expect_rejected({ "foo" => { "key" => pem_key } }, "foo.key")
+        end
+
+        it "does not reject a public CERTIFICATE block used as a key" do
+          cert = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----\n"
+          expect { check({ cert => 1 }, entity_type: "certificate", operation: "update") }.not_to raise_error
+          expect { check({ cert => 1 }, entity_type: "ca_certificate") }.not_to raise_error
+        end
       end
 
       it "does not reject ordinary strings, numbers, nils and empty containers" do

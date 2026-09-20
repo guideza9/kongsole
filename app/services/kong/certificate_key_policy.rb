@@ -112,14 +112,25 @@ module Kong
     def self.reject_nested_private_key!(node, path = nil)
       case node
       when Hash
-        node.each { |field, value| reject_nested_private_key!(value, [ path, field ].compact.join(".")) }
+        node.each do |field, value|
+          # A Hash key can carry key material too, and it would land in the
+          # path: render it as a placeholder rather than echoing it.
+          segment = PRIVATE_KEY_MARKER.match?(field.to_s) ? "[key removed]" : field.to_s
+          field_path = [ path, segment ].compact.join(".")
+          reject!(field_path) if segment == "[key removed]"
+          reject_nested_private_key!(value, field_path)
+        end
       when Array
         node.each_with_index { |value, index| reject_nested_private_key!(value, "#{path}[#{index}]") }
       when String
         return unless PRIVATE_KEY_MARKER.match?(node)
 
-        raise Rejected, "#{path}: a private key can't be stored here, at any depth. Reference one instead: #{EXAMPLE}"
+        reject!(path)
       end
+    end
+
+    def self.reject!(path)
+      raise Rejected, "#{path}: a private key can't be stored here, at any depth. Reference one instead: #{EXAMPLE}"
     end
 
     def self.rejection_message(field, value, apply_mode)
@@ -131,6 +142,6 @@ module Kong
 
       "#{field}: a private key can't be set from here. #{hint}"
     end
-    private_class_method :check_key_fields!, :reject_nested_private_key!, :rejection_message
+    private_class_method :check_key_fields!, :reject_nested_private_key!, :reject!, :rejection_message
   end
 end
