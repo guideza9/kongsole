@@ -441,6 +441,22 @@ RSpec.describe Kong::ChangePlanner do
       end
     end
 
+    describe "a private key nested under another field" do
+      it "is rejected on a PR-mode connection (where Kong's schema check is skipped), with no plan created" do
+        connection.update!(apply_mode: "pr", access_level: "ro")
+        pem_key = PemFixtures.self_signed[:key_pem]
+
+        expect {
+          cert_planner(operation: "create",
+            attributes: { "cert" => pem, "key" => '${{ env "DECK_CERT_A" }}', "foo" => { "key" => pem_key } }).call
+        }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /foo\.key/) { |e|
+          expect(e.message).not_to include("PRIVATE KEY")
+        }
+        expect(ChangePlan.count).to eq(0)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+    end
+
     describe "PR-mode connections" do
       it "accepts a decK placeholder and makes no schema POST (a read-only route would 404 it)" do
         connection.update!(apply_mode: "pr", access_level: "ro")

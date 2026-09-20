@@ -56,7 +56,7 @@ RSpec.describe Kong::CertificateKeyPolicy do
 
     it "is a no-op for any type but certificate, even with a PEM in a key field" do
       expect { check({ "key" => pem_key }, entity_type: "keyauth_credential") }.not_to raise_error
-      expect { check({ "key" => pem_key }, entity_type: "ca_certificate") }.not_to raise_error
+      expect { check({ "key" => "not-a-reference" }, entity_type: "ca_certificate") }.not_to raise_error
     end
 
     it "accepts a vault reference in key and key_alt in both apply modes" do
@@ -96,6 +96,57 @@ RSpec.describe Kong::CertificateKeyPolicy do
     it "requires a key on create, but not on update" do
       expect { check({ "snis" => [ "a.example" ] }, operation: "create") }.to raise_error(described_class::Rejected, /needs a key/)
       expect { check({ "tags" => [ "x" ] }, operation: "update") }.not_to raise_error
+    end
+
+    describe "a private key nested anywhere in the payload" do
+      let(:secret_body) { "MIIEvQIBADANBgkqhkiG9w0B" }
+
+      def expect_rejected(attrs, path, **opts)
+        expect { check(attrs, **opts) }.to raise_error(described_class::Rejected) { |e|
+          expect(e.message).to include(path)
+          expect(e.message).not_to include(secret_body)
+          expect(e.message).not_to include("PRIVATE KEY")
+        }
+      end
+
+      it "rejects a PEM nested under another key, naming the path" do
+        expect_rejected({ "foo" => { "key" => pem_key } }, "foo.key")
+      end
+
+      it "rejects a PEM inside an array, naming the index" do
+        expect_rejected({ "snis" => [ "a.example", pem_key ] }, "snis[1]")
+        expect_rejected({ "extra" => [ { "deep" => [ pem_key ] } ] }, "extra[0].deep[0]")
+      end
+
+      it "rejects a PEM in a top-level field other than key and key_alt" do
+        expect_rejected({ "cert" => pem_key, "key" => "{vault://env/a}" }, "cert")
+      end
+
+      it "also applies to ca_certificate and any operation or apply mode" do
+        expect_rejected({ "cert" => pem_key }, "cert", entity_type: "ca_certificate", operation: "create")
+        expect_rejected({ "meta" => { "k" => pem_key } }, "meta.k", entity_type: "ca_certificate", apply_mode: "pr")
+        expect_rejected({ "meta" => { "k" => pem_key } }, "meta.k", operation: "update", apply_mode: "pr")
+      end
+
+      it "recognises algorithm-specific private key headers" do
+        rsa = "-----BEGIN RSA PRIVATE KEY-----\n#{secret_body}\n-----END RSA PRIVATE KEY-----"
+        expect_rejected({ "x" => rsa }, "x")
+      end
+
+      it "catches a key embedded in a longer string" do
+        expect_rejected({ "notes" => "see below\n#{pem_key}" }, "notes")
+      end
+
+      it "does not reject a public CERTIFICATE block" do
+        cert = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----\n"
+        expect { check({ "cert" => cert, "key" => "{vault://env/a}", "cert_alt" => cert }, operation: "create") }.not_to raise_error
+        expect { check({ "cert" => cert }, entity_type: "ca_certificate") }.not_to raise_error
+      end
+
+      it "does not reject ordinary strings, numbers, nils and empty containers" do
+        attrs = { "tags" => [ "core", "private key rotation" ], "snis" => [], "meta" => { "n" => 1, "z" => nil, "d" => {} } }
+        expect { check(attrs, operation: "update") }.not_to raise_error
+      end
     end
   end
 

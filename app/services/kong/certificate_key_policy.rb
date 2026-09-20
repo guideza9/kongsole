@@ -24,6 +24,8 @@ module Kong
     # swallows the rest of the input; that is intended: half a key is still key
     # material, and the \z alternative keeps the scan linear.
     PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)/m
+    PRIVATE_KEY_MARKER = /-----BEGIN [A-Z ]*PRIVATE KEY-----/
+    DEEP_SCAN_TYPES = %w[certificate ca_certificate].freeze
     EXAMPLE = "{vault://env/cert-payments-key}".freeze
 
     def self.applies_to?(entity_type)
@@ -53,9 +55,14 @@ module Kong
     end
 
     def self.check!(attributes, entity_type:, apply_mode:, operation: nil)
+      attributes ||= {}
+      check_key_fields!(attributes, entity_type: entity_type, apply_mode: apply_mode, operation: operation)
+      reject_nested_private_key!(attributes) if DEEP_SCAN_TYPES.include?(entity_type.to_s)
+    end
+
+    def self.check_key_fields!(attributes, entity_type:, apply_mode:, operation:)
       return unless applies_to?(entity_type)
 
-      attributes ||= {}
       if operation == "create" && attributes["key"].blank?
         raise Rejected, "a certificate needs a key reference, e.g. #{EXAMPLE} (read from CERT_PAYMENTS_KEY on every Kong node)"
       end
@@ -97,6 +104,24 @@ module Kong
       text.to_s.gsub(PRIVATE_KEY_BLOCK, "[private key removed]")
     end
 
+    # Walks the payload at any depth (Hashes and Arrays) and refuses a private
+    # key wherever it hides -- e.g. {"foo" => {"key" => "<PEM>"}}, which the
+    # top-level key/key_alt check never sees and which PR mode would persist
+    # (Kong's schema check, that would reject the unknown field, is skipped
+    # there). Names the JSON path only, never the value.
+    def self.reject_nested_private_key!(node, path = nil)
+      case node
+      when Hash
+        node.each { |field, value| reject_nested_private_key!(value, [ path, field ].compact.join(".")) }
+      when Array
+        node.each_with_index { |value, index| reject_nested_private_key!(value, "#{path}[#{index}]") }
+      when String
+        return unless PRIVATE_KEY_MARKER.match?(node)
+
+        raise Rejected, "#{path}: a private key can't be stored here, at any depth. Reference one instead: #{EXAMPLE}"
+      end
+    end
+
     def self.rejection_message(field, value, apply_mode)
       hint = "Reference one instead: #{EXAMPLE} (read from CERT_PAYMENTS_KEY on every Kong node)"
       hint += ', or in PR mode ${{ env "DECK_CERT_PAYMENTS_KEY" }}' if apply_mode != "pr"
@@ -106,6 +131,6 @@ module Kong
 
       "#{field}: a private key can't be set from here. #{hint}"
     end
-    private_class_method :rejection_message
+    private_class_method :check_key_fields!, :reject_nested_private_key!, :rejection_message
   end
 end
