@@ -11,7 +11,8 @@ module Kong
 
     Result = Struct.new(:change_plan, :audit_event, keyword_init: true)
 
-    def initialize(change_plan:, client:, actor_username:, actor_operator: nil, confirmation_name: nil, secret: nil)
+    def initialize(change_plan:, client:, actor_username:, actor_operator: nil, confirmation_name: nil, secret: nil,
+                    env_acknowledged: false)
       @change_plan = change_plan
       @connection = change_plan.kong_connection
       @client = client
@@ -19,6 +20,8 @@ module Kong
       @actor_operator = actor_operator
       @confirmation_name = confirmation_name
       @secret = secret
+      @env_acknowledged = env_acknowledged
+      @env_vars = []
       @definition = Kong::EntityTypes.fetch(change_plan.entity_type)
     end
 
@@ -32,6 +35,14 @@ module Kong
         target: @change_plan.operation == "create" ? nil : { "id" => @change_plan.target_kong_id },
         scope_kong_id: @change_plan.operation == "create" ? @change_plan.parent_kong_id : nil
       )
+
+      # M5b: re-check the key policy against the *current* apply_mode (a plan
+      # can sit pending 15 minutes) and demand the env-var acknowledgement.
+      Kong::CertificateKeyPolicy.check!(
+        @change_plan.after, entity_type: @change_plan.entity_type, apply_mode: @connection.apply_mode,
+        operation: @change_plan.operation
+      )
+      require_env_acknowledgement!
 
       if @change_plan.operation == "delete"
         Kong::ChangeGuardrails.check_delete_confirmation!(
@@ -108,7 +119,8 @@ module Kong
     def execute_create!
       response = @client.post(@definition.create_path(parent_kong_id: @change_plan.parent_kong_id), body: @change_plan.after)
       raw = parse(response)
-      Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      refresh_parent_certificate(entity.parent_kong_id) if @change_plan.entity_type == "sni"
     end
 
     # Sends only the fields that actually changed, not the whole merged
@@ -122,13 +134,48 @@ module Kong
       body = @change_plan.diff.each_with_object({}) { |(field, change), acc| acc[field] = change["to"] }
       response = @client.patch(member_path, body: body)
       raw = parse(response)
-      Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      refresh_parent_certificate(entity.parent_kong_id) if @change_plan.entity_type == "sni"
     end
 
     def execute_delete!
       @client.delete(member_path)
       KongEntity.active
         .where(kong_connection: @connection, entity_type: @change_plan.entity_type, kong_id: @change_plan.target_kong_id)
+        .update_all(deleted_at: Time.current)
+      soft_delete_children
+      refresh_parent_certificate(@change_plan.before.dig("certificate", "id") || @change_plan.parent_kong_id) if @change_plan.entity_type == "sni"
+    end
+
+    # Kong accepts a broken {vault://env/...} reference silently and the
+    # hostname's TLS then fails (M5b spec section 1), and this tool cannot see
+    # Kong's environment. So the operator (or agent) must state, out of band,
+    # that the variable exists on every node.
+    def require_env_acknowledgement!
+      @env_vars = Kong::CertificateKeyPolicy.env_vars_for(@change_plan)
+      return if @env_vars.empty? || @env_acknowledged
+
+      raise Kong::ChangeGuardrails::Violation,
+        "this makes Kong read #{@env_vars.join(', ')} -- confirm that variable is set on every Kong node " \
+        "(acknowledge_env_vars) before applying; Kong won't notice if it is missing"
+    end
+
+    # After a child write, the parent's derived name/logical_key may have moved
+    # (a certificate is named by its first SNI). The write already happened, so
+    # a failed refresh must not fail the apply -- the next sync corrects it.
+    def refresh_parent_certificate(parent_kong_id)
+      return if parent_kong_id.blank?
+
+      Kong::EntitySync.sync_one(connection: @connection, client: @client, entity_type: "certificate", kong_id: parent_kong_id)
+    rescue Kong::Client::Error
+      nil
+    end
+
+    # Kong deletes a certificate's SNIs and an upstream's targets with it;
+    # without this the read-model would keep listing them until the next sync.
+    def soft_delete_children
+      KongEntity.active
+        .where(kong_connection: @connection, parent_kong_id: @change_plan.target_kong_id)
         .update_all(deleted_at: Time.current)
     end
 
@@ -198,7 +245,8 @@ module Kong
         entity_type: @change_plan.entity_type,
         target_kong_id: @change_plan.target_kong_id,
         entity_name: @change_plan.entity_label,
-        diff: @change_plan.diff
+        diff: @change_plan.diff,
+        context: @env_vars.present? ? { "acknowledged_env_vars" => @env_vars } : {}
       )
     end
   end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_02_040000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_21_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -21,6 +21,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_02_040000) do
     t.string "actor_operator"
     t.string "actor_username", null: false
     t.bigint "change_plan_id"
+    t.jsonb "context", default: {}, null: false
     t.datetime "created_at", null: false
     t.jsonb "diff", default: {}, null: false
     t.string "entity_name"

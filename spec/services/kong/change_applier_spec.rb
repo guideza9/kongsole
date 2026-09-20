@@ -1,6 +1,7 @@
 require "rails_helper"
 require "open3"
 require "tmpdir"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe Kong::ChangeApplier do
   APPLIER_SVC_1 = "33333333-3333-3333-3333-333333333333"
@@ -464,6 +465,169 @@ RSpec.describe Kong::ChangeApplier do
 
       expect { applier(plan).call }.to raise_error(Kong::Client::UnexpectedResponse)
       expect(plan.reload.status).to eq("failed")
+    end
+  end
+
+  describe "certificates and SNIs (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:sni_id) { "eeeeeeee-0000-0000-0000-00000000000e" }
+    let(:fixture) { PemFixtures.self_signed(days: 60) }
+    let(:ref) { "{vault://env/cert-pay-key}" }
+    let(:created_cert) do
+      { id: cert_id, cert: fixture[:cert_pem], key: ref, snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000 }
+    end
+
+    def cert_create_plan(after: nil)
+      create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "create", target_kong_id: nil, before: {},
+        after: after || { "cert" => fixture[:cert_pem], "key" => ref, "snis" => [ "pay.example.internal" ] },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+    end
+
+    describe "the env-var acknowledgement" do
+      it "refuses a vault-referenced create until the variable is acknowledged, naming it, and touches nothing" do
+        plan = cert_create_plan
+
+        expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+        expect(plan.reload.status).to eq("pending")
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "applies once acknowledged, and records which variables were confirmed" do
+        plan = cert_create_plan
+        post = stub_request(:post, "https://kong-admin.internal/certificates")
+          .with(body: hash_including("key" => ref)).to_return(status: 201, body: created_cert.to_json)
+
+        result = applier(plan, env_acknowledged: true).call
+
+        expect(post).to have_been_requested
+        expect(plan.reload.status).to eq("applied")
+        expect(result.audit_event.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+        expect(result.audit_event.entity_name).to eq("pay.example.internal")
+      end
+
+      it "writes through metadata and the reference -- never the PEM -- to the read-model" do
+        stub_request(:post, "https://kong-admin.internal/certificates").to_return(status: 201, body: created_cert.to_json)
+
+        applier(cert_create_plan, env_acknowledged: true).call
+
+        row = KongEntity.find_by(kong_id: cert_id)
+        expect(row.data["key"]).to eq(ref)
+        expect(row.data).not_to have_key("cert")
+        expect(row.not_after).to be_within(5.seconds).of(60.days.from_now)
+      end
+
+      it "needs no acknowledgement for an edit that leaves the key alone" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+          before: { "id" => cert_id, "key" => ref, "tags" => [], "updated_at" => 1_700_000_000 },
+          after: { "id" => cert_id, "key" => ref, "tags" => [ "core" ], "updated_at" => 1_700_000_000 },
+          diff: { "tags" => { "from" => [], "to" => [ "core" ] } }, base_updated_at: Time.zone.at(1_700_000_000))
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        patch = stub_request(:patch, "https://kong-admin.internal/certificates/#{cert_id}").with(body: { "tags" => [ "core" ] })
+          .to_return(status: 200, body: created_cert.merge(tags: [ "core" ]).to_json)
+
+        result = applier(plan).call
+
+        expect(patch).to have_been_requested
+        expect(result.audit_event.context).to eq({})
+      end
+
+      it "needs it when an update changes the key reference" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+          before: { "id" => cert_id, "key" => "{vault://env/cert-old-key}", "updated_at" => 1_700_000_000 },
+          after: { "id" => cert_id, "key" => "{vault://env/cert-new-key}", "updated_at" => 1_700_000_000 },
+          diff: { "key" => { "from" => "{vault://env/cert-old-key}", "to" => "{vault://env/cert-new-key}" } },
+          base_updated_at: Time.zone.at(1_700_000_000))
+
+        expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_NEW_KEY/)
+      end
+
+      it "needs none for a delete, and records an empty audit context" do
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+          before: { "id" => cert_id, "snis" => [ "pay.example.internal" ], "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        stub_request(:delete, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 204)
+
+        expect(applier(plan).call.audit_event.context).to eq({})
+      end
+    end
+
+    describe "defense in depth on the key policy" do
+      it "re-rejects a plan whose stored body carries a PEM, even when acknowledged, before any request" do
+        plan = cert_create_plan(after: { "cert" => fixture[:cert_pem], "key" => fixture[:key_pem] })
+
+        expect { applier(plan, env_acknowledged: true).call }.to raise_error(Kong::CertificateKeyPolicy::Rejected)
+        expect(plan.reload.status).to eq("pending")
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "re-rejects a decK placeholder when the connection is (now) direct" do
+        plan = cert_create_plan(after: { "cert" => fixture[:cert_pem], "key" => '${{ env "DECK_CERT_A" }}' })
+
+        expect { applier(plan, env_acknowledged: true).call }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /direct/)
+      end
+    end
+
+    describe "keeping the read-model honest" do
+      before { create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: cert_id, name: "old.example") }
+
+      it "refreshes the parent certificate after an SNI create, so its derived name follows" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis").with(body: hash_including("certificate" => { "id" => cert_id }))
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+
+        applier(plan).call
+
+        expect(refetch).to have_been_requested
+        expect(KongEntity.find_by(kong_id: sni_id).parent_kong_id).to eq(cert_id)
+        expect(KongEntity.find_by(kong_id: cert_id).name).to eq("pay.example.internal")
+      end
+
+      it "still applies the SNI when refreshing the parent fails -- the write already happened" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis")
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 503, body: "")
+
+        applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(KongEntity.find_by(kong_id: sni_id)).to be_present
+      end
+
+      it "soft-deletes a deleted certificate's SNIs, which Kong removes with it" do
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
+          parent_type: "certificate", parent_kong_id: cert_id)
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+          before: { "id" => cert_id, "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        stub_request(:delete, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 204)
+
+        applier(plan).call
+
+        expect(KongEntity.active.where(kong_connection: connection, kong_id: [ cert_id, sni_id ])).to be_empty
+      end
+
+      it "does the same for an upstream's targets (closing an M5a gap: they stayed listed until the next sync)" do
+        upstream_id = "aaaaaaaa-0000-0000-0000-00000000000a"
+        target_id = "cccccccc-0000-0000-0000-00000000000c"
+        create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+        create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+          parent_type: "upstream", parent_kong_id: upstream_id)
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "upstream", target_kong_id: upstream_id,
+          before: { "id" => upstream_id, "name" => "orders", "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}")
+          .to_return(status: 200, body: { id: upstream_id, name: "orders", updated_at: 1_700_000_000 }.to_json)
+        stub_request(:delete, "https://kong-admin.internal/upstreams/#{upstream_id}").to_return(status: 204)
+
+        applier(plan).call
+
+        expect(KongEntity.active.where(kong_connection: connection, kong_id: [ upstream_id, target_id ])).to be_empty
+      end
     end
   end
 end
