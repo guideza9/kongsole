@@ -1,3 +1,4 @@
+require Rails.root.join("spec/support/pem_fixtures")
 require "rails_helper"
 
 RSpec.describe "Entities (web)", type: :request do
@@ -716,5 +717,108 @@ RSpec.describe "Entities (web)", type: :request do
     get entities_path(type: "route")
 
     expect(response.body).to include("protected")
+  end
+
+  describe "certificates (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:sni_id) { "eeeeeeee-0000-0000-0000-00000000000e" }
+    let(:metadata) do
+      { "subject" => "CN=pay.example.internal,O=Spec", "issuer" => "CN=Spec CA", "serial" => "ABC123",
+        "not_before" => 1.day.ago.iso8601, "not_after" => 12.days.from_now.iso8601,
+        "fingerprint_sha256" => "a" * 64, "sans" => [ "DNS:pay.example.internal" ] }
+    end
+
+    def create_certificate(name: "pay.example.internal", key: "{vault://env/cert-pay-key}", not_after: 12.days.from_now, **attrs)
+      create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: cert_id, name: name, not_after: not_after,
+        data: { "key" => key, "snis" => [ name ], "_metadata" => metadata }, **attrs)
+    end
+
+    it "has Certificates and CA certificates tabs" do
+      sign_in
+
+      get entities_path(type: "certificate")
+
+      expect(response.body).to include("Certificates").and include("CA certificates")
+    end
+
+    it "lists certificates with an expiry badge and how long is left" do
+      sign_in
+      create_certificate
+      create(:kong_entity, kong_connection: connection, entity_type: "certificate", name: "gone.example", not_after: 2.days.ago,
+        data: { "_metadata" => metadata })
+
+      get entities_path(type: "certificate")
+
+      expect(response.body).to include("pay.example.internal").and include("gone.example")
+      expect(response.body).to include("Warning") # 12 days left
+      expect(response.body).to include("Expired")
+      expect(response.body).to include("2 days ago")
+    end
+
+    it "shows how many SNIs each certificate has" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "certificate", name: "multi.example", not_after: 90.days.from_now,
+        data: { "snis" => %w[multi.example a.example b.example], "_metadata" => metadata })
+
+      get entities_path(type: "certificate")
+
+      expect(response.body).to include("SNIs") # column header
+      expect(response.body).to match(/tabular-nums[^>]*>\s*3\s*</)
+    end
+
+    it "lists CA certificates the same way" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "ca_certificate", name: "9852b7219ac3", not_after: 400.days.from_now,
+        data: { "_metadata" => metadata })
+
+      get entities_path(type: "ca_certificate")
+
+      expect(response.body).to include("9852b7219ac3").and include("Ok")
+    end
+
+    it "shows a certificate's metadata, and the env var its key reference reads" do
+      sign_in
+      certificate = create_certificate
+
+      get entity_path(certificate)
+
+      expect(response.body).to include("CN=pay.example.internal,O=Spec").and include("CN=Spec CA")
+      expect(response.body).to include("a" * 64)
+      expect(response.body).to include("DNS:pay.example.internal")
+      expect(response.body).to include("{vault://env/cert-pay-key}")
+      expect(response.body).to include("CERT_PAY_KEY")
+    end
+
+    it "warns when Kong still holds a plaintext key, since the tool can never have set it" do
+      sign_in
+      certificate = create_certificate(key: "[REDACTED]")
+
+      get entity_path(certificate)
+
+      expect(response.body).to include("plaintext")
+      expect(response.body).not_to include("PRIVATE KEY")
+    end
+
+    it "shows the certificate's SNIs with an Add SNI link scoped to it" do
+      sign_in
+      certificate = create_certificate
+      create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "api.example.internal",
+        parent_type: "certificate", parent_kong_id: cert_id, enabled: nil)
+
+      get entity_path(certificate)
+
+      expect(response.body).to include("SNIs").and include("api.example.internal")
+      expect(response.body).to include(new_entity_path(type: "sni", parent_kong_id: cert_id).gsub("&", "&amp;"))
+      expect(response.body).not_to include(">disabled<")
+    end
+
+    it "does not show certificate panels on other entity types" do
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "payments-api")
+
+      get entity_path(service)
+
+      expect(response.body).not_to include("Key reference")
+    end
   end
 end

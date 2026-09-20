@@ -1,0 +1,43 @@
+<%# Metadata parsed from the PEM at sync time (Kong::CertificateMetadata). The
+    PEM itself is never cached, and the private key is only ever a reference. %>
+<% meta = @entity.data["_metadata"] || {} %>
+<% key = certificate_key_summary(@entity) if @entity.entity_type == "certificate" %>
+
+<section class="panel p-4">
+  <h2 class="section-label mb-3">Certificate</h2>
+  <% if meta["parse_error"] %>
+    <p class="text-sm" style="color: var(--color-warning)">Kong's copy of this certificate couldn't be read here (<%= meta["parse_error"] %>), so no details are shown.</p>
+  <% else %>
+    <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt style="color: var(--color-ink-soft)">Expires</dt>
+      <dd class="flex flex-wrap items-center gap-2"><%= expiry_badge(@entity) %> <%= @entity.not_after&.to_fs(:long) %> <% if @entity.not_after %><span style="color: var(--color-ink-soft)">(<%= expiry_when(@entity) %>)</span><% end %></dd>
+      <dt style="color: var(--color-ink-soft)">Valid from</dt><dd><%= meta["not_before"] && Time.iso8601(meta["not_before"]).to_fs(:long) %></dd>
+      <dt style="color: var(--color-ink-soft)">Subject</dt><dd class="font-mono text-xs break-all"><%= meta["subject"] %></dd>
+      <dt style="color: var(--color-ink-soft)">Issuer</dt><dd class="font-mono text-xs break-all"><%= meta["issuer"] %></dd>
+      <dt style="color: var(--color-ink-soft)">SANs</dt><dd class="font-mono text-xs"><%= Array(meta["sans"]).join(", ").presence || "—" %></dd>
+      <dt style="color: var(--color-ink-soft)">Serial</dt><dd class="font-mono text-xs break-all"><%= meta["serial"] %></dd>
+      <dt style="color: var(--color-ink-soft)">SHA-256</dt><dd class="font-mono text-xs break-all"><%= meta["fingerprint_sha256"] %></dd>
+    </dl>
+  <% end %>
+</section>
+
+<% if key %>
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Key reference</h2>
+    <% if key[:kind] == :reference %>
+      <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+        <dt style="color: var(--color-ink-soft)">Reference</dt><dd class="font-mono text-xs break-all"><%= key[:value] %></dd>
+        <dt style="color: var(--color-ink-soft)">Kong reads</dt><dd class="font-mono text-xs"><%= key[:env_var] %></dd>
+      </dl>
+      <p class="text-xs mt-3" style="color: var(--color-ink-faint)">
+        The private key lives only in that environment variable on each Kong node. Kong doesn't check that it is set —
+        if it is missing, TLS for this certificate's hostnames fails.
+      </p>
+    <% else %>
+      <p class="text-sm" style="color: var(--color-warning)">
+        Kong holds a plaintext private key for this certificate. This tool never sets one and can't show it — replace it
+        with a <code class="font-mono">{vault://env/…}</code> reference when you next edit the certificate.
+      </p>
+    <% end %>
+  </section>
+<% end %>

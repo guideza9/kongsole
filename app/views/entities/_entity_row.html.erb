@@ -21,6 +21,19 @@
     <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-soft)"><%= entity.data["weight"] || "—" %></span>
   <% end %>
 
+  <% if type == "certificate" %>
+    <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-soft)"><%= Array(entity.data["snis"]).size %></span>
+  <% end %>
+
+  <% if type.in?(%w[certificate ca_certificate]) %>
+    <div class="entity-cell flex flex-wrap items-center gap-1.5">
+      <%= expiry_badge(entity) %>
+      <% if entity.not_after %>
+        <span class="text-xs" style="color: var(--color-ink-soft)"><%= expiry_when(entity) %></span>
+      <% end %>
+    </div>
+  <% end %>
+
   <div class="entity-cell flex items-center gap-1.5">
     <% visible_tags(entity).each do |tag| %>
       <span class="tag"><%= tag %></span>

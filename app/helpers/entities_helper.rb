@@ -47,6 +47,21 @@ module EntitiesHelper
       [ "Tags", "minmax(120px, 0.9fr)" ],
       [ "Status", "minmax(96px, auto)" ],
       [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "certificate" => [
+      [ "Name", "minmax(160px, 1.2fr)" ],
+      [ "SNIs", "minmax(64px, 0.4fr)" ],
+      [ "Expires", "minmax(200px, 1.3fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "ca_certificate" => [
+      [ "Name", "minmax(160px, 1.2fr)" ],
+      [ "Expires", "minmax(200px, 1.3fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
     ]
   }.freeze
 
@@ -62,7 +77,7 @@ module EntitiesHelper
   # the table scrolls horizontally below this, the same pattern already
   # used by audit_events/change_plans' tables.
   def entity_table_min_width(type)
-    type.in?(%w[route plugin upstream target]) ? "820px" : "620px"
+    type.in?(%w[route plugin upstream target certificate ca_certificate]) ? "820px" : "620px"
   end
 
   def entity_table_columns(type)
@@ -93,6 +108,18 @@ module EntitiesHelper
 
     parent = KongEntity.active.find_by(kong_connection: entity.kong_connection, entity_type: entity.parent_type, kong_id: entity.parent_kong_id)
     "#{entity.parent_type}: #{parent&.name || entity.parent_kong_id[0..7]}"
+  end
+
+  # What the certificate page says about a certificate's private key: the
+  # reference and the env var it reads, "plaintext" when Kong still holds one
+  # (the redactor blanked it -- this tool never sets one), or nil.
+  def certificate_key_summary(entity)
+    key = entity.data["key"]
+    if Kong::CertificateKeyPolicy.vault_reference?(key)
+      { kind: :reference, value: key, env_var: Kong::CertificateKeyPolicy.env_var_name(key) }
+    elsif key == Kong::Redactor::MARK
+      { kind: :plaintext }
+    end
   end
 
   # Caps a row to one line of tags so every row holds the same height --

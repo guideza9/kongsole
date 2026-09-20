@@ -16,7 +16,7 @@
 </div>
 
 <nav class="flex gap-1 mb-6" style="border-bottom: 1px solid var(--color-border)">
-  <% %w[service route consumer plugin upstream].each do |type| %>
+  <% %w[service route consumer plugin upstream certificate ca_certificate].each do |type| %>
     <%= link_to entity_type_label(type), entities_path(type: type),
           class: "px-3 py-2 text-sm #{'font-semibold' if @type == type}",
           style: @type == type ? "color: var(--color-ink); border-bottom: 2px solid var(--color-accent)" : "color: var(--color-ink-soft)" %>

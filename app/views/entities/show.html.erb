@@ -37,6 +37,10 @@
     </dl>
   </section>
 
+  <% if @entity.entity_type.in?(%w[certificate ca_certificate]) %>
+    <%= render "certificate_details" %>
+  <% end %>
+
   <section class="panel p-4">
     <h2 class="section-label mb-3">Raw JSON <span class="font-normal normal-case" style="letter-spacing: normal; color: var(--color-ink-faint)">(redacted at sync time)</span></h2>
     <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@entity.data) %></pre>
@@ -52,6 +56,8 @@
           <%= link_to "Add plugin", new_plugin_path(scope_type: @entity.entity_type, scope_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
         <% elsif label == "Targets" %>
           <%= link_to "Add target", new_entity_path(type: "target", parent_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
+        <% elsif label == "SNIs" %>
+          <%= link_to "Add SNI", new_entity_path(type: "sni", parent_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
         <% end %>
       </div>
       <% if children.empty? %>

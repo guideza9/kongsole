@@ -210,6 +210,8 @@ class EntitiesController < ApplicationController
       { "Credentials" => children_of(%w[keyauth_credential basicauth_credential]), "Plugins" => children_of("plugin") }
     when "upstream"
       { "Targets" => children_of("target") }
+    when "certificate"
+      { "SNIs" => children_of("sni") }
     else
       {}
     end
