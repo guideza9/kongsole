@@ -20,7 +20,7 @@ module Kong
       @actor_operator = actor_operator
       @confirmation_name = confirmation_name
       @secret = secret
-      @env_acknowledged = env_acknowledged
+      @env_acknowledged = env_acknowledged == true
       @env_vars = []
       @definition = Kong::EntityTypes.fetch(change_plan.entity_type)
     end
@@ -167,7 +167,8 @@ module Kong
       return if parent_kong_id.blank?
 
       Kong::EntitySync.sync_one(connection: @connection, client: @client, entity_type: "certificate", kong_id: parent_kong_id)
-    rescue Kong::Client::Error
+    rescue Kong::Client::Error, JSON::ParserError, KeyError, ActiveRecord::ActiveRecordError => e
+      Rails.logger.warn("kong: parent certificate refresh failed after a child write (#{e.class}: #{e.message})")
       nil
     end
 

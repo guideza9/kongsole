@@ -492,6 +492,12 @@ RSpec.describe Kong::ChangeApplier do
         expect(WebMock).not_to have_requested(:any, /kong-admin/)
       end
 
+      it "does not treat a raw param string as an acknowledgement" do
+        expect { applier(cert_create_plan, env_acknowledged: "false").call }
+          .to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
       it "applies once acknowledged, and records which variables were confirmed" do
         plan = cert_create_plan
         post = stub_request(:post, "https://kong-admin.internal/certificates")
@@ -583,6 +589,20 @@ RSpec.describe Kong::ChangeApplier do
         expect(refetch).to have_been_requested
         expect(KongEntity.find_by(kong_id: sni_id).parent_kong_id).to eq(cert_id)
         expect(KongEntity.find_by(kong_id: cert_id).name).to eq("pay.example.internal")
+      end
+
+      it "still applies and audits the SNI when the parent's refresh returns garbage -- the write already happened" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis")
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: "<html>not json")
+
+        result = applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(result.audit_event).to be_persisted
       end
 
       it "still applies the SNI when refreshing the parent fails -- the write already happened" do
