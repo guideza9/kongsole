@@ -82,7 +82,7 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "every connection this token can reach (or one, with connection=). Reads the last sync -- check meta.generated_at " +
         "and sync first if it might be stale. Never returns a key or a PEM.",
       inputSchema: {
-        days: z.number().int().positive().optional().describe("Window in days (default 30)"),
+        days: z.number().int().positive().max(3650).optional().describe("Window in days, 1-3650 (default 30)"),
         connection: z.string().optional().describe("Limit to one connection this token is bound to")
       }
     },

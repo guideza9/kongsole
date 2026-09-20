@@ -140,6 +140,8 @@ describe("registerTools", () => {
 
       expect(() => schema.parse({})).not.toThrow();
       expect(() => schema.parse({ days: 0 })).toThrow(); // must be positive
+      expect(() => schema.parse({ days: 3650 })).not.toThrow();
+      expect(() => schema.parse({ days: 3651 })).toThrow(); // Rails' ceiling, so the agent learns early
     });
 
     it("surfaces an API error as isError with Rails' message", async () => {

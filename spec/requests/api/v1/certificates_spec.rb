@@ -118,4 +118,21 @@ RSpec.describe "API::V1::Certificates", type: :request do
     expect(response).to have_http_status(:ok)
     expect(JSON.parse(response.body)["data"].size).to eq(1)
   end
+
+  it "rejects a wrong bearer token" do
+    get expiring_api_v1_certificates_path, headers: auth("not-a-real-token")
+
+    expect(response).to have_http_status(:unauthorized)
+  end
+
+  it "excludes soft-deleted certificates, ones with no not_after, and non-certificate entity types" do
+    cert(dev, "live.example", 5.days.from_now)
+    cert(dev, "deleted.example", 5.days.from_now, deleted_at: 1.hour.ago)
+    cert(dev, "undated.example", nil)
+    cert(dev, "an-upstream", 5.days.from_now, type: "upstream")
+
+    get expiring_api_v1_certificates_path, headers: auth(token_for(dev))
+
+    expect(JSON.parse(response.body)["data"].map { |c| c["name"] }).to eq([ "live.example" ])
+  end
 end

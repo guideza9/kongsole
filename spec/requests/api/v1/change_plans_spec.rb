@@ -252,6 +252,34 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
     end
   end
 
+  describe "a non-String connection param" do
+    let(:connection) { create(:kong_connection, name: "dev", admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword") }
+    let(:token) { token_for(connection) }
+    let(:variants) { { "hash" => { a: "dev" }, "array" => [ "dev" ], "array of a bound name and a blank" => [ "dev", "" ] } }
+
+    it "is treated like an unbound connection name (401) on kong_plan, creating no plan" do
+      variants.each do |label, value|
+        post api_v1_change_plans_path, params: { connection: value, type: "service", operation: "create", attributes: { name: "x" } },
+          headers: auth(token)
+
+        expect(response).to have_http_status(:unauthorized), label
+        expect(ChangePlan.count).to eq(0), label
+      end
+    end
+
+    it "is treated like an unbound connection name (401) on kong_apply, leaving the plan pending" do
+      plan = create(:change_plan, kong_connection: connection, actor_kind: "agent", entity_type: "service", operation: "create",
+        target_kong_id: nil, before: {}, after: { "name" => "x" }, diff: { "operation" => "create" }, base_updated_at: nil)
+
+      variants.each do |label, value|
+        post apply_api_v1_change_plan_path(plan), params: { connection: value }, headers: auth(token)
+
+        expect(response).to have_http_status(:unauthorized), label
+        expect(plan.reload.status).to eq("pending"), label
+      end
+    end
+  end
+
   describe "certificates and SNIs (M5b)" do
     let(:connection) { create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword") }
     let(:token) { token_for(connection) }

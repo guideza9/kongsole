@@ -23,11 +23,13 @@ module Api
       # parameter on every tool" rule docs/DESIGN.md section 12 states,
       # just keyed off the PAT's connection set instead of one browser
       # session's single active connection.
+      # Only a String names a connection: an Array/hash smuggled in via the
+      # query string is treated as an unknown name (401), never cast or resolved.
       def current_pat_connection
         return @current_pat_connection if defined?(@current_pat_connection)
 
         @current_pat_connection =
-          if params[:connection].present?
+          if params[:connection].is_a?(String) && params[:connection].present?
             current_pat.kong_connections.find_by(name: params[:connection])
           end
       end
