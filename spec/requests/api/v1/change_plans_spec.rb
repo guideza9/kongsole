@@ -1,4 +1,5 @@
 require "rails_helper"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe "API::V1::ChangePlans", type: :request do
   def auth(raw_token)
@@ -248,6 +249,114 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(response).to have_http_status(:forbidden)
       expect(response.body).to include("PR mode")
       expect(plan.reload.status).to eq("pending")
+    end
+  end
+
+  describe "certificates and SNIs (M5b)" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword") }
+    let(:token) { token_for(connection) }
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:fixture) { PemFixtures.self_signed(days: 60) }
+    let(:ref) { "{vault://env/cert-pay-key}" }
+    let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+
+    def plan_cert(attributes)
+      post api_v1_change_plans_path, params: { connection: connection.name, type: "certificate", operation: "create", attributes: attributes },
+        headers: auth(token), as: :json
+    end
+
+    it "proposes a certificate whose key is a vault reference" do
+      stub_request(:post, "https://kong-admin.test/schemas/certificates/validate").to_return(ok)
+
+      plan_cert({ cert: fixture[:cert_pem], key: ref, snis: [ "pay.example.internal" ] })
+
+      expect(response).to have_http_status(:created)
+      expect(ChangePlan.find(JSON.parse(response.body)["id"]).after["key"]).to eq(ref)
+    end
+
+    it "returns 422 -- not 403 -- for a pasted private key, never echoing it, and creates no plan" do
+      plan_cert({ cert: fixture[:cert_pem], key: fixture[:key_pem] })
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)["error"]).to include("{vault://env/")
+      expect(response.body).not_to include("PRIVATE KEY")
+      expect(ChangePlan.count).to eq(0)
+    end
+
+    it "returns 422 for a decK placeholder on a direct-mode connection" do
+      plan_cert({ cert: fixture[:cert_pem], key: '${{ env "DECK_CERT_A" }}' })
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "proposes an SNI under a certificate given as parent_kong_id" do
+      stub_request(:post, "https://kong-admin.test/schemas/snis/validate").to_return(ok)
+
+      post api_v1_change_plans_path, params: { connection: connection.name, type: "sni", operation: "create", parent_kong_id: cert_id,
+        attributes: { name: "api.example.internal" } }, headers: auth(token), as: :json
+
+      expect(response).to have_http_status(:created)
+      expect(ChangePlan.last.after).to eq({ "name" => "api.example.internal", "certificate" => { "id" => cert_id } })
+    end
+
+    describe "kong_apply and the env-var acknowledgement" do
+      let(:plan) do
+        create(:change_plan, kong_connection: connection, actor_kind: "agent", entity_type: "certificate", operation: "create",
+          target_kong_id: nil, before: {}, after: { "cert" => fixture[:cert_pem], "key" => ref, "snis" => [ "pay.example.internal" ] },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+      end
+
+      def stub_create
+        stub_request(:post, "https://kong-admin.test/certificates").to_return(status: 201, body: {
+          id: cert_id, cert: fixture[:cert_pem], key: ref, snis: [ "pay.example.internal" ], updated_at: 1_700_000_000
+        }.to_json)
+      end
+
+      it "refuses without acknowledge_env_vars, naming the variable, and leaves the plan pending" do
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+        expect(response).to have_http_status(:forbidden)
+        expect(JSON.parse(response.body)["error"]).to include("CERT_PAY_KEY")
+        expect(plan.reload.status).to eq("pending")
+      end
+
+      it "applies with acknowledge_env_vars: true and records the agent's confirmation" do
+        stub_create
+
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name, acknowledge_env_vars: true },
+          headers: auth(token), as: :json
+
+        expect(response).to have_http_status(:ok)
+        event = AuditEvent.find(JSON.parse(response.body)["audit_event_id"])
+        expect(event.actor_kind).to eq("agent")
+        expect(event.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+      end
+
+      it "accepts the form-encoded strings \"true\" and \"1\"" do
+        stub_create
+
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name, acknowledge_env_vars: "1" }, headers: auth(token)
+
+        expect(response).to have_http_status(:ok)
+        expect(plan.reload.status).to eq("applied")
+      end
+
+      it "does not treat the string \"false\" as an acknowledgement" do
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name, acknowledge_env_vars: "false" }, headers: auth(token)
+
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      [ false, "0", "yes", "TRUE", [ true ], [ "true" ], { "a" => true }, 1, nil ].each do |value|
+        it "refuses acknowledge_env_vars: #{value.inspect} and leaves the plan pending" do
+          post apply_api_v1_change_plan_path(plan), params: { connection: connection.name, acknowledge_env_vars: value },
+            headers: auth(token), as: :json
+
+          expect(response).to have_http_status(:forbidden)
+          expect(JSON.parse(response.body)["error"]).to include("CERT_PAY_KEY")
+          expect(plan.reload.status).to eq("pending")
+        end
+      end
     end
   end
 end

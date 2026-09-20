@@ -55,7 +55,8 @@ module Api
         result = Kong::ChangeApplier.new(
           change_plan: plan, client: client_for(plan.kong_connection),
           actor_username: current_pat.issued_by_username, actor_operator: current_pat.operator,
-          secret: plan.kong_connection.auth_secret
+          secret: plan.kong_connection.auth_secret,
+          env_acknowledged: env_acknowledged?
         ).call
 
         render json: { id: plan.id, status: plan.reload.status, audit_event_id: result.audit_event.id }
@@ -70,6 +71,16 @@ module Api
       end
 
       private
+
+      # The applier only honours a literal `true`, so this must be a strict
+      # boolean: JSON true, or the form-encoded strings "true"/"1". Anything
+      # else -- absent, false, "0", "false", "yes", an Array or hash -- is a
+      # refusal. (ActiveModel's Boolean cast is deliberately not used: it
+      # casts an Array to true.)
+      def env_acknowledged?
+        value = params[:acknowledge_env_vars]
+        value == true || (value.is_a?(String) && %w[true 1].include?(value))
+      end
 
       def raw_attributes
         value = params[:attributes]

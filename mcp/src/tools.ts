@@ -74,20 +74,42 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
   );
 
   server.registerTool(
+    "kong_certs_expiring",
+    {
+      title: "List expiring certificates",
+      description:
+        "Certificates and CA certificates that expire within a window, expired ones included, soonest first, across " +
+        "every connection this token can reach (or one, with connection=). Reads the last sync -- check meta.generated_at " +
+        "and sync first if it might be stale. Never returns a key or a PEM.",
+      inputSchema: {
+        days: z.number().int().positive().optional().describe("Window in days (default 30)"),
+        connection: z.string().optional().describe("Limit to one connection this token is bound to")
+      }
+    },
+    async (params) => {
+      try {
+        return ok(await client.certsExpiring(params));
+      } catch (error) {
+        return fail(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "kong_plan",
     {
       title: "Propose a Kong entity change",
       description:
         "Propose a create/update/delete against a Kong entity. No side effect on Kong -- returns a diff and a " +
         "plan_id for kong_apply to execute. Deleting an admin-path or protected entity is always rejected here, " +
-        "with no override.",
+        "with no override. A certificate's key must be a {vault://env/NAME} reference -- a private key is never accepted.",
       inputSchema: {
         connection: z.string(),
         type: z
           .string()
           .describe(
             "Entity type: service, route, consumer, plugin, keyauth_credential, basicauth_credential, " +
-              "upstream, or target"
+              "upstream, target, certificate, sni, or ca_certificate"
           ),
         operation: z.enum(["create", "update", "delete"]),
         target_kong_id: z.string().optional().describe("Required for update/delete; omit for create"),
@@ -95,7 +117,7 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
           .string()
           .optional()
           .describe(
-            "Required to CREATE a target (the upstream's kong id) or a credential (the consumer's kong id). " +
+            "Required to CREATE a target (the upstream's kong id), a credential (the consumer's kong id) or an SNI (the certificate's kong id). " +
               "For update/delete of an existing target it may be omitted -- it is looked up from the last sync."
           ),
         attributes: z.record(z.string(), z.unknown()).optional().describe("Fields to set, required for create/update")
@@ -119,12 +141,23 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "connection is rank >= 2 and still on apply_mode direct (agent writes to those need PR mode).",
       inputSchema: {
         connection: z.string(),
-        plan_id: z.number().int().describe("The id kong_plan returned")
+        plan_id: z.number().int().describe("The id kong_plan returned"),
+        acknowledge_env_vars: z
+          .boolean()
+          .optional()
+          .describe(
+            "Required to apply a certificate whose key is a {vault://env/NAME} reference: pass true only after confirming " +
+              "the variable (e.g. CERT_PAYMENTS_KEY) is set on every Kong node. Kong won't notice if it is missing."
+          )
       }
     },
-    async ({ connection, plan_id }) => {
+    async ({ connection, plan_id, acknowledge_env_vars }) => {
       try {
-        return ok(await client.applyChange(plan_id, connection));
+        return ok(
+          acknowledge_env_vars
+            ? await client.applyChange(plan_id, connection, true)
+            : await client.applyChange(plan_id, connection)
+        );
       } catch (error) {
         return fail(error);
       }

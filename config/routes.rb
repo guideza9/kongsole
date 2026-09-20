@@ -42,6 +42,9 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :entities, only: %i[index]
       resources :connections, only: %i[index]
+      resources :certificates, only: [] do
+        collection { get :expiring }
+      end
       resources :change_plans, only: %i[create] do
         member { post :apply }
       end

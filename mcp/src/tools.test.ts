@@ -116,6 +116,65 @@ describe("registerTools", () => {
 
       expect(described).toContain("target");
       expect(described).toContain("upstream");
+      expect(described).toContain("certificate");
+    });
+  });
+
+  describe("kong_certs_expiring", () => {
+    it("passes days and connection through to the client", async () => {
+      const { server, tools } = fakeServer();
+      const certsExpiring = vi.fn().mockResolvedValue({ data: [{ name: "pay.example" }], meta: { days: 14 } });
+      registerTools(server, { certsExpiring } as unknown as KongctlClient);
+
+      const result = await tools.get("kong_certs_expiring")!({ days: 14, connection: "prod" });
+
+      expect(certsExpiring).toHaveBeenCalledWith({ days: 14, connection: "prod" });
+      expect(result).toEqual({ content: [{ type: "text", text: JSON.stringify({ data: [{ name: "pay.example" }], meta: { days: 14 } }, null, 2) }] });
+    });
+
+    it("accepts no arguments at all -- both are optional", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+
+      const schema = z.object(configs.get("kong_certs_expiring")!.inputSchema!);
+
+      expect(() => schema.parse({})).not.toThrow();
+      expect(() => schema.parse({ days: 0 })).toThrow(); // must be positive
+    });
+
+    it("surfaces an API error as isError with Rails' message", async () => {
+      const { server, tools } = fakeServer();
+      const certsExpiring = vi.fn().mockRejectedValue(new KongctlApiError(401, "connection \"prod\" must be one this token is bound to"));
+      registerTools(server, { certsExpiring } as unknown as KongctlClient);
+
+      const result = (await tools.get("kong_certs_expiring")!({ connection: "prod" })) as { isError: boolean; content: { text: string }[] };
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("bound to");
+    });
+  });
+
+  describe("kong_apply acknowledge_env_vars", () => {
+    it("is declared in the input schema and optional", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+      const shape = configs.get("kong_apply")!.inputSchema!;
+
+      expect(z.object(shape).parse({ connection: "dev", plan_id: 1, acknowledge_env_vars: true }).acknowledge_env_vars).toBe(true);
+      expect(() => z.object(shape).parse({ connection: "dev", plan_id: 1 })).not.toThrow();
+      expect(shape.acknowledge_env_vars?.description).toContain("CERT_");
+    });
+
+    it("forwards the flag only when it is true, leaving existing calls unchanged", async () => {
+      const { server, tools } = fakeServer();
+      const applyChange = vi.fn().mockResolvedValue({ status: "applied" });
+      registerTools(server, { applyChange } as unknown as KongctlClient);
+
+      await tools.get("kong_apply")!({ connection: "dev", plan_id: 1 });
+      expect(applyChange).toHaveBeenLastCalledWith(1, "dev");
+
+      await tools.get("kong_apply")!({ connection: "dev", plan_id: 2, acknowledge_env_vars: true });
+      expect(applyChange).toHaveBeenLastCalledWith(2, "dev", true);
     });
   });
 

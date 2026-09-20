@@ -15,6 +15,11 @@ export class KongctlApiError extends Error {
   }
 }
 
+export interface CertsExpiringParams {
+  days?: number;
+  connection?: string;
+}
+
 export interface SearchEntitiesParams {
   connection: string;
   type: string;
@@ -65,8 +70,19 @@ export class KongctlClient {
     return this.request("POST", "/change_plans", params);
   }
 
-  applyChange(planId: number, connection: string): Promise<unknown> {
-    return this.request("POST", `/change_plans/${planId}/apply`, { connection });
+  certsExpiring(params: CertsExpiringParams = {}): Promise<unknown> {
+    const query = new URLSearchParams();
+    if (params.days !== undefined) query.set("days", String(params.days));
+    if (params.connection !== undefined) query.set("connection", params.connection);
+    const suffix = query.toString();
+    return this.request("GET", `/certificates/expiring${suffix ? `?${suffix}` : ""}`);
+  }
+
+  applyChange(planId: number, connection: string, acknowledgeEnvVars = false): Promise<unknown> {
+    return this.request("POST", `/change_plans/${planId}/apply`, {
+      connection,
+      ...(acknowledgeEnvVars ? { acknowledge_env_vars: true } : {})
+    });
   }
 
   private async request(method: string, path: string, body?: unknown): Promise<unknown> {
