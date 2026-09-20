@@ -97,6 +97,40 @@ RSpec.describe Kong::EntityTypes do
     end
   end
 
+  describe "certificate types (M5b)" do
+    it "registers certificate, sni and ca_certificate as flat collections with schema names" do
+      { "certificate" => [ "/certificates", "certificates" ],
+        "sni" => [ "/snis", "snis" ],
+        "ca_certificate" => [ "/ca_certificates", "ca_certificates" ] }.each do |type, (path, schema)|
+        definition = described_class.fetch(type)
+        expect(definition).not_to be_nested
+        expect(definition.collection_path).to eq(path)
+        expect(definition.member_path("abc")).to eq("#{path}/abc")
+        expect(definition.schema_name).to eq(schema)
+      end
+    end
+
+    it "makes an sni a flat child whose create body carries its certificate" do
+      sni = described_class.fetch("sni")
+
+      expect(sni.parent_type).to eq("certificate")
+      expect(sni.parent_in_body).to be(true)
+      expect(sni.requires_parent?).to be(true)
+      expect(sni.create_path).to eq("/snis")
+    end
+
+    it "does not make other types require a parent by accident" do
+      expect(described_class.fetch("certificate").requires_parent?).to be(false)
+      expect(described_class.fetch("route").requires_parent?).to be(false)
+      expect(described_class.fetch("target").requires_parent?).to be(true) # nested
+    end
+
+    it "labels a certificate by its first SNI in sorted order, since Kong gives it no name" do
+      expect(described_class.label({ "snis" => %w[b.example a.example] })).to eq("a.example")
+      expect(described_class.label({ "snis" => [] })).to be_nil
+    end
+  end
+
   describe "existing credential types" do
     it "keep their flat list path for reads and only nest the create path" do
       definition = described_class.fetch("keyauth_credential")

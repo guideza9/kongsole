@@ -19,9 +19,15 @@ module Kong
     # runs `POST /schemas/:name/validate` at plan time so a malformed body is
     # rejected with Kong's own per-field errors before a plan exists.
     Definition = Struct.new(:list_path, :parent_type, :create_path_proc, :nested_collection_proc, :schema_name,
-                             keyword_init: true) do
+                             :parent_in_body, keyword_init: true) do
       def nested?
         nested_collection_proc.present?
+      end
+
+      # A flat child (sni) still needs its parent: the create body must carry
+      # `certificate: {id}`. `nested?` types (target) need it for the path.
+      def requires_parent?
+        nested? || parent_in_body.present?
       end
 
       def collection_path(parent_kong_id: nil)
@@ -85,15 +91,21 @@ module Kong
         parent_type: "upstream",
         nested_collection_proc: ->(upstream_kong_id) { "/upstreams/#{upstream_kong_id}/targets" },
         schema_name: "targets"
-      )
+      ),
+      # M5b. All three are flat top-level collections in Kong 3.7 -- unlike a
+      # target, an SNI is listable and addressable without its certificate.
+      "certificate" => Definition.new(list_path: "/certificates", parent_type: nil, schema_name: "certificates"),
+      "sni" => Definition.new(list_path: "/snis", parent_type: "certificate", schema_name: "snis", parent_in_body: true),
+      "ca_certificate" => Definition.new(list_path: "/ca_certificates", parent_type: nil, schema_name: "ca_certificates")
     }.freeze
 
     # What a human calls an entity: its `name`, or -- for a target, which has
-    # none -- its `host:port`. Takes several documents (before, after) and
+    # none -- its `host:port`, or -- for a certificate, which has none -- its
+    # first SNI in sorted order. Takes several documents (before, after) and
     # returns the first label present, since a create has no `before`.
     def self.label(*documents)
       documents.each do |doc|
-        label = doc && (doc["name"].presence || doc["target"].presence)
+        label = doc && (doc["name"].presence || doc["target"].presence || Array(doc["snis"]).min.presence)
         return label if label
       end
       nil

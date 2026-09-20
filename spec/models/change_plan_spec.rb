@@ -20,4 +20,13 @@ RSpec.describe ChangePlan do
       expect(plan.entity_label).to eq("10.0.0.1:8080")
     end
   end
+
+  describe "#entity_label for a certificate" do
+    it "is the first SNI in sorted order, from the create body" do
+      plan = build(:change_plan, entity_type: "certificate", operation: "create", before: {},
+        after: { "snis" => %w[b.example a.example], "key" => "{vault://env/x}" })
+
+      expect(plan.entity_label).to eq("a.example")
+    end
+  end
 end
