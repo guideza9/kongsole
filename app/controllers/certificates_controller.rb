@@ -23,7 +23,8 @@ class CertificatesController < ApplicationController
   private
 
   def normalized_days
-    days = params[:days].to_i
+    raw = params[:days]
+    days = raw.is_a?(String) ? raw.to_i : 0 # days[]=1 / days[a]=1 arrive as Array / Parameters
     days.between?(1, MAX_DAYS) ? days : DEFAULT_DAYS
   end
 end

@@ -30,7 +30,7 @@
       <tbody>
         <% @entities.each do |entity| %>
           <tr style="border-top: 1px solid var(--color-border)">
-            <td class="px-3 py-2.5 font-semibold"><%= link_to entity.name, entity_path(entity) %></td>
+            <td class="px-3 py-2.5 font-semibold"><%= link_to entity.name.presence || entity.kong_id, entity_path(entity) %></td>
             <td class="px-3 py-2.5" style="color: var(--color-ink-soft)"><%= entity_type_label(entity.entity_type, count: 1) %></td>
             <td class="px-3 py-2.5"><span class="inline-flex flex-wrap items-center gap-1.5"><%= expiry_badge(entity) %> <span class="text-xs" style="color: var(--color-ink-soft)"><%= expiry_when(entity) %></span></span></td>
             <td class="px-3 py-2.5 font-mono text-xs"><%= entity.not_after.to_date %></td>

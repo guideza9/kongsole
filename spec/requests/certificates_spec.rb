@@ -78,6 +78,52 @@ RSpec.describe "Certificates expiring (web)", type: :request do
     expect(response.body).to include("month.example")
   end
 
+  it "falls back to 30 days for array and hash days params instead of erroring" do
+    sign_in
+    cert("soon.example", 5.days.from_now)
+    cert("month.example", 20.days.from_now)
+    cert("quarter.example", 60.days.from_now)
+
+    [ "days[]=1", "days[a]=1" ].each do |query|
+      get "#{expiring_certificates_path}?#{query}"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("soon.example").and include("month.example")
+      expect(response.body).not_to include("quarter.example")
+    end
+  end
+
+  it "keeps days within 1..3650, falling back to 30 outside it and truncating fractions" do
+    sign_in
+    cert("tomorrow.example", 12.hours.from_now)
+    cert("month.example", 20.days.from_now)
+    cert("decade.example", 3000.days.from_now)
+
+    [ "0", "3651", "99999999999999999999" ].each do |days|
+      get expiring_certificates_path(days: days)
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("month.example")
+      expect(response.body).not_to include("decade.example")
+    end
+
+    get expiring_certificates_path(days: 3650)
+    expect(response.body).to include("decade.example")
+
+    get expiring_certificates_path(days: "1.5")
+    expect(response.body).to include("tomorrow.example")
+    expect(response.body).not_to include("month.example")
+  end
+
+  it "falls back to the kong id as link text when a certificate has no name" do
+    sign_in
+    certificate = cert("placeholder", 5.days.from_now)
+    certificate.update_columns(name: nil)
+
+    get expiring_certificates_path
+
+    expect(response.body).to include(">#{certificate.kong_id}</a>")
+  end
+
   it "says so when nothing is expiring, and how fresh the data is" do
     sign_in
 
