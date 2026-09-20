@@ -22,6 +22,12 @@ module Kong
     # A nested type (target) with no parent to build its Admin API path from.
     class MissingParent < InvalidChange; end
 
+    # Convenience fields Kong's write endpoint accepts but its schema does not
+    # know: a certificate's `snis` creates the SNI rows, and `/schemas/
+    # certificates/validate` answers "snis: unknown field". Left out of the
+    # validation body only -- the plan's `after`, and so the apply body, keep it.
+    NOT_IN_KONG_SCHEMA = { "certificate" => %w[snis] }.freeze
+
     def initialize(connection:, client:, operation:, entity_type:, actor_username:, target_kong_id: nil,
                     parent_kong_id: nil, attributes: {}, actor_operator: nil, actor_kind: "human")
       @connection = connection
@@ -117,7 +123,7 @@ module Kong
       # with the router's 404; `deck gateway validate` covers PR mode in CI.
       return if @connection.apply_mode == "pr"
 
-      body = after.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
+      body = after.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS, *NOT_IN_KONG_SCHEMA.fetch(@entity_type, []))
       body = body.merge(@definition.parent_type => { "id" => @parent_kong_id }) if @definition.requires_parent? && @parent_kong_id.present?
       @client.post("/schemas/#{@definition.schema_name}/validate", body: body)
     rescue Kong::Client::UnexpectedResponse => e

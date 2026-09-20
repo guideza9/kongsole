@@ -382,6 +382,28 @@ RSpec.describe Kong::ChangePlanner do
         expect(validate.with(body: hash_including("key" => "{vault://env/cert-pay-key}"))).to have_been_requested
       end
 
+      it "keeps snis in the plan but never sends it to Kong's schema validation (not a schema field on a real Kong)" do
+        validate = stub_request(:post, validate_certs).to_return(ok)
+
+        plan = cert_planner(operation: "create",
+          attributes: { "cert" => pem, "key" => "{vault://env/cert-pay-key}", "snis" => [ "pay.example.internal" ] }).call
+
+        expect(plan.after["snis"]).to eq([ "pay.example.internal" ])
+        expect(validate.with { |req| !JSON.parse(req.body).key?("snis") }).to have_been_requested
+      end
+
+      it "also omits the live snis from the validation body on an update, while after keeps them" do
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem, key: "{vault://env/cert-pay-key}", snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+        validate = stub_request(:post, validate_certs).to_return(ok)
+
+        plan = cert_planner(operation: "update", target_kong_id: cert_id, attributes: { "tags" => [ "core" ] }).call
+
+        expect(plan.after["snis"]).to eq([ "pay.example.internal" ])
+        expect(validate.with { |req| !JSON.parse(req.body).key?("snis") }).to have_been_requested
+      end
+
       it "rejects a PEM key before any request reaches Kong, never persisting or echoing it" do
         pem_key = PemFixtures.self_signed[:key_pem]
 
