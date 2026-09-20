@@ -52,6 +52,11 @@
         <p class="notice-banner mb-3 text-xs" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
           <%= @payload_error %>
         </p>
+        <% if @payload_withheld %>
+          <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+            Your text wasn't kept because it may contain key material, so the editor shows the current document again.
+          </p>
+        <% end %>
       <% end %>
 
       <div class="json-editor" data-json-editor-target="wrapper">

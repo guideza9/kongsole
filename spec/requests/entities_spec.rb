@@ -934,7 +934,55 @@ RSpec.describe "Entities (web)", type: :request do
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).not_to include("BEGIN PRIVATE KEY")
-        expect(response.body).to include("private key removed")
+        expect(response.body).not_to include(private_key_pem.lines[1].strip)
+        expect(response.body).to include("wasn't kept")
+        expect(response.body).to include("{vault://env/cert-NAME-key}") # the seed is back
+      end
+
+      {
+        "an unquoted key name" => '{"cert": "c", key: HEADLESSSENTINEL0123456789}',
+        "single quotes" => "{'key': 'HEADLESSSENTINEL0123456789'}",
+        "a multi-element array" => '{"key": ["a", "HEADLESSSENTINEL0123456789"',
+        "a multi-entry object" => '{"key": {"a": "b", "c": "HEADLESSSENTINEL0123456789"}',
+        "a stray inner quote" => '{"key": "abc"HEADLESSSENTINEL0123456789"}',
+        "a bare string" => '"HEADLESSSENTINEL0123456789"',
+        "a top-level array" => '["HEADLESSSENTINEL0123456789"]'
+      }.each do |shape, payload|
+        it "withholds unparseable or non-object text instead of echoing it (#{shape})" do
+          sign_in
+
+          post entities_path, params: { type: "certificate", payload_json: payload }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.body).not_to include("HEADLESSSENTINEL")
+          expect(response.body).to include("wasn't kept")
+          expect(ChangePlan.count).to eq(0)
+        end
+      end
+
+      it "withholds unparseable text from the certificate editor too, showing the live document" do
+        sign_in
+        certificate = create_certificate
+        stub_request(:get, "https://kong-admin.test/certificates/#{cert_id}").to_return(status: 200, body: {
+          id: cert_id, cert: pem[:cert_pem], key: "{vault://env/cert-pay-key}", snis: [], tags: [], updated_at: 1_700_000_000
+        }.to_json)
+
+        patch entity_path(certificate), params: { payload_json: '{"key": HEADLESSSENTINEL0123456789' }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).not_to include("HEADLESSSENTINEL")
+        expect(response.body).to include("wasn't kept")
+        expect(response.body).to include("{vault://env/cert-pay-key}")
+      end
+
+      it "still keeps the operator's text for a type that carries no key material" do
+        sign_in
+
+        post entities_path, params: { type: "upstream", payload_json: "{ \"name\": oops-kept" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("oops-kept")
+        expect(response.body).not_to include("wasn't kept")
       end
 
       it "does not echo a key pasted without its BEGIN line, in key or key_alt" do

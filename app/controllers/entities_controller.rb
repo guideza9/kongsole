@@ -32,8 +32,7 @@ class EntitiesController < ApplicationController
   # What a key reference looks like, ignoring case: the seeded NAME placeholder
   # has this shape (so it may stay on screen) yet is not key material.
   REFERENCE_SHAPE = %r{\A\{vault://env/[a-z0-9][a-z0-9_-]*\}\z}i
-  UNPARSED_KEY_VALUE = /("key(?:_alt)?"\s*:\s*)("(?:[^"\\]|\\.)*"?|[^,}\]]*)/
-  KEY_MATERIAL_REMOVED ="[private key removed]".freeze
+  KEY_MATERIAL_REMOVED = "[private key removed]".freeze
 
   def index
     @filters = params.permit(:q, :tags, :sort).to_h.symbolize_keys
@@ -109,7 +108,7 @@ class EntitiesController < ApplicationController
     # Re-render rather than redirect so the operator's edit survives the
     # round trip -- a redirect would hand back the unedited document and
     # throw away however long they spent in the textarea.
-    @payload_json = echoed_payload(@entity.entity_type)
+    @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
     @payload_error = e.message
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangePlanner::SchemaViolation, Kong::CertificateKeyPolicy::Rejected => e
@@ -117,7 +116,7 @@ class EntitiesController < ApplicationController
 
     # Kong refused the document itself: keep the operator's JSON on screen
     # with Kong's per-field message, same as an unparseable payload.
-    @payload_json = echoed_payload(@entity.entity_type)
+    @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
     @payload_error = e.message
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangeGuardrails::Violation => e
@@ -203,9 +202,13 @@ class EntitiesController < ApplicationController
 
   # The text an error page puts back in the editor. A private key someone
   # pasted must not round-trip through our HTML. A marker scrub alone misses a
-  # key pasted without its BEGIN line, so for the certificate types every
-  # key / key_alt value that is not a key *reference* is blanked too; text that
-  # is not JSON falls back to the marker scrub alone.
+  # key pasted without its BEGIN line, so for the certificate types:
+  #   * JSON objects have every key / key_alt value that is not a key
+  #     *reference* blanked;
+  #   * anything else (unparseable text, or JSON that is not an object) is not
+  #     echoed at all -- a textual blanker cannot be made safe -- and the
+  #     fallback (the seed, or the live document) is shown instead.
+  # Other types keep the operator's text, scrubbed of PEM blocks.
   def echoed_payload(entity_type)
     text = params[:payload_json].to_s
     return Kong::CertificateKeyPolicy.scrub(text) unless entity_type.to_s.in?(Kong::CertificateKeyPolicy::DEEP_SCAN_TYPES)
@@ -213,22 +216,12 @@ class EntitiesController < ApplicationController
     parsed = begin
       JSON.parse(text)
     rescue JSON::ParserError
-      return blank_unparsed_key_values(Kong::CertificateKeyPolicy.scrub(text))
+      nil
     end
-    JSON.pretty_generate(blank_key_material(parsed))
-  end
+    return JSON.pretty_generate(blank_key_material(parsed)) if parsed.is_a?(Hash)
 
-  # Text that isn't JSON can't be walked, so the value after each "key" /
-  # "key_alt" is found textually -- quoted (possibly unterminated) or bare up to
-  # the next delimiter -- and emptied unless it is a key reference.
-  def blank_unparsed_key_values(text)
-    text.gsub(UNPARSED_KEY_VALUE) do
-      prefix = Regexp.last_match(1)
-      value = Regexp.last_match(2)
-      quoted = value.delete_prefix('"').delete_suffix('"')
-      keep = REFERENCE_SHAPE.match?(quoted) || quoted.sub(/(?:\\[nr]|\s)+\z/, "") == KEY_MATERIAL_REMOVED
-      keep ? "#{prefix}#{value}" : "#{prefix}\"\""
-    end
+    @payload_withheld = true
+    JSON.pretty_generate(yield)
   end
 
   def blank_key_material(node)
@@ -255,7 +248,7 @@ class EntitiesController < ApplicationController
   end
 
   def render_new_with_error(message)
-    @payload_json = echoed_payload(@creatable_type)
+    @payload_json = echoed_payload(@creatable_type) { seed_payload }
     @payload_error = message
     render :new, status: :unprocessable_entity
   end
