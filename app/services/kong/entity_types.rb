@@ -9,9 +9,44 @@ module Kong
     # never rendered into decK YAML or the JSON editor.
     KONG_MANAGED_FIELDS = %w[id created_at updated_at].freeze
 
-    Definition = Struct.new(:list_path, :parent_type, :create_path_proc, keyword_init: true) do
+    # `list_path` is the flat, top-level collection. A type whose Admin API
+    # only exists under its parent (a target -- Kong has no global
+    # `GET /targets`) sets `nested_collection_proc` instead, and every
+    # read/patch/delete resolves through the parent id. Callers use
+    # collection_path/member_path and never build a path from list_path.
+    #
+    # `schema_name` is Kong's `/schemas/:name` -- when set, Kong::ChangePlanner
+    # runs `POST /schemas/:name/validate` at plan time so a malformed body is
+    # rejected with Kong's own per-field errors before a plan exists.
+    Definition = Struct.new(:list_path, :parent_type, :create_path_proc, :nested_collection_proc, :schema_name,
+                             keyword_init: true) do
+      def nested?
+        nested_collection_proc.present?
+      end
+
+      def collection_path(parent_kong_id: nil)
+        return list_path unless nested?
+
+        require_parent!(parent_kong_id)
+        nested_collection_proc.call(parent_kong_id)
+      end
+
+      def member_path(kong_id, parent_kong_id: nil)
+        "#{collection_path(parent_kong_id: parent_kong_id)}/#{kong_id}"
+      end
+
       def create_path(parent_kong_id: nil)
-        create_path_proc ? create_path_proc.call(parent_kong_id) : list_path
+        return create_path_proc.call(parent_kong_id) if create_path_proc
+
+        collection_path(parent_kong_id: parent_kong_id)
+      end
+
+      private
+
+      def require_parent!(parent_kong_id)
+        return if parent_kong_id.present?
+
+        raise ArgumentError, "a #{parent_type}-nested entity needs its parent_kong_id to build a path"
       end
     end
 
@@ -41,8 +76,28 @@ module Kong
       # single fixed answer the way every other type does -- see
       # Kong::EntitySync#identify's "plugin" branch, which resolves it per
       # instance instead.
-      "plugin" => Definition.new(list_path: "/plugins", parent_type: nil)
+      "plugin" => Definition.new(list_path: "/plugins", parent_type: nil),
+      "upstream" => Definition.new(list_path: "/upstreams", parent_type: nil, schema_name: "upstreams"),
+      # Kong 3.7 targets are ordinary mutable entities (PATCH/DELETE work,
+      # duplicates 409), but there is no global collection -- everything
+      # lives under the upstream, so `nested_collection_proc` and no list_path.
+      "target" => Definition.new(
+        parent_type: "upstream",
+        nested_collection_proc: ->(upstream_kong_id) { "/upstreams/#{upstream_kong_id}/targets" },
+        schema_name: "targets"
+      )
     }.freeze
+
+    # What a human calls an entity: its `name`, or -- for a target, which has
+    # none -- its `host:port`. Takes several documents (before, after) and
+    # returns the first label present, since a create has no `before`.
+    def self.label(*documents)
+      documents.each do |doc|
+        label = doc && (doc["name"].presence || doc["target"].presence)
+        return label if label
+      end
+      nil
+    end
 
     def self.fetch(entity_type)
       DEFINITIONS.fetch(entity_type) { raise ArgumentError, "unknown entity_type #{entity_type.inspect}" }

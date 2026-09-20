@@ -13,6 +13,14 @@
     <span class="entity-cell text-xs" style="color: var(--color-ink-soft)"><%= plugin_scope_label(entity) %></span>
   <% end %>
 
+  <% if type == "upstream" %>
+    <span class="entity-cell font-mono text-xs" style="color: var(--color-ink-soft)"><%= entity.data["algorithm"] || "—" %></span>
+  <% end %>
+
+  <% if type == "target" %>
+    <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-soft)"><%= entity.data["weight"] || "—" %></span>
+  <% end %>
+
   <div class="entity-cell flex items-center gap-1.5">
     <% visible_tags(entity).each do |tag| %>
       <span class="tag"><%= tag %></span>

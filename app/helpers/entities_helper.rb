@@ -33,6 +33,20 @@ module EntitiesHelper
       [ "Tags", "minmax(120px, 0.9fr)" ],
       [ "Status", "minmax(96px, auto)" ],
       [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "upstream" => [
+      [ "Name", "minmax(160px, 1.3fr)" ],
+      [ "Algorithm", "minmax(120px, 0.8fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "target" => [
+      [ "Target", "minmax(160px, 1.3fr)" ],
+      [ "Weight", "minmax(80px, 0.5fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
     ]
   }.freeze
 
@@ -48,7 +62,7 @@ module EntitiesHelper
   # the table scrolls horizontally below this, the same pattern already
   # used by audit_events/change_plans' tables.
   def entity_table_min_width(type)
-    type.in?(%w[route plugin]) ? "820px" : "620px"
+    type.in?(%w[route plugin upstream target]) ? "820px" : "620px"
   end
 
   def entity_table_columns(type)

@@ -605,7 +605,7 @@ audit_events  <span class="cmt"># append-only — actor = username + operator</s
         </tbody>
       </table>
     </div>
-    <p class="col" style="font-size:15.5px;color:var(--ink-2)"><strong>ต้อง spike ก่อน M5:</strong> semantic ของ <code>target</code> ต่างจาก entity อื่น (เคยเป็น append-only, มี <code>/upstreams/:id/targets/all</code>) — ยืนยันกับเวอร์ชันที่ใช้จริงก่อนออกแบบ UI</p>
+    <p class="col" style="font-size:15.5px;color:var(--ink-2)"><strong>Spike เสร็จแล้ว (M5a, Kong 3.7.1):</strong> <code>target</code> เป็น entity ธรรมดาที่แก้ไขได้ ไม่ใช่ append-only แล้ว — <code>GET</code>/<code>PATCH</code>/<code>DELETE</code> ที่ <code>/upstreams/:upstream/targets/:id</code> ใช้ได้ · <strong>ไม่มี</strong> <code>GET /targets</code> แบบ global (404) ทุก path ต้องผ่าน upstream · <code>(upstream, target)</code> ซ้ำ → 409 · <code>updated_at</code> มีทศนิยมระดับ ms จึงเทียบ optimistic lock ที่ระดับ ms · <code>healthchecks</code> ให้ Kong ตรวจด้วย <code>POST /schemas/upstreams/validate</code> ตอนวางแผน</p>
   </div>
 </section>
 

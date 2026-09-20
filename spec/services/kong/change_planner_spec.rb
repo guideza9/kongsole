@@ -17,6 +17,162 @@ RSpec.describe Kong::ChangePlanner do
     )
   end
 
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+    let(:validate_upstream_url) { "https://kong-admin.internal/schemas/upstreams/validate" }
+    let(:validate_target_url) { "https://kong-admin.internal/schemas/targets/validate" }
+    let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+
+    def upstream_planner(**overrides)
+      planner(entity_type: "upstream", **overrides)
+    end
+
+    def target_planner(**overrides)
+      planner(entity_type: "target", **overrides)
+    end
+
+    describe "upstream" do
+      it "validates a new upstream against Kong's schema before proposing it" do
+        validate = stub_request(:post, validate_upstream_url).to_return(ok)
+
+        plan = upstream_planner(operation: "create", attributes: { "name" => "orders", "algorithm" => "round-robin" }).call
+
+        expect(plan).to be_persisted
+        expect(plan.entity_type).to eq("upstream")
+        expect(plan.after).to eq({ "name" => "orders", "algorithm" => "round-robin" })
+        expect(plan.parent_kong_id).to be_nil
+        expect(validate.with(body: { "name" => "orders", "algorithm" => "round-robin" })).to have_been_requested
+      end
+
+      it "rejects a bad healthchecks block with Kong's per-field messages, and creates no plan" do
+        stub_request(:post, validate_upstream_url).to_return(
+          status: 400,
+          body: { code: 2, name: "schema violation", message: "schema violation",
+                  fields: { healthchecks: { active: { http_path: "should start with: /", healthy: { interval: "value should be between 0 and 65535" } } } } }.to_json
+        )
+
+        expect {
+          upstream_planner(operation: "create", attributes: { "name" => "orders", "healthchecks" => { "active" => { "http_path" => "health" } } }).call
+        }.to raise_error(Kong::ChangePlanner::SchemaViolation) { |e|
+          expect(e).to be_a(Kong::ChangePlanner::InvalidChange)
+          expect(e).to be_a(Kong::ChangeGuardrails::Violation) # existing rescues still catch it
+          expect(e.message).to include("healthchecks.active.http_path: should start with: /")
+          expect(e.message).to include("healthchecks.active.healthy.interval: value should be between 0 and 65535")
+        }
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "falls back to Kong's message when a 400 carries no per-field detail" do
+        stub_request(:post, validate_upstream_url).to_return(status: 400, body: { message: "bad body" }.to_json)
+
+        expect {
+          upstream_planner(operation: "create", attributes: { "name" => "orders" }).call
+        }.to raise_error(Kong::ChangeGuardrails::Violation, /bad body/)
+      end
+
+      it "validates the merged document on update, without Kong-managed fields" do
+        stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}")
+          .to_return(status: 200, body: { id: upstream_id, name: "orders", algorithm: "round-robin", slots: 10_000,
+                                          created_at: 1_700_000_000, updated_at: 1_700_000_100, tags: nil }.to_json)
+        validate = stub_request(:post, validate_upstream_url).to_return(ok)
+
+        plan = upstream_planner(operation: "update", target_kong_id: upstream_id, attributes: { "algorithm" => "least-connections" }).call
+
+        expect(plan.diff).to eq({ "algorithm" => { "from" => "round-robin", "to" => "least-connections" } })
+        expect(validate.with(body: { "name" => "orders", "algorithm" => "least-connections", "slots" => 10_000, "tags" => nil })).to have_been_requested
+      end
+
+      it "does not validate a delete" do
+        stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}")
+          .to_return(status: 200, body: { id: upstream_id, name: "orders" }.to_json)
+
+        plan = upstream_planner(operation: "delete", target_kong_id: upstream_id).call
+
+        expect(plan.diff).to eq({ "operation" => "delete" })
+        expect(WebMock).not_to have_requested(:post, validate_upstream_url)
+      end
+
+      it "still refuses to propose on a read-only credential, before any Kong call" do
+        connection.update!(access_level: "ro")
+
+        expect {
+          upstream_planner(operation: "create", attributes: { "name" => "orders" }).call
+        }.to raise_error(Kong::ChangeGuardrails::Violation, /can't write/) { |e|
+          expect(e).not_to be_a(Kong::ChangePlanner::SchemaViolation)
+        }
+        expect(WebMock).not_to have_requested(:post, validate_upstream_url)
+      end
+    end
+
+    describe "target" do
+      it "creates under its upstream, carries parent_kong_id on the plan, and validates with the upstream reference" do
+        validate = stub_request(:post, validate_target_url).to_return(ok)
+
+        plan = target_planner(operation: "create", parent_kong_id: upstream_id,
+          attributes: { "target" => "10.0.0.1:8080", "weight" => 100 }).call
+
+        expect(plan.entity_type).to eq("target")
+        expect(plan.parent_kong_id).to eq(upstream_id)
+        expect(plan.after).to eq({ "target" => "10.0.0.1:8080", "weight" => 100 })
+        expect(validate.with(body: { "target" => "10.0.0.1:8080", "weight" => 100, "upstream" => { "id" => upstream_id } })).to have_been_requested
+      end
+
+      it "refuses to create a target without an upstream" do
+        expect {
+          target_planner(operation: "create", attributes: { "target" => "10.0.0.1:8080" }).call
+        }.to raise_error(Kong::ChangePlanner::MissingParent, /upstream/) { |e|
+          expect(e).to be_a(Kong::ChangePlanner::InvalidChange) # a malformed request, not a guardrail
+        }
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "rejects a malformed target with Kong's field message" do
+        stub_request(:post, validate_target_url).to_return(
+          status: 400, body: { name: "schema violation", message: "schema violation", fields: { target: "Invalid target; ..." } }.to_json
+        )
+
+        expect {
+          target_planner(operation: "create", parent_kong_id: upstream_id, attributes: { "target" => "not a target" }).call
+        }.to raise_error(Kong::ChangeGuardrails::Violation, /target: Invalid target/)
+      end
+
+      it "resolves the upstream of an existing target from the read-model, and fetches through the nested path" do
+        create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id,
+          name: "10.0.0.1:8080", parent_type: "upstream", parent_kong_id: upstream_id)
+        get = stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}/targets/#{target_id}")
+          .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100,
+                                          upstream: { id: upstream_id }, created_at: 1_700_000_000.226, updated_at: 1_700_000_100.5 }.to_json)
+        validate = stub_request(:post, validate_target_url).to_return(ok)
+
+        plan = target_planner(operation: "update", target_kong_id: target_id, attributes: { "weight" => 50 }).call
+
+        expect(get).to have_been_requested
+        expect(plan.parent_kong_id).to eq(upstream_id)
+        expect(plan.diff).to eq({ "weight" => { "from" => 100, "to" => 50 } })
+        expect(validate.with(body: { "target" => "10.0.0.1:8080", "weight" => 50, "upstream" => { "id" => upstream_id } })).to have_been_requested
+      end
+
+      it "prefers an explicitly supplied parent over the read-model lookup" do
+        get = stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}/targets/#{target_id}")
+          .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id } }.to_json)
+
+        plan = target_planner(operation: "delete", target_kong_id: target_id, parent_kong_id: upstream_id).call
+
+        expect(get).to have_been_requested
+        expect(plan.parent_kong_id).to eq(upstream_id)
+        expect(plan.diff).to eq({ "operation" => "delete" })
+      end
+
+      it "refuses to update a target whose upstream can't be determined, without calling Kong" do
+        expect {
+          target_planner(operation: "update", target_kong_id: target_id, attributes: { "weight" => 50 }).call
+        }.to raise_error(Kong::ChangePlanner::MissingParent, /upstream.*sync/i)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+    end
+  end
+
   describe "#call" do
     it "proposes an update, capturing before/after/diff from a live Kong fetch" do
       stub_request(:get, "https://kong-admin.internal/services/#{PLANNER_SVC_1}")

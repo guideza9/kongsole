@@ -220,9 +220,164 @@ RSpec.describe Kong::EntitySync do
     end
   end
 
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:other_upstream_id) { "bbbbbbbb-0000-0000-0000-00000000000b" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+    let(:upstream_sync) { described_class.new(connection: connection, client: client, entity_type: "upstream") }
+    let(:target_sync) { described_class.new(connection: connection, client: client, entity_type: "target") }
+
+    def targets_url(id)
+      "https://kong-admin.internal/upstreams/#{id}/targets"
+    end
+
+    def stub_targets(id, targets, offset: nil, query: { size: "100" })
+      stub_request(:get, targets_url(id)).with(query: query)
+        .to_return(status: 200, body: { data: targets, offset: offset }.to_json)
+    end
+
+    it "syncs an upstream by name, with no parent" do
+      stub_request(:get, "https://kong-admin.internal/upstreams")
+        .with(query: { size: "100" })
+        .to_return(status: 200, body: { data: [
+          { id: upstream_id, name: "orders", algorithm: "round-robin", tags: [ "core" ],
+            created_at: 1_700_000_000, updated_at: 1_700_000_100 }
+        ], offset: nil }.to_json)
+
+      result = upstream_sync.call
+
+      expect(result.synced_count).to eq(1)
+      upstream = KongEntity.find_by(kong_id: upstream_id)
+      expect(upstream.entity_type).to eq("upstream")
+      expect(upstream.name).to eq("orders")
+      expect(upstream.logical_key).to eq("orders")
+      expect(upstream.parent_type).to be_nil
+      expect(upstream.tags).to eq([ "core" ])
+      expect(upstream.data["algorithm"]).to eq("round-robin")
+    end
+
+    it "lists targets under each synced upstream, since Kong 3.7 has no global /targets" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: other_upstream_id, name: "billing")
+      stub_targets(upstream_id, [ { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, tags: [] } ])
+      stub_targets(other_upstream_id, [
+        { id: "dddddddd-0000-0000-0000-00000000000d", target: "10.0.1.1:9000", weight: 10, upstream: { id: other_upstream_id }, tags: [] }
+      ])
+
+      result = target_sync.call
+
+      expect(result.synced_count).to eq(2)
+      expect(WebMock).not_to have_requested(:get, "https://kong-admin.internal/targets")
+      target = KongEntity.find_by(kong_id: target_id)
+      expect(target.entity_type).to eq("target")
+      expect(target.name).to eq("10.0.0.1:8080")
+      expect(target.logical_key).to eq("orders/10.0.0.1:8080")
+      expect(target.parent_type).to eq("upstream")
+      expect(target.parent_kong_id).to eq(upstream_id)
+      expect(target.data["weight"]).to eq(100)
+    end
+
+    it "falls back to the upstream id's first 8 chars when the upstream hasn't been synced under that name" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: nil, logical_key: nil)
+      stub_targets(upstream_id, [ { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id }, tags: [] } ])
+
+      target_sync.call
+
+      expect(KongEntity.find_by(kong_id: target_id).logical_key).to eq("#{upstream_id[0..7]}/10.0.0.1:8080")
+    end
+
+    it "pages through one upstream's targets with Kong's offset cursor" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      stub_targets(upstream_id, [ { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id } } ], offset: "1")
+      stub_targets(upstream_id,
+        [ { id: "dddddddd-0000-0000-0000-00000000000d", target: "10.0.0.2:8080", upstream: { id: upstream_id } } ],
+        query: { size: "100", offset: "1" })
+
+      result = target_sync.call
+
+      expect(result.synced_count).to eq(2)
+    end
+
+    it "makes no target requests, and removes nothing it shouldn't, when there are no upstreams" do
+      result = target_sync.call
+
+      expect(result.synced_count).to eq(0)
+      expect(result.removed_count).to eq(0)
+      expect(WebMock).not_to have_requested(:get, /upstreams/)
+    end
+
+    it "soft-deletes a target that no longer comes back from its upstream" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      gone = create(:kong_entity, kong_connection: connection, entity_type: "target",
+        kong_id: "eeeeeeee-0000-0000-0000-00000000000e", name: "10.9.9.9:80", parent_type: "upstream", parent_kong_id: upstream_id)
+      stub_targets(upstream_id, [ { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id } } ])
+
+      result = target_sync.call
+
+      expect(result.removed_count).to eq(1)
+      expect(gone.reload.deleted_at).to be_present
+      expect(KongEntity.active.where(entity_type: "target").pluck(:kong_id)).to contain_exactly(target_id)
+    end
+
+    it "soft-deletes the targets of an upstream that is no longer in the read-model" do
+      orphan = create(:kong_entity, kong_connection: connection, entity_type: "target",
+        kong_id: "eeeeeeee-0000-0000-0000-00000000000e", name: "10.9.9.9:80", parent_type: "upstream", parent_kong_id: other_upstream_id)
+
+      result = target_sync.call
+
+      expect(result.removed_count).to eq(1)
+      expect(orphan.reload.deleted_at).to be_present
+    end
+
+    it "treats an upstream Kong reports gone mid-sync as having no targets, and keeps syncing the rest" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: other_upstream_id, name: "billing")
+      stale = create(:kong_entity, kong_connection: connection, entity_type: "target",
+        kong_id: "eeeeeeee-0000-0000-0000-00000000000e", name: "10.9.9.9:80", parent_type: "upstream", parent_kong_id: upstream_id)
+      stub_request(:get, targets_url(upstream_id)).with(query: { size: "100" })
+        .to_return(status: 404, body: { message: "Not found" }.to_json)
+      stub_targets(other_upstream_id, [ { id: target_id, target: "10.0.1.1:9000", upstream: { id: other_upstream_id } } ])
+
+      result = target_sync.call
+
+      expect(result.synced_count).to eq(1)
+      expect(stale.reload.deleted_at).to be_present
+    end
+
+    it "does not swallow other Admin API errors while listing targets" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      stub_request(:get, targets_url(upstream_id)).with(query: { size: "100" })
+        .to_return(status: 503, body: "")
+
+      expect { target_sync.call }.to raise_error(Kong::Client::Error)
+    end
+
+    it "re-syncs a single target through its nested member path (sync_one)" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      stub_request(:get, "#{targets_url(upstream_id)}/#{target_id}")
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 50, upstream: { id: upstream_id }, tags: [] }.to_json)
+
+      entity = described_class.sync_one(
+        connection: connection, client: client, entity_type: "target", kong_id: target_id, parent_kong_id: upstream_id
+      )
+
+      expect(entity.logical_key).to eq("orders/10.0.0.1:8080")
+      expect(entity.data["weight"]).to eq(50)
+    end
+
+    it "does not mark an upstream or a target as an admin-path entity" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      stub_targets(upstream_id, [ { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id } } ])
+
+      target_sync.call
+
+      expect(KongEntity.find_by(kong_id: target_id).is_admin_path).to eq(false)
+    end
+  end
+
   describe ".sync_connection" do
-    it "syncs every M0-M3 entity type in dependency order (services/consumers before routes/credentials)" do
-      %w[services consumers routes key-auths basic-auths plugins].each do |path|
+    it "syncs every entity type in dependency order (services/consumers/upstreams before their children)" do
+      %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
         stub_request(:get, "https://kong-admin.internal/#{path}")
           .with(query: { size: "100" })
           .to_return(status: 200, body: { data: [], offset: nil }.to_json)
@@ -231,9 +386,29 @@ RSpec.describe Kong::EntitySync do
       result = described_class.sync_connection(connection: connection, client: client)
 
       expect(result.synced_count).to eq(0)
-      %w[services consumers routes key-auths basic-auths plugins].each do |path|
+      %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
         expect(WebMock).to have_requested(:get, "https://kong-admin.internal/#{path}").with(query: { size: "100" })
       end
+    end
+
+    it "syncs upstreams before targets, so a just-created upstream's targets are fetched in the same run" do
+      upstream_id = "aaaaaaaa-0000-0000-0000-00000000000a"
+      %w[services consumers routes key-auths basic-auths plugins].each do |path|
+        stub_request(:get, "https://kong-admin.internal/#{path}")
+          .with(query: { size: "100" })
+          .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+      end
+      stub_request(:get, "https://kong-admin.internal/upstreams").with(query: { size: "100" })
+        .to_return(status: 200, body: { data: [ { id: upstream_id, name: "orders" } ], offset: nil }.to_json)
+      stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}/targets").with(query: { size: "100" })
+        .to_return(status: 200, body: { data: [
+          { id: "cccccccc-0000-0000-0000-00000000000c", target: "10.0.0.1:8080", upstream: { id: upstream_id } }
+        ], offset: nil }.to_json)
+
+      result = described_class.sync_connection(connection: connection, client: client)
+
+      expect(result.synced_count).to eq(2)
+      expect(KongEntity.active.where(entity_type: "target").count).to eq(1)
     end
   end
 end

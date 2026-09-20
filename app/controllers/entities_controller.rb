@@ -1,5 +1,5 @@
 # Browses kong_entities for the session's current connection and proposes
-# changes to them, across every entity_type M0-M3 sync into the read-model
+# changes to them, across every entity_type synced into the read-model
 # (docs/DESIGN.md section 15). Read path lives entirely against the local
 # read-model; only #sync, #update, and #destroy talk to Kong directly.
 # #update/#destroy never touch Kong themselves -- they propose a
@@ -10,8 +10,14 @@ class EntitiesController < ApplicationController
   before_action :require_session!
   before_action :set_type, only: :index
   before_action :set_entity, only: %i[show edit update destroy]
+  before_action :set_creatable_type, :set_parent, only: %i[new create]
 
   DEFAULT_TYPE = "service"
+
+  # The types this controller has a "New" flow for (docs/DESIGN.md section 15
+  # M5). Everything else is created through PluginsController or the API/MCP.
+  CREATABLE_TYPES = %w[upstream target].freeze
+  TARGET_SEED = { "target" => "", "weight" => 100, "tags" => [] }.freeze
 
   def index
     @filters = params.permit(:q, :tags, :sort).to_h.symbolize_keys
@@ -47,6 +53,29 @@ class EntitiesController < ApplicationController
     @child_groups = child_groups
   end
 
+  def new
+    @payload_json = JSON.pretty_generate(seed_payload)
+  end
+
+  # Same document editor and review pipeline as an edit: the parsed JSON goes
+  # to Kong::ChangePlanner, which validates it against Kong's own schema. A
+  # rejection re-renders the form rather than redirecting, so a long
+  # healthchecks block isn't lost to a typo.
+  def create
+    attributes = parse_json_payload!(params[:payload_json], entity_type: @creatable_type)
+
+    plan = Kong::ChangePlanner.new(
+      connection: current_connection, client: current_client, operation: "create",
+      entity_type: @creatable_type, parent_kong_id: @parent&.kong_id, attributes: attributes,
+      actor_username: current_connection.auth_username, actor_operator: current_operator
+    ).call
+    redirect_to change_plan_path(plan)
+  rescue JsonPayloadParsing::InvalidPayload, Kong::ChangeGuardrails::Violation => e
+    render_new_with_error(e.message)
+  rescue Kong::Client::Error => e
+    render_new_with_error("Kong rejected this request: #{e.message}")
+  end
+
   def edit
     @payload_json = JSON.pretty_generate(editable_payload)
   end
@@ -56,14 +85,22 @@ class EntitiesController < ApplicationController
 
     plan = Kong::ChangePlanner.new(
       connection: current_connection, client: current_client, operation: "update",
-      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, attributes: attributes,
-      actor_username: current_connection.auth_username, actor_operator: current_operator
+      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, parent_kong_id: @entity.parent_kong_id,
+      attributes: attributes, actor_username: current_connection.auth_username, actor_operator: current_operator
     ).call
     redirect_to change_plan_path(plan)
   rescue JsonPayloadParsing::InvalidPayload => e
     # Re-render rather than redirect so the operator's edit survives the
     # round trip -- a redirect would hand back the unedited document and
     # throw away however long they spent in the textarea.
+    @payload_json = params[:payload_json]
+    @payload_error = e.message
+    render :edit, status: :unprocessable_entity
+  rescue Kong::ChangePlanner::SchemaViolation => e
+    return redirect_to(edit_entity_path(@entity), alert: e.message) if params[:payload_json].blank?
+
+    # Kong refused the document itself: keep the operator's JSON on screen
+    # with Kong's per-field message, same as an unparseable payload.
     @payload_json = params[:payload_json]
     @payload_error = e.message
     render :edit, status: :unprocessable_entity
@@ -76,7 +113,7 @@ class EntitiesController < ApplicationController
   def destroy
     plan = Kong::ChangePlanner.new(
       connection: current_connection, client: current_client, operation: "delete",
-      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id,
+      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, parent_kong_id: @entity.parent_kong_id,
       actor_username: current_connection.auth_username, actor_operator: current_operator
     ).call
     redirect_to change_plan_path(plan)
@@ -115,6 +152,41 @@ class EntitiesController < ApplicationController
     @entity = KongEntity.active.where(kong_connection: current_connection).find(params[:id])
   end
 
+  def set_creatable_type
+    @creatable_type = params[:type].to_s
+    return if CREATABLE_TYPES.include?(@creatable_type)
+
+    redirect_to entities_path, alert: "There's no create form for #{@creatable_type.presence&.inspect || 'that type'} here."
+  end
+
+  # A nested type (target) is always created inside a parent the operator was
+  # already looking at -- no free-text picker, same as PluginsController's
+  # scope. An unknown parent bounces back to the list to pick one.
+  def set_parent
+    definition = Kong::EntityTypes.fetch(@creatable_type)
+    return unless definition.nested?
+
+    @parent = KongEntity.active.find_by(
+      kong_connection: current_connection, entity_type: definition.parent_type, kong_id: params[:parent_kong_id]
+    )
+    return if @parent
+
+    redirect_to entities_path(type: definition.parent_type),
+      alert: "Pick the #{definition.parent_type} to add this #{@creatable_type} to first."
+  end
+
+  def seed_payload
+    return Kong::UpstreamPresets.seed(params[:preset]) if @creatable_type == "upstream"
+
+    TARGET_SEED.deep_dup
+  end
+
+  def render_new_with_error(message)
+    @payload_json = params[:payload_json]
+    @payload_error = message
+    render :new, status: :unprocessable_entity
+  end
+
   # "Load more" (see _pagination.html.erb) is the only request that wants
   # the append-a-page turbo_stream template, and it is the only one that
   # carries these params.
@@ -136,6 +208,8 @@ class EntitiesController < ApplicationController
       { "Plugins" => children_of("plugin") }
     when "consumer"
       { "Credentials" => children_of(%w[keyauth_credential basicauth_credential]), "Plugins" => children_of("plugin") }
+    when "upstream"
+      { "Targets" => children_of("target") }
     else
       {}
     end
@@ -155,7 +229,8 @@ class EntitiesController < ApplicationController
   # Falls back to the cached copy if Kong is unreachable, flagging it so the
   # page can say the JSON may be stale.
   def editable_payload
-    response = current_client.get("#{Kong::EntityTypes.fetch(@entity.entity_type).list_path}/#{@entity.kong_id}")
+    path = Kong::EntityTypes.fetch(@entity.entity_type).member_path(@entity.kong_id, parent_kong_id: @entity.parent_kong_id)
+    response = current_client.get(path)
     body = response.body
     raw = body.is_a?(String) ? JSON.parse(body) : body
     Kong::Redactor.call(@entity.entity_type, raw)[:data].except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)

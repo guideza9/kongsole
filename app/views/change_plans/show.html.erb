@@ -2,7 +2,7 @@
 
 <div class="flex flex-wrap items-center gap-2 mb-1">
   <h1 class="text-xl font-semibold" style="color: var(--color-ink)">
-    <%= @change_plan.operation.capitalize %> <%= @change_plan.before["name"] || @change_plan.after["name"] %>
+    <%= @change_plan.operation.capitalize %> <%= @change_plan.entity_label %>
   </h1>
   <span class="tag"><%= @change_plan.entity_type %></span>
 </div>
@@ -32,6 +32,12 @@
 <% if @dependent_routes.present? %>
   <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
     Kong will reject this delete until these <%= @dependent_routes.size %> route<%= "s" unless @dependent_routes.size == 1 %> are removed first: <%= @dependent_routes.map(&:name).join(", ") %>
+  </p>
+<% end %>
+
+<% if @dependent_targets.present? %>
+  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+    Deleting this upstream also removes its <%= @dependent_targets.size %> target<%= "s" unless @dependent_targets.size == 1 %>: <%= @dependent_targets.map(&:name).join(", ") %>
   </p>
 <% end %>
 
@@ -115,7 +121,7 @@
       <% if @requires_confirmation_name %>
         <div>
           <label class="block text-sm font-medium mb-1" style="color: var(--color-danger)">
-            This is protected. Type <span class="font-mono"><%= @change_plan.before["name"] %></span> to confirm deletion.
+            This is protected. Type <span class="font-mono"><%= @change_plan.entity_label %></span> to confirm deletion.
           </label>
           <input type="text" name="confirmation_name" class="field-input font-mono text-sm" autocomplete="off" />
         </div>

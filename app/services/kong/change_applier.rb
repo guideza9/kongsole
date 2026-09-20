@@ -57,18 +57,33 @@ module Kong
 
     private
 
+    # A nested type (target) resolves every path through its upstream, which
+    # the planner stored on the plan as parent_kong_id.
+    def member_path
+      @definition.member_path(@change_plan.target_kong_id, parent_kong_id: @change_plan.parent_kong_id)
+    end
+
     def check_optimistic_lock!
       current = fetch_current
       return if @change_plan.base_updated_at.blank?
       return if current["updated_at"].blank?
-      return if Time.zone.at(current["updated_at"]) == @change_plan.base_updated_at
+      return if same_instant?(Time.zone.at(current["updated_at"]), @change_plan.base_updated_at)
 
       raise Kong::ChangeGuardrails::Violation,
-        "this service was changed by someone else since this plan was proposed -- review the new state and re-propose"
+        "this #{@change_plan.entity_type} was changed by someone else since this plan was proposed -- review the new state and re-propose"
+    end
+
+    # Most Kong entities stamp updated_at in whole seconds, but a target's
+    # carries milliseconds (1789914728.226). The plan's copy has been through
+    # the database's microsecond rounding while this side is a bare float, so
+    # an exact == never matches for those. Milliseconds is Kong's own finest
+    # resolution, so comparing there loses nothing real.
+    def same_instant?(a, b)
+      a.round(3) == b.round(3)
     end
 
     def fetch_current
-      response = @client.get("#{@definition.list_path}/#{@change_plan.target_kong_id}")
+      response = @client.get(member_path)
       body = response.body
       body.is_a?(String) ? JSON.parse(body) : body
     end
@@ -105,13 +120,13 @@ module Kong
     # value this plan happened to read.
     def execute_update!
       body = @change_plan.diff.each_with_object({}) { |(field, change), acc| acc[field] = change["to"] }
-      response = @client.patch("#{@definition.list_path}/#{@change_plan.target_kong_id}", body: body)
+      response = @client.patch(member_path, body: body)
       raw = parse(response)
       Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
     end
 
     def execute_delete!
-      @client.delete("#{@definition.list_path}/#{@change_plan.target_kong_id}")
+      @client.delete(member_path)
       KongEntity.active
         .where(kong_connection: @connection, entity_type: @change_plan.entity_type, kong_id: @change_plan.target_kong_id)
         .update_all(deleted_at: Time.current)
@@ -161,7 +176,7 @@ module Kong
     end
 
     def commit_message
-      summary = "#{@change_plan.operation} #{@change_plan.entity_type} #{@change_plan.before['name'] || @change_plan.after['name']}"
+      summary = "#{@change_plan.operation} #{@change_plan.entity_type} #{@change_plan.entity_label}"
       lines = [ summary, "", "Plan: #{@change_plan.id}" ]
       lines << "Changed-by: #{@actor_operator}" if @actor_operator.present?
       lines.join("\n")
@@ -182,7 +197,7 @@ module Kong
         operation: @change_plan.operation,
         entity_type: @change_plan.entity_type,
         target_kong_id: @change_plan.target_kong_id,
-        entity_name: @change_plan.before["name"] || @change_plan.after["name"],
+        entity_name: @change_plan.entity_label,
         diff: @change_plan.diff
       )
     end

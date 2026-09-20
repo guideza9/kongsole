@@ -50,7 +50,9 @@ module ApplicationHelper
     "consumer" => %w[Consumer Consumers],
     "keyauth_credential" => %w[Key-auth\ credential Key-auth\ credentials],
     "basicauth_credential" => %w[Basic-auth\ credential Basic-auth\ credentials],
-    "plugin" => %w[Plugin Plugins]
+    "plugin" => %w[Plugin Plugins],
+    "upstream" => %w[Upstream Upstreams],
+    "target" => %w[Target Targets]
   }.freeze
 
   def entity_type_label(entity_type, count: nil)

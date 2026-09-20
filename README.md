@@ -38,6 +38,27 @@ for the full solution design and milestone plan.
   stack that fronts its own Admin API via the loopback pattern (section 1),
   used to prove the whole design against a live Kong rather than only mocks.
 
+## Upstreams and targets (M5a)
+
+`upstream` and `target` are managed like the other entity types (`docs/DESIGN.md`
+section 15, M5), in **direct mode**:
+
+- Browse them under **Upstreams**; an upstream's page has a **Targets** tab, with
+  **New upstream** / **Add target** forms that edit Kong's own JSON document and
+  land on the normal plan → review → apply → audit pipeline.
+- An upstream's `healthchecks` block is edited as JSON, not through a bespoke form.
+  Kong validates every upstream/target body at plan time (`POST /schemas/:name/validate`)
+  and its per-field errors are shown as-is. **Start from** offers an active HTTP
+  health-check preset.
+- Kong 3.7 has no global `GET /targets`, so every target path goes through its upstream
+  (`Kong::EntityTypes#collection_path` / `#member_path`) and a target plan carries its
+  upstream as `parent_kong_id`. The MCP `kong_plan` tool accepts `parent_kong_id` too.
+- A target has no `name`; it is identified by its `host:port` everywhere a name would
+  show (audit trail, typed-delete confirmation, plan title).
+- PR mode (decK YAML) for these types is M5c: a PR-mode plan for an upstream or target
+  raises `NotImplementedError` and stays pending. Certificates, SNIs and the
+  private-key-on-env handling are M5b.
+
 ## Setup
 
 ```bash

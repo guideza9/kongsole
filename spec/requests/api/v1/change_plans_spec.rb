@@ -106,10 +106,112 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       connection = create(:kong_connection, credential_mode: "stored")
       token = token_for(connection)
 
-      post api_v1_change_plans_path, params: { connection: connection.name, type: "upstream", operation: "update" }, headers: auth(token)
+      post api_v1_change_plans_path, params: { connection: connection.name, type: "widget", operation: "update" }, headers: auth(token)
 
       expect(response).to have_http_status(:bad_request)
+      expect(response.body).to include("upstream").and include("target")
       expect(ChangePlan.count).to eq(0)
+    end
+
+    describe "upstreams and targets (M5a)" do
+      let(:connection) { create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword") }
+      let(:token) { token_for(connection) }
+      let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+      let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+      let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+
+      it "proposes an upstream create, validated against Kong's schema first" do
+        validate = stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(ok)
+
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "upstream", operation: "create",
+          attributes: { name: "orders", algorithm: "round-robin" }
+        }, headers: auth(token)
+
+        expect(response).to have_http_status(:created)
+        json = JSON.parse(response.body)
+        expect(json["entity_type"]).to eq("upstream")
+        expect(ChangePlan.find(json["id"]).after).to eq({ "name" => "orders", "algorithm" => "round-robin" })
+        expect(validate).to have_been_requested
+      end
+
+      it "proposes a target create under its upstream and reports the parent back" do
+        stub_request(:post, "https://kong-admin.test/schemas/targets/validate").to_return(ok)
+
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "target", operation: "create", parent_kong_id: upstream_id,
+          attributes: { target: "10.0.0.1:8080", weight: 100 }
+        }, headers: auth(token)
+
+        expect(response).to have_http_status(:created)
+        json = JSON.parse(response.body)
+        expect(json["parent_kong_id"]).to eq(upstream_id)
+        expect(ChangePlan.find(json["id"]).parent_kong_id).to eq(upstream_id)
+      end
+
+      it "resolves the upstream of an existing target from the read-model, so an agent only needs the target id" do
+        create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+          parent_type: "upstream", parent_kong_id: upstream_id)
+        stub_request(:get, "https://kong-admin.test/upstreams/#{upstream_id}/targets/#{target_id}")
+          .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: 1_700_000_000 }.to_json)
+        stub_request(:post, "https://kong-admin.test/schemas/targets/validate").to_return(ok)
+
+        # JSON, like the MCP client sends -- form encoding would flatten 20 to "20".
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "target", operation: "update", target_kong_id: target_id, attributes: { weight: 20 }
+        }, headers: auth(token), as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(JSON.parse(response.body)["diff"]).to eq({ "weight" => { "from" => 100, "to" => 20 } })
+      end
+
+      it "returns 422 with Kong's field messages, and no plan, when the schema rejects the body" do
+        stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(
+          status: 400, body: { message: "schema violation", fields: { healthchecks: { active: { http_path: "should start with: /" } } } }.to_json
+        )
+
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "upstream", operation: "create",
+          attributes: { name: "orders", healthchecks: { active: { http_path: "health" } } }
+        }, headers: auth(token)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)["error"]).to include("healthchecks.active.http_path: should start with: /")
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "returns 422, not a misleading 403, when a target create names no upstream" do
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "target", operation: "create", attributes: { target: "10.0.0.1:8080" }
+        }, headers: auth(token)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(JSON.parse(response.body)["error"]).to include("upstream")
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "still returns 403 when the credential can't write" do
+        connection.update!(access_level: "ro")
+
+        post api_v1_change_plans_path, params: {
+          connection: connection.name, type: "upstream", operation: "create", attributes: { name: "orders" }
+        }, headers: auth(token)
+
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "applies a target create through the nested upstream path" do
+        plan = create(:change_plan, kong_connection: connection, actor_kind: "agent", entity_type: "target", operation: "create",
+          target_kong_id: nil, parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080" }, base_updated_at: nil)
+        post_target = stub_request(:post, "https://kong-admin.test/upstreams/#{upstream_id}/targets")
+          .to_return(status: 201, body: { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id }, updated_at: 1_700_000_000 }.to_json)
+
+        post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+        expect(response).to have_http_status(:ok)
+        expect(post_target).to have_been_requested
+        expect(AuditEvent.last.entity_name).to eq("10.0.0.1:8080")
+      end
     end
   end
 

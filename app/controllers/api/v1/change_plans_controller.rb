@@ -11,7 +11,10 @@ module Api
     # no interactive re-auth channel the way the web UI's rank>=2 flow does.
     class ChangePlansController < BaseController
       REAUTH_RANK_THRESHOLD = 2
-      SUPPORTED_TYPES = %w[service route consumer keyauth_credential basicauth_credential plugin].freeze
+      # Every type the registry knows -- derived, not listed, so a new entity
+      # type can't be added to Kong::EntityTypes and silently stay unwritable
+      # over the agent path.
+      SUPPORTED_TYPES = Kong::EntityTypes::DEFINITIONS.keys.freeze
 
       before_action :require_connection!
 
@@ -29,6 +32,8 @@ module Api
         ).call
 
         render json: serialize_plan(plan), status: :created
+      rescue Kong::ChangePlanner::InvalidChange => e
+        render json: { error: e.message }, status: :unprocessable_entity
       rescue Kong::ChangeGuardrails::Violation => e
         render json: { error: e.message }, status: :forbidden
       rescue Kong::Client::EntityNotFound
@@ -78,7 +83,8 @@ module Api
       def serialize_plan(plan)
         {
           "id" => plan.id, "operation" => plan.operation, "entity_type" => plan.entity_type,
-          "target_kong_id" => plan.target_kong_id, "diff" => plan.diff, "status" => plan.status,
+          "target_kong_id" => plan.target_kong_id, "parent_kong_id" => plan.parent_kong_id,
+          "diff" => plan.diff, "status" => plan.status,
           "expires_at" => plan.expires_at.iso8601
         }
       end

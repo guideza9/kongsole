@@ -1,6 +1,31 @@
 require "rails_helper"
 
 RSpec.describe Kong::ChangeGuardrails do
+  # A target carries no `name`; a `protected`-tagged one must be confirmed by
+  # typing its host:port, not by an impossible blank name.
+  describe ".check_delete_confirmation! for a protected target" do
+    let(:connection) { create(:kong_connection) }
+    let(:target) { { "id" => "cccccccc-0000-0000-0000-00000000000c", "target" => "10.0.0.1:8080", "tags" => [ "protected" ] } }
+
+    it "asks for the host:port when none was typed" do
+      expect {
+        described_class.check_delete_confirmation!(connection: connection, entity: target, confirmation_name: nil)
+      }.to raise_error(Kong::ChangeGuardrails::Violation, /10\.0\.0\.1:8080.*typing/)
+    end
+
+    it "accepts the exact host:port" do
+      expect {
+        described_class.check_delete_confirmation!(connection: connection, entity: target, confirmation_name: "10.0.0.1:8080")
+      }.not_to raise_error
+    end
+
+    it "rejects a different value" do
+      expect {
+        described_class.check_delete_confirmation!(connection: connection, entity: target, confirmation_name: "10.0.0.2:8080")
+      }.to raise_error(Kong::ChangeGuardrails::Violation, /does not match/)
+    end
+  end
+
   describe ".check_plugin_immutable!" do
     ADMIN_ROUTE_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     PLUGIN_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"

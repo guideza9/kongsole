@@ -19,7 +19,7 @@ Rails.application.routes.draw do
   end
   delete "logout" => "sessions#destroy", as: :logout
 
-  resources :entities, only: %i[index show edit update destroy] do
+  resources :entities, only: %i[index show new create edit update destroy] do
     collection { post :sync }
   end
 

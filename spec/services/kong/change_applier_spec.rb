@@ -294,5 +294,176 @@ RSpec.describe Kong::ChangeApplier do
       }.to raise_error(NotImplementedError, /not yet rendered/)
       expect(Kong::GitClient).not_to have_received(:new)
     end
+
+    it "leaves an upstream or target PR-mode plan pending, untouched, until M5c renders them into decK YAML" do
+      %w[upstream target].each do |type|
+        plan = create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: type, operation: "create",
+          target_kong_id: nil, parent_kong_id: (type == "target" ? "aaaaaaaa-0000-0000-0000-00000000000a" : nil),
+          before: {}, after: { "name" => "x" }, base_updated_at: nil)
+
+        expect {
+          described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw").call
+        }.to raise_error(NotImplementedError)
+        expect(plan.reload.status).to eq("pending")
+      end
+    end
+  end
+
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+    let(:target_path) { "https://kong-admin.internal/upstreams/#{upstream_id}/targets/#{target_id}" }
+
+    it "creates an upstream against /upstreams and writes it through to the read-model" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "upstream", operation: "create",
+        target_kong_id: nil, before: {}, after: { "name" => "orders", "algorithm" => "round-robin" }, base_updated_at: nil)
+      post = stub_request(:post, "https://kong-admin.internal/upstreams")
+        .with(body: { "name" => "orders", "algorithm" => "round-robin" })
+        .to_return(status: 201, body: { id: upstream_id, name: "orders", algorithm: "round-robin", updated_at: 1_700_000_000 }.to_json)
+
+      result = applier(plan).call
+
+      expect(post).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      expect(result.audit_event.entity_name).to eq("orders")
+      upstream = KongEntity.find_by(kong_id: upstream_id, entity_type: "upstream")
+      expect(upstream.logical_key).to eq("orders")
+    end
+
+    it "creates a target against the nested upstream path, using parent_kong_id" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create",
+        target_kong_id: nil, parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080", "weight" => 100 },
+        base_updated_at: nil)
+      post = stub_request(:post, "https://kong-admin.internal/upstreams/#{upstream_id}/targets")
+        .with(body: { "target" => "10.0.0.1:8080", "weight" => 100 })
+        .to_return(status: 201, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id },
+                                        updated_at: 1_700_000_000 }.to_json)
+
+      result = applier(plan).call
+
+      expect(post).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      target = KongEntity.find_by(kong_id: target_id, entity_type: "target")
+      expect(target.logical_key).to eq("orders/10.0.0.1:8080")
+      expect(target.parent_kong_id).to eq(upstream_id)
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    it "updates a target through its nested member path, PATCHing only the changed fields" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => 1_700_000_000 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50, "updated_at" => 1_700_000_000 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_700_000_000))
+      get = stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: 1_700_000_000 }.to_json)
+      patch = stub_request(:patch, target_path).with(body: { "weight" => 50 })
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 50, upstream: { id: upstream_id }, updated_at: 1_700_000_500 }.to_json)
+
+      result = applier(plan).call
+
+      expect(get).to have_been_requested
+      expect(patch).to have_been_requested
+      expect(KongEntity.find_by(kong_id: target_id).data["weight"]).to eq(50)
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    # Kong reports a target's updated_at with millisecond fractions
+    # (1789914728.226); every other entity uses whole seconds. The plan stores
+    # it at database precision, so an exact == against a freshly parsed float
+    # never matched -- every target update or delete was refused as "changed
+    # by someone else". Found by running against a real Kong 3.7.
+    it "applies a target update whose Kong updated_at carries millisecond fractions" do
+      updated_at = 1_789_914_728.226
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => updated_at },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50, "updated_at" => updated_at },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(updated_at))
+      plan = ChangePlan.find(plan.id) # as the applier sees it: read back from the database
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: updated_at }.to_json)
+      patch = stub_request(:patch, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 50, upstream: { id: upstream_id }, updated_at: updated_at + 1 }.to_json)
+
+      applier(plan).call
+
+      expect(patch).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+    end
+
+    it "applies a target delete whose Kong updated_at carries millisecond fractions" do
+      updated_at = 1_789_914_728.226
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id, before: { "id" => target_id, "target" => "10.0.0.1:8080", "updated_at" => updated_at },
+        base_updated_at: Time.zone.at(updated_at))
+      plan = ChangePlan.find(plan.id)
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: updated_at }.to_json)
+      delete = stub_request(:delete, target_path).to_return(status: 204)
+
+      applier(plan).call
+
+      expect(delete).to have_been_requested
+    end
+
+    it "still refuses when the millisecond timestamp really did move" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_789_914_728.226))
+      plan = ChangePlan.find(plan.id)
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: 1_789_914_728.227 }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /changed by someone else/)
+    end
+
+    it "refuses to update a target someone else changed since the plan, checking through the nested path" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_700_000_000))
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 75, updated_at: 1_700_000_999 }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /changed by someone else/)
+      expect(plan.reload.status).to eq("pending")
+      expect(WebMock).not_to have_requested(:patch, target_path)
+    end
+
+    it "deletes a target through its nested member path and soft-deletes its read-model row" do
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id,
+        name: "10.0.0.1:8080", parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => 1_700_000_000 })
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: 1_700_000_000 }.to_json)
+      delete = stub_request(:delete, target_path).to_return(status: 204)
+
+      result = applier(plan).call
+
+      expect(delete).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      expect(KongEntity.active.find_by(kong_id: target_id)).to be_nil
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    it "marks the plan failed when Kong rejects the target write (e.g. a duplicate target -> 409)" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create",
+        target_kong_id: nil, parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080" }, base_updated_at: nil)
+      stub_request(:post, "https://kong-admin.internal/upstreams/#{upstream_id}/targets")
+        .to_return(status: 409, body: { name: "unique constraint violation" }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::Client::UnexpectedResponse)
+      expect(plan.reload.status).to eq("failed")
+    end
   end
 end

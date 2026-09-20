@@ -45,6 +45,19 @@ describe("KongctlClient", () => {
     expect(url).toContain("limit=3");
   });
 
+  it("planChange carries parent_kong_id in the JSON body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 1 }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new KongctlClient({ apiUrl: "http://rails.test/api/v1", token: "t" });
+
+    await client.planChange({
+      connection: "dev", type: "target", operation: "create", parent_kong_id: "up-1", attributes: { target: "10.0.0.1:8080" }
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toMatchObject({ type: "target", parent_kong_id: "up-1" });
+  });
+
   it("planChange POSTs a JSON body", async () => {
     const fetchMock = stubFetch(201, { id: 1, status: "pending" });
     const client = new KongctlClient(config);

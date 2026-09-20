@@ -442,7 +442,12 @@ audit_events   # append-only — actor = username + operator
 | sni | `name` | `name` | certificate |
 | ca_certificate | `cert_digest[0..11]` | `cert_digest` | — |
 
-**ต้อง spike ก่อน M5:** semantic ของ `target` ต่างจาก entity อื่น
+**Spike เสร็จแล้ว (M5a, Kong 3.7.1 ทดสอบกับ stack ในเครื่อง):** `target` เป็น entity ธรรมดาที่แก้ไขได้ ไม่ใช่ append-only แล้ว
+- `GET`/`PATCH`/`DELETE` ที่ `/upstreams/:upstream/targets/:id` ใช้ได้ (ใช้ `host:port` แทน id ก็ได้)
+- **ไม่มี** `GET /targets` แบบ global (404) — ทุก path ต้องผ่าน upstream จึงต้องดึง target ทีละ upstream
+- `(upstream, target)` ซ้ำ → 409 · `/targets/all` ยังตอบ 200 แต่เป็นของเก่า ไม่ใช้
+- `updated_at` ของ target มีทศนิยมระดับ ms (entity อื่นเป็นวินาทีเต็ม) → optimistic lock เทียบที่ระดับ ms
+- `healthchecks` ของ upstream ซ้อนลึก → ไม่ทำฟอร์มเอง แต่ให้ Kong ตรวจด้วย `POST /schemas/upstreams/validate` ตอนวางแผน
 
 ---
 

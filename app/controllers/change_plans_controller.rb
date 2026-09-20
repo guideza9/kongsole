@@ -23,6 +23,7 @@ class ChangePlansController < ApplicationController
       Kong::ChangeGuardrails.protected_entity?(current_connection, @change_plan.before)
     @requires_reauth = current_connection.rank >= REAUTH_RANK_THRESHOLD
     @dependent_routes = dependent_routes
+    @dependent_targets = dependent_targets
   end
 
   def apply
@@ -75,8 +76,30 @@ class ChangePlansController < ApplicationController
     KongEntity.active.where(kong_connection: current_connection, entity_type: "route", parent_kong_id: @change_plan.target_kong_id)
   end
 
+  # Unlike a service's routes, an upstream's targets are removed *with* it --
+  # Kong cascades the delete -- so this is a heads-up about what goes too,
+  # not a blocker. Informational only.
+  def dependent_targets
+    return nil unless @change_plan.delete? && @change_plan.entity_type == "upstream"
+
+    KongEntity.active.where(kong_connection: current_connection, entity_type: "target", parent_kong_id: @change_plan.target_kong_id)
+  end
+
+  # Where to land after applying: the entity itself, or -- for a create of a
+  # nested type (a new target has no id on the plan yet) -- its parent, which
+  # is where the operator started and where the new row now shows.
   def entity_path_for(change_plan)
     entity = KongEntity.active.find_by(kong_connection: current_connection, entity_type: change_plan.entity_type, kong_id: change_plan.target_kong_id)
-    entity ? entity_path(entity) : entities_path
+    return entity_path(entity) if entity
+
+    parent = nested_parent_for(change_plan)
+    parent ? entity_path(parent) : entities_path
+  end
+
+  def nested_parent_for(change_plan)
+    definition = Kong::EntityTypes.fetch(change_plan.entity_type)
+    return nil unless definition.nested? && change_plan.parent_kong_id.present?
+
+    KongEntity.active.find_by(kong_connection: current_connection, entity_type: definition.parent_type, kong_id: change_plan.parent_kong_id)
   end
 end

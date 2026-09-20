@@ -8,13 +8,15 @@
   <div class="flex gap-2">
     <% if @type == "plugin" %>
       <%= link_to "New global plugin", new_plugin_path, class: "btn-primary px-3.5 py-2 text-sm" %>
+    <% elsif @type == "upstream" %>
+      <%= link_to "New upstream", new_entity_path(type: "upstream"), class: "btn-primary px-3.5 py-2 text-sm" %>
     <% end %>
     <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-secondary px-3.5 py-2 text-sm cursor-pointer" %>
   </div>
 </div>
 
 <nav class="flex gap-1 mb-6" style="border-bottom: 1px solid var(--color-border)">
-  <% %w[service route consumer plugin].each do |type| %>
+  <% %w[service route consumer plugin upstream].each do |type| %>
     <%= link_to entity_type_label(type), entities_path(type: type),
           class: "px-3 py-2 text-sm #{'font-semibold' if @type == type}",
           style: @type == type ? "color: var(--color-ink); border-bottom: 2px solid var(--color-accent)" : "color: var(--color-ink-soft)" %>

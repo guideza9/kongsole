@@ -65,6 +65,85 @@ RSpec.describe "ChangePlans (web)", type: :request do
     expect(response.body).not_to include(">Apply<")
   end
 
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+
+    it "titles a target plan by its host:port, since a target has no name" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create", target_kong_id: nil,
+        parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080", "weight" => 100 }, diff: { "operation" => "create" })
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("Create 10.0.0.1:8080")
+    end
+
+    it "asks for a protected target's host:port on delete, not a blank name" do
+      sign_in
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id, before: { "id" => target_id, "target" => "10.0.0.1:8080", "tags" => [ "protected" ] })
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("Type <span class=\"font-mono\">10.0.0.1:8080</span>")
+    end
+
+    it "warns that deleting an upstream also removes its targets" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "target", name: "10.0.0.1:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id)
+      create(:kong_entity, kong_connection: connection, entity_type: "target", name: "10.0.0.2:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "upstream", target_kong_id: upstream_id,
+        before: { "id" => upstream_id, "name" => "orders", "tags" => [] })
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("also removes its 2 targets")
+      expect(response.body).to include("10.0.0.1:8080")
+    end
+
+    it "shows no such warning when an upstream has no targets" do
+      sign_in
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "upstream", target_kong_id: upstream_id,
+        before: { "id" => upstream_id, "name" => "orders", "tags" => [] })
+
+      get change_plan_path(plan)
+
+      expect(response.body).not_to include("also removes")
+    end
+
+    it "lands on the upstream's page after a target is created, not the generic list" do
+      sign_in
+      upstream = create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create", target_kong_id: nil,
+        parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080" }, diff: { "operation" => "create" }, base_updated_at: nil)
+      stub_request(:post, "https://kong-admin.test/upstreams/#{upstream_id}/targets")
+        .to_return(status: 201, body: { id: target_id, target: "10.0.0.1:8080", upstream: { id: upstream_id }, updated_at: 1_700_000_000 }.to_json)
+
+      post apply_change_plan_path(plan)
+
+      expect(response).to redirect_to(entity_path(upstream))
+      expect(plan.reload.status).to eq("applied")
+    end
+
+    it "labels a deleted target by host:port in the flash message" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id, before: { "id" => target_id, "target" => "10.0.0.1:8080", "updated_at" => 1_700_000_000 })
+      member = "https://kong-admin.test/upstreams/#{upstream_id}/targets/#{target_id}"
+      stub_request(:get, member).to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: 1_700_000_000 }.to_json)
+      stub_request(:delete, member).to_return(status: 204)
+
+      post apply_change_plan_path(plan)
+
+      expect(flash[:notice]).to eq("Deleted 10.0.0.1:8080.")
+    end
+  end
+
   it "rejects deleting an admin-path entity without the typed confirmation" do
     sign_in
     kong_id = "77777777-7777-7777-7777-777777777777"

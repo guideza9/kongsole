@@ -37,6 +37,7 @@ export interface PlanChangeParams {
   type: string;
   operation: "create" | "update" | "delete";
   target_kong_id?: string;
+  parent_kong_id?: string;
   attributes?: Record<string, unknown>;
 }
 

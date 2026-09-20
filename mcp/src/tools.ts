@@ -44,7 +44,12 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "Pass fields= to narrow the response and save tokens.",
       inputSchema: {
         connection: z.string().describe("Connection name (required, no default -- see section 12's guardrail #1)"),
-        type: z.string().describe('Entity type, e.g. "service" (only type synced as of M1)'),
+        type: z
+          .string()
+          .describe(
+            'Entity type, e.g. "service", "route", "consumer", "plugin", "upstream" or "target" ' +
+              "(a target's name is its host:port)"
+          ),
         q: z.string().optional().describe("Substring match on name"),
         tags: z.array(z.string()).optional().describe("Must have every one of these tags"),
         tags_any: z.array(z.string()).optional().describe("Must have at least one of these tags"),
@@ -78,9 +83,21 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "with no override.",
       inputSchema: {
         connection: z.string(),
-        type: z.string().describe('Entity type, e.g. "service"'),
+        type: z
+          .string()
+          .describe(
+            "Entity type: service, route, consumer, plugin, keyauth_credential, basicauth_credential, " +
+              "upstream, or target"
+          ),
         operation: z.enum(["create", "update", "delete"]),
         target_kong_id: z.string().optional().describe("Required for update/delete; omit for create"),
+        parent_kong_id: z
+          .string()
+          .optional()
+          .describe(
+            "Required to CREATE a target (the upstream's kong id) or a credential (the consumer's kong id). " +
+              "For update/delete of an existing target it may be omitted -- it is looked up from the last sync."
+          ),
         attributes: z.record(z.string(), z.unknown()).optional().describe("Fields to set, required for create/update")
       }
     },

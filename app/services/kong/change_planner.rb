@@ -10,6 +10,18 @@ module Kong
   # before comes straight from JSON.parse, and a symbol key would merge in
   # as a sibling rather than an override.
   class ChangePlanner
+    # The request itself is malformed -- as opposed to a guardrail refusing a
+    # well-formed one. Still a Violation (existing rescues catch it), but the
+    # API answers 422 rather than 403, since nothing here is about permission.
+    class InvalidChange < Kong::ChangeGuardrails::Violation; end
+
+    # Kong's own schema refused the proposed body. Distinct so a JSON editor
+    # can re-render with the operator's text intact instead of redirecting.
+    class SchemaViolation < InvalidChange; end
+
+    # A nested type (target) with no parent to build its Admin API path from.
+    class MissingParent < InvalidChange; end
+
     def initialize(connection:, client:, operation:, entity_type:, actor_username:, target_kong_id: nil,
                     parent_kong_id: nil, attributes: {}, actor_operator: nil, actor_kind: "human")
       @connection = connection
@@ -33,6 +45,8 @@ module Kong
         scope_kong_id: @operation == "create" ? plugin_scope_kong_id : nil
       )
 
+      @parent_kong_id = resolve_parent_kong_id
+
       before = @operation == "create" ? {} : fetch_current
 
       if @actor_kind == "agent" && @operation == "delete"
@@ -42,6 +56,7 @@ module Kong
       end
 
       after = compute_after(before)
+      validate_against_kong_schema!(after)
 
       ChangePlan.create!(
         kong_connection: @connection,
@@ -64,6 +79,68 @@ module Kong
 
     private
 
+    # A nested type (target) can't build any Admin API path without its
+    # parent. A create must be told it; an update/delete may omit it, in which
+    # case the read-model's own record of that entity is the authority.
+    def resolve_parent_kong_id
+      return @parent_kong_id unless @definition.nested?
+      return @parent_kong_id if @parent_kong_id.present?
+
+      found = @operation == "create" ? nil : cached_parent_kong_id
+      return found if found.present?
+
+      remedy = @operation == "create" ? "pick a #{@definition.parent_type}" : "sync this connection first, then retry"
+      raise MissingParent, "can't tell which #{@definition.parent_type} this #{@entity_type} belongs to -- #{remedy}"
+    end
+
+    def cached_parent_kong_id
+      KongEntity.active
+        .where(kong_connection: @connection, entity_type: @entity_type, kong_id: @target_kong_id)
+        .pick(:parent_kong_id)
+    end
+
+    # docs/DESIGN.md section 15 M5: Kong's own schema is the single source of
+    # truth for what an upstream's `healthchecks` (or a target) may contain,
+    # so a bad config is refused here, with Kong's per-field messages, instead
+    # of surfacing at apply. Kong-managed fields are stripped (Kong owns
+    # them), and a nested type's parent reference is added, since the schema
+    # requires it and the form body doesn't carry it.
+    def validate_against_kong_schema!(after)
+      return unless @definition.schema_name && after
+
+      body = after.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
+      body = body.merge(@definition.parent_type => { "id" => @parent_kong_id }) if @definition.nested?
+      @client.post("/schemas/#{@definition.schema_name}/validate", body: body)
+    rescue Kong::Client::UnexpectedResponse => e
+      raise unless e.response&.status == 400
+
+      raise SchemaViolation, "Kong rejected this #{@entity_type}: #{schema_violation_message(e.response)}"
+    end
+
+    # Flattens Kong's nested `fields` map into "healthchecks.active.http_path:
+    # should start with: /" lines, falling back to its top-level message.
+    def schema_violation_message(response)
+      body = response.body
+      body = JSON.parse(body) if body.is_a?(String)
+      lines = flatten_field_errors(body["fields"]) if body.is_a?(Hash)
+      lines.presence&.join("; ") || (body.is_a?(Hash) && body["message"]) || "invalid #{@entity_type}"
+    rescue JSON::ParserError
+      "invalid #{@entity_type}"
+    end
+
+    def flatten_field_errors(node, prefix = nil)
+      case node
+      when Hash
+        node.flat_map { |key, value| flatten_field_errors(value, [ prefix, key ].compact.join(".")) }
+      when Array
+        [ "#{prefix}: #{node.join(', ')}" ]
+      when nil
+        []
+      else
+        [ "#{prefix}: #{node}" ]
+      end
+    end
+
     # A new plugin's proposed scope target, straight out of `attributes`
     # (string-keyed, matching Kong's own body shape -- `{"service" =>
     # {"id" => "..."}}`). nil for a global plugin, which can never be
@@ -84,7 +161,7 @@ module Kong
     # (`updated_at` for the optimistic lock, `id`/`tags` for the guardrails,
     # `name` for the audit event and decK YAML).
     def fetch_current
-      response = @client.get("#{@definition.list_path}/#{@target_kong_id}")
+      response = @client.get(@definition.member_path(@target_kong_id, parent_kong_id: @parent_kong_id))
       body = response.body
       raw = body.is_a?(String) ? JSON.parse(body) : body
       Kong::Redactor.call(@entity_type, raw)[:data]

@@ -107,6 +107,9 @@ RSpec.describe "Entities (web)", type: :request do
     stub_request(:get, "https://kong-admin.test/plugins")
       .with(query: { size: "100" })
       .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    stub_request(:get, "https://kong-admin.test/upstreams")
+      .with(query: { size: "100" })
+      .to_return(status: 200, body: { data: [], offset: nil }.to_json)
 
     post sync_entities_path
 
@@ -116,7 +119,7 @@ RSpec.describe "Entities (web)", type: :request do
 
   it "returns to the tab Sync now was clicked from, not always services" do
     sign_in
-    %w[services consumers routes key-auths basic-auths plugins].each do |path|
+    %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
       stub_request(:get, "https://kong-admin.test/#{path}")
         .with(query: { size: "100" })
         .to_return(status: 200, body: { data: [], offset: nil }.to_json)
@@ -129,13 +132,13 @@ RSpec.describe "Entities (web)", type: :request do
 
   it "falls back to services if Sync now somehow posts an unknown type" do
     sign_in
-    %w[services consumers routes key-auths basic-auths plugins].each do |path|
+    %w[services consumers routes key-auths basic-auths plugins upstreams].each do |path|
       stub_request(:get, "https://kong-admin.test/#{path}")
         .with(query: { size: "100" })
         .to_return(status: 200, body: { data: [], offset: nil }.to_json)
     end
 
-    post sync_entities_path(type: "upstream")
+    post sync_entities_path(type: "widget")
 
     expect(response).to redirect_to(entities_path(type: "service"))
   end
@@ -190,7 +193,7 @@ RSpec.describe "Entities (web)", type: :request do
     it "redirects with an alert for an unknown type" do
       sign_in
 
-      get entities_path(type: "upstream")
+      get entities_path(type: "widget")
 
       expect(response).to redirect_to(entities_path)
       follow_redirect!
@@ -219,6 +222,327 @@ RSpec.describe "Entities (web)", type: :request do
 
       expect(response.body).to include("Credentials")
       expect(response.body).to include("alice/abcd1234")
+    end
+  end
+
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+    let(:ok) { { status: 200, body: { message: "schema validation successful" }.to_json } }
+
+    def create_upstream(name: "orders", **attrs)
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: name,
+        data: { "name" => name, "algorithm" => "round-robin" }, **attrs)
+    end
+
+    def create_target(**attrs)
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id, data: { "target" => "10.0.0.1:8080", "weight" => 100 }, **attrs)
+    end
+
+    describe "listing" do
+      it "has an Upstreams tab and lists upstreams with their algorithm" do
+        sign_in
+        create_upstream
+
+        get entities_path(type: "upstream")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("Upstreams")
+        expect(response.body).to include("orders")
+        expect(response.body).to include("round-robin")
+      end
+
+      it "offers a New upstream button only on the upstreams tab" do
+        sign_in
+
+        get entities_path(type: "upstream")
+        expect(response.body).to include("New upstream")
+
+        get entities_path(type: "service")
+        expect(response.body).not_to include("New upstream")
+      end
+
+      it "lists targets, showing weight, when asked for type=target directly" do
+        sign_in
+        create_upstream
+        create_target
+
+        get entities_path(type: "target")
+
+        expect(response.body).to include("10.0.0.1:8080")
+        expect(response.body).to include("100")
+      end
+    end
+
+    describe "an upstream's detail page" do
+      it "shows its Targets, with an Add target link carrying the upstream" do
+        sign_in
+        upstream = create_upstream
+        create_target
+
+        get entity_path(upstream)
+
+        expect(response.body).to include("Targets")
+        expect(response.body).to include("10.0.0.1:8080")
+        expect(response.body).to include(new_entity_path(type: "target", parent_kong_id: upstream_id).gsub("&", "&amp;"))
+      end
+
+      it "does not label targets (or any child with no `enabled` field) as disabled" do
+        sign_in
+        upstream = create_upstream
+        create_target(enabled: nil)
+
+        get entity_path(upstream)
+
+        expect(response.body).not_to include(">disabled<")
+      end
+
+      it "still labels a child that Kong reports as explicitly disabled" do
+        sign_in
+        service = create(:kong_entity, kong_connection: connection, entity_type: "service", kong_id: "66666666-6666-6666-6666-666666666666", name: "payments-api")
+        create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "cors", enabled: false,
+          parent_type: "service", parent_kong_id: service.kong_id)
+
+        get entity_path(service)
+
+        expect(response.body).to include(">disabled<")
+      end
+    end
+
+    describe "GET /entities/new" do
+      it "opens an upstream form seeded with sensible defaults" do
+        sign_in
+
+        get new_entity_path(type: "upstream")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("New upstream")
+        expect(response.body).to include("&quot;algorithm&quot;: &quot;round-robin&quot;")
+        expect(response.body).not_to include("healthchecks")
+      end
+
+      it "offers a preset that seeds an active HTTP health check" do
+        sign_in
+
+        get new_entity_path(type: "upstream", preset: "active_http")
+
+        expect(response.body).to include("&quot;healthchecks&quot;")
+        expect(response.body).to include("&quot;http_path&quot;: &quot;/health&quot;")
+        expect(response.body).to include("Start from")
+      end
+
+      it "ignores an unknown preset rather than erroring" do
+        sign_in
+
+        get new_entity_path(type: "upstream", preset: "nope")
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).not_to include("healthchecks")
+      end
+
+      it "opens a target form scoped to its upstream" do
+        sign_in
+        create_upstream
+
+        get new_entity_path(type: "target", parent_kong_id: upstream_id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("upstream: orders")
+        expect(response.body).to include("&quot;weight&quot;: 100")
+      end
+
+      it "redirects a target form with no known upstream" do
+        sign_in
+
+        get new_entity_path(type: "target", parent_kong_id: upstream_id)
+
+        expect(response).to redirect_to(entities_path(type: "upstream"))
+        follow_redirect!
+        expect(response.body).to include("upstream")
+      end
+
+      it "only opens forms for types the UI can create, not e.g. a service" do
+        sign_in
+
+        get new_entity_path(type: "service")
+
+        expect(response).to redirect_to(entities_path)
+      end
+    end
+
+    describe "POST /entities (create)" do
+      it "proposes an upstream, validated against Kong's schema, and redirects to review" do
+        sign_in
+        validate = stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(ok)
+
+        post entities_path, params: { type: "upstream", payload_json: { name: "orders", algorithm: "round-robin" }.to_json }
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.entity_type).to eq("upstream")
+        expect(plan.operation).to eq("create")
+        expect(plan.after).to eq({ "name" => "orders", "algorithm" => "round-robin" })
+        expect(validate).to have_been_requested
+      end
+
+      it "proposes a target under its upstream" do
+        sign_in
+        create_upstream
+        stub_request(:post, "https://kong-admin.test/schemas/targets/validate").to_return(ok)
+
+        post entities_path, params: { type: "target", parent_kong_id: upstream_id,
+                                      payload_json: { target: "10.0.0.1:8080", weight: 100 }.to_json }
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.entity_type).to eq("target")
+        expect(plan.parent_kong_id).to eq(upstream_id)
+      end
+
+      it "strips Kong-assigned fields left in the document" do
+        sign_in
+        stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(ok)
+
+        post entities_path, params: { type: "upstream", payload_json: { id: "x", name: "orders", created_at: 1 }.to_json }
+
+        expect(ChangePlan.last.after).to eq({ "name" => "orders" })
+      end
+
+      it "re-renders with the operator's text and Kong's field errors when the schema rejects it, creating no plan" do
+        sign_in
+        stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(
+          status: 400, body: { name: "schema violation", message: "schema violation",
+                               fields: { healthchecks: { active: { http_path: "should start with: /" } } } }.to_json
+        )
+        payload = { name: "orders", healthchecks: { active: { http_path: "health" } } }.to_json
+
+        post entities_path, params: { type: "upstream", payload_json: payload }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("healthchecks.active.http_path: should start with: /")
+        expect(response.body).to include("health&quot;") # the edit survives the round trip
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "re-renders with the text intact when the JSON doesn't parse" do
+        sign_in
+
+        post entities_path, params: { type: "upstream", payload_json: "{ not json" }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("valid JSON")
+        expect(response.body).to include("{ not json")
+      end
+
+      it "refuses a type the UI can't create" do
+        sign_in
+
+        post entities_path, params: { type: "service", payload_json: { name: "x" }.to_json }
+
+        expect(response).to redirect_to(entities_path)
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "refuses to propose on a read-only credential" do
+        sign_in
+        connection.update!(access_level: "ro")
+
+        post entities_path, params: { type: "upstream", payload_json: { name: "orders" }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to match(/can(&#39;|')t write/)
+        expect(ChangePlan.count).to eq(0)
+      end
+    end
+
+    describe "editing a target" do
+      let(:member_url) { "https://kong-admin.test/upstreams/#{upstream_id}/targets/#{target_id}" }
+
+      it "opens the editor on the live target, fetched through its upstream" do
+        sign_in
+        target = create_target
+        get_live = stub_request(:get, member_url).to_return(status: 200, body: {
+          id: target_id, target: "10.0.0.1:8080", weight: 77, upstream: { id: upstream_id },
+          created_at: 1_700_000_000.226, updated_at: 1_700_000_000.5
+        }.to_json)
+
+        get edit_entity_path(target)
+
+        expect(get_live).to have_been_requested
+        expect(response.body).to include("&quot;weight&quot;: 77")
+        expect(response.body).not_to include("created_at")
+      end
+
+      it "proposes a weight change, resolving the upstream from the read-model" do
+        sign_in
+        target = create_target
+        stub_request(:get, member_url).to_return(status: 200, body: {
+          id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: 1_700_000_000.5
+        }.to_json)
+        stub_request(:post, "https://kong-admin.test/schemas/targets/validate").to_return(ok)
+
+        patch entity_path(target), params: { payload_json: { weight: 50 }.to_json }
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.parent_kong_id).to eq(upstream_id)
+        expect(plan.diff).to eq({ "weight" => { "from" => 100, "to" => 50 } })
+      end
+
+      it "re-renders the editor with Kong's message, keeping the operator's JSON, on a schema rejection" do
+        sign_in
+        upstream = create_upstream
+        stub_request(:get, "https://kong-admin.test/upstreams/#{upstream_id}").to_return(status: 200, body: {
+          id: upstream_id, name: "orders", algorithm: "round-robin", updated_at: 1_700_000_000
+        }.to_json)
+        stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(
+          status: 400, body: { message: "schema violation", fields: { algorithm: "expected one of: round-robin, consistent-hashing" } }.to_json
+        )
+
+        patch entity_path(upstream), params: { payload_json: { algorithm: "bogus" }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("algorithm: expected one of")
+        expect(response.body).to include("bogus")
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "proposes deleting a target through its upstream" do
+        sign_in
+        target = create_target
+        stub_request(:get, member_url).to_return(status: 200, body: {
+          id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: 1_700_000_000.5
+        }.to_json)
+
+        delete entity_path(target)
+
+        plan = ChangePlan.last
+        expect(response).to redirect_to(change_plan_path(plan))
+        expect(plan.operation).to eq("delete")
+        expect(plan.parent_kong_id).to eq(upstream_id)
+      end
+    end
+
+    describe "syncing" do
+      it "syncs upstreams and their targets from the Sync now button" do
+        sign_in
+        %w[services consumers key-auths basic-auths plugins].each do |path|
+          stub_request(:get, "https://kong-admin.test/#{path}").with(query: { size: "100" })
+            .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+        end
+        stub_request(:get, "https://kong-admin.test/routes").with(query: { size: "100" })
+          .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+        stub_request(:get, "https://kong-admin.test/upstreams").with(query: { size: "100" })
+          .to_return(status: 200, body: { data: [ { id: upstream_id, name: "orders", algorithm: "round-robin" } ], offset: nil }.to_json)
+        stub_request(:get, "https://kong-admin.test/upstreams/#{upstream_id}/targets").with(query: { size: "100" })
+          .to_return(status: 200, body: { data: [ { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id } } ], offset: nil }.to_json)
+
+        post sync_entities_path(type: "upstream")
+
+        expect(response).to redirect_to(entities_path(type: "upstream"))
+        expect(KongEntity.active.pluck(:entity_type)).to contain_exactly("upstream", "target")
+      end
     end
   end
 
