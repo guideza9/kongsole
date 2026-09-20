@@ -1,0 +1,34 @@
+<%# Read-only reference beside the JSON config editor -- one entry per
+    field: name, type, required, description, default, and (for a `set`/
+    `array` of strings) its allowed values. Recurses into a `record`
+    field's own nested `fields`, or an array/set-of-records' `elements`. %>
+<div class="grid gap-3 text-xs">
+  <% fields.each do |field| %>
+    <% name, spec = field.first %>
+    <div class="pb-2" style="border-bottom: 1px solid var(--color-border)">
+      <div class="flex items-center gap-1.5 flex-wrap mb-1">
+        <span class="font-mono font-semibold" style="color: var(--color-ink)"><%= name %></span>
+        <span class="tag"><%= spec["type"] %></span>
+        <% if spec["required"] %>
+          <span class="tag" style="color: var(--color-danger); border-color: var(--color-danger)">required</span>
+        <% end %>
+      </div>
+      <% if spec["description"].present? %>
+        <p style="color: var(--color-ink-soft)"><%= spec["description"] %></p>
+      <% end %>
+      <% if spec.key?("default") %>
+        <p class="font-mono mt-1" style="color: var(--color-ink-faint)">default: <%= spec["default"].inspect %></p>
+      <% end %>
+      <% one_of = spec["one_of"] || spec.dig("elements", "one_of") %>
+      <% if one_of.present? %>
+        <p class="mt-1" style="color: var(--color-ink-faint)">one of: <span class="font-mono"><%= one_of.join(", ") %></span></p>
+      <% end %>
+      <% nested = spec["fields"] || spec.dig("elements", "fields") %>
+      <% if nested.present? %>
+        <div class="mt-2 pl-3" style="border-left: 1px solid var(--color-border)">
+          <%= render "schema_reference", fields: nested %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</div>

@@ -1,0 +1,49 @@
+<% content_for :title, "Connections" %>
+
+<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+  <div>
+    <h1 class="text-xl font-semibold" style="color: var(--color-ink)">Connections</h1>
+    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">Every registered Kong Admin API connection.</p>
+  </div>
+  <%= link_to "Add connection", new_connection_path, class: "btn-primary shrink-0 px-3.5 py-2 text-sm" %>
+</div>
+
+<div class="grid gap-3">
+  <% @connections.each do |connection| %>
+    <div class="row-card p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <%= env_badge(connection, size: :lg) %>
+          <span class="text-xs" style="color: var(--color-ink-faint)">rank <%= connection.rank %></span>
+          <%= status_badge(connection.last_status) %>
+        </div>
+
+        <div class="mt-2 text-sm font-mono truncate" style="color: var(--color-ink-soft)"><%= connection.admin_url %></div>
+
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <span class="tag">apply: <%= connection.apply_mode %></span>
+          <% if connection.access_level %>
+            <span class="tag">access: <%= connection.access_level %></span>
+          <% end %>
+          <% if connection.credential_kind %>
+            <span class="tag">credential: <%= connection.credential_kind %></span>
+          <% end %>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 text-sm shrink-0">
+        <%= link_to "Log in", login_connection_path(connection), class: "btn-primary px-3 py-1.5" %>
+        <%= link_to "Edit", edit_connection_path(connection), class: "btn-secondary px-3 py-1.5" %>
+        <%= button_to "Remove", connection_path(connection), method: :delete,
+              form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from the registry? This does not touch anything in Kong itself." } },
+              class: "btn-text-danger px-3 py-1.5 bg-transparent cursor-pointer" %>
+      </div>
+    </div>
+  <% end %>
+
+  <% if @connections.empty? %>
+    <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+      No connections yet. Add one above, or run <code class="font-mono">rails kong:load_connections</code> to load <code class="font-mono">config/connections.yml</code>.
+    </div>
+  <% end %>
+</div>

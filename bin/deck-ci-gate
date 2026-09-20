@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+# CI gate for a PR-mode branch this tool pushed (docs/DESIGN.md section 6
+# step 6, section 15 M2). Host-agnostic: a future CI pipeline (GitHub
+# Actions, GitLab CI, ...) invokes this once a host is chosen; it takes a
+# change_plan id, re-derives the admin-path entity names for that plan's
+# connection, and exits non-zero with a reason if the gate should block.
+#
+# Usage: bin/deck-ci-gate <change_plan_id>
+
+APP_PATH = File.expand_path("../config/environment", __dir__)
+require_relative "../config/boot"
+require APP_PATH
+
+change_plan_id = ARGV.first
+unless change_plan_id
+  warn "usage: bin/deck-ci-gate <change_plan_id>"
+  exit 2
+end
+
+plan = ChangePlan.find(change_plan_id)
+connection = plan.kong_connection
+admin_path_names = KongEntity.where(kong_connection: connection, is_admin_path: true).pluck(:name)
+
+result = Kong::CiGate.check(deck_diff: plan.deck_diff, admin_path_names: admin_path_names)
+
+if result.passed?
+  puts "PASS: #{connection.name} plan #{plan.id}"
+  exit 0
+else
+  warn "BLOCKED: #{connection.name} plan #{plan.id}"
+  result.reasons.each { |reason| warn "  - #{reason}" }
+  exit 1
+end

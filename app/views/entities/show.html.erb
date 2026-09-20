@@ -1,0 +1,76 @@
+<% content_for :title, @entity.name %>
+
+<div class="flex flex-wrap items-center gap-2 mb-1">
+  <h1 class="text-xl font-semibold" style="color: var(--color-ink)"><%= @entity.name %></h1>
+  <% if @entity.is_admin_path? %>
+    <span class="chip" style="background-color: var(--color-warning-tint); color: var(--color-warning)">
+      <svg class="chip-dot" width="10" height="10" viewBox="0 0 10 10" fill="none" style="border-radius:0">
+        <rect x="2" y="4.2" width="6" height="4.3" rx="0.8" stroke="currentColor" stroke-width="1"/>
+        <path d="M3.2 4.2V3a1.8 1.8 0 0 1 3.6 0v1.2" stroke="currentColor" stroke-width="1" fill="none"/>
+      </svg>
+      protected — part of this connection's own admin path
+    </span>
+  <% end %>
+</div>
+<p class="text-sm mb-6" style="color: var(--color-ink-soft)"><%= entity_type_label(@entity.entity_type, count: 1).downcase %> · <%= current_connection.name %></p>
+
+<div class="max-w-2xl grid gap-4">
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Overview</h2>
+    <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt style="color: var(--color-ink-soft)">Kong ID</dt><dd class="font-mono"><%= @entity.kong_id %></dd>
+      <dt style="color: var(--color-ink-soft)">Logical key</dt><dd><%= @entity.logical_key %></dd>
+      <% if @entity.entity_type.in?(%w[service plugin]) %>
+        <dt style="color: var(--color-ink-soft)">Enabled</dt><dd><%= @entity.enabled ? "yes" : "no" %></dd>
+      <% end %>
+      <dt style="color: var(--color-ink-soft)">Tags</dt>
+      <dd>
+        <% if @entity.tags.any? %>
+          <div class="flex flex-wrap gap-1.5">
+            <% @entity.tags.each do |tag| %><span class="tag"><%= tag %></span><% end %>
+          </div>
+        <% else %>—<% end %>
+      </dd>
+      <dt style="color: var(--color-ink-soft)">Created in Kong</dt><dd><%= @entity.kong_created_at&.to_fs(:long) || "—" %></dd>
+      <dt style="color: var(--color-ink-soft)">Updated in Kong</dt><dd><%= @entity.kong_updated_at&.to_fs(:long) || "—" %></dd>
+      <dt style="color: var(--color-ink-soft)">Last synced</dt><dd><%= @entity.synced_at&.to_fs(:long) || "—" %></dd>
+    </dl>
+  </section>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Raw JSON <span class="font-normal normal-case" style="letter-spacing: normal; color: var(--color-ink-faint)">(redacted at sync time)</span></h2>
+    <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@entity.data) %></pre>
+  </section>
+
+  <% @child_groups.each do |label, children| %>
+    <section class="panel p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="section-label">
+          <%= label %>
+        </h2>
+        <% if label == "Plugins" %>
+          <%= link_to "Add plugin", new_plugin_path(scope_type: @entity.entity_type, scope_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
+        <% end %>
+      </div>
+      <% if children.empty? %>
+        <p class="text-sm" style="color: var(--color-ink-soft)">None synced yet.</p>
+      <% else %>
+        <div class="grid gap-px" style="background: var(--color-border)">
+          <%= render partial: "entity", collection: children %>
+        </div>
+      <% end %>
+    </section>
+  <% end %>
+</div>
+
+<div class="mt-6 flex gap-2">
+  <% if @entity.entity_type == "plugin" && @entity.is_admin_path? %>
+    <p class="text-sm" style="color: var(--color-ink-soft)">
+      Read-only — this plugin fronts the connection's own admin path and can't be edited or deleted here.
+    </p>
+  <% else %>
+    <%= link_to "Edit", edit_entity_path(@entity), class: "btn-secondary px-3 py-1.5 text-sm" %>
+    <%= button_to "Delete", entity_path(@entity), method: :delete, class: "btn-text-danger px-3 py-1.5 text-sm bg-transparent cursor-pointer" %>
+  <% end %>
+  <%= link_to "Back to #{entity_type_label(@entity.entity_type).downcase}", entities_path(type: @entity.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
+</div>

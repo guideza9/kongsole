@@ -30,8 +30,10 @@ for the full solution design and milestone plan.
 - `Kong::ConnectionLogin` / `Kong::ConnectionsConfigLoader` — the login
   pipeline and the git-tracked connection registry loader (section 3).
 - Web UI: connection list/add/edit/delete, per-connection login, and a
-  `/health` dashboard. No UI polish pass yet — that's for a later
-  `/impeccable` milestone once M1 has real entities to show.
+  `/health` dashboard, styled as a quiet minimalist console — see
+  `docs/UI-DESIGN.md` for the palette, type, and component language.
+  Future milestones' screens (entity browser, decK diffs, drift)
+  extend this system rather than introducing a new one.
 - `docker-compose.yml` + `docker/kong/bootstrap.sh`: a real two-node Kong CE
   stack that fronts its own Admin API via the loopback pattern (section 1),
   used to prove the whole design against a live Kong rather than only mocks.

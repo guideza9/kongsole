@@ -1,0 +1,15 @@
+<%# "Load more" (see _pagination.html.erb, data: { turbo_stream: true }) requests
+    this same action expecting this format instead of a full page: append the
+    new page's rows to the existing list rather than replacing the whole page,
+    so nothing already scanned disappears and scroll position holds. %>
+<%= turbo_stream.append "entities-list" do %>
+  <%= render partial: "entity_row", collection: @entities, as: :entity, locals: { type: @type } %>
+<% end %>
+
+<%= turbo_stream.replace "entities-pagination" do %>
+  <%= render "pagination" %>
+<% end %>
+
+<%= turbo_stream.replace "entities-count" do %>
+  <%= render "count" %>
+<% end %>

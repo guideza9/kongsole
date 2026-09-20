@@ -1,0 +1,38 @@
+<% content_for :title, "Log in to #{@connection.name}" %>
+
+<div class="max-w-md">
+  <div class="flex items-center gap-2 mb-1">
+    <h1 class="text-xl font-semibold" style="color: var(--color-ink)">Log in to</h1>
+    <%= env_badge(@connection, size: :lg) %>
+  </div>
+  <p class="text-sm mb-6 font-mono break-all" style="color: var(--color-ink-soft)"><%= @connection.admin_url %> <span class="font-sans">· apply: <%= @connection.apply_mode %></span></p>
+
+  <% if @connection.prod? %>
+    <div class="notice-banner mb-6" style="background: var(--color-danger-tint); border-color: var(--color-danger)">
+      <p class="font-semibold" style="color: var(--color-danger)">This is production.</p>
+      <p class="text-sm mt-0.5" style="color: var(--color-danger)">Please take a moment to double-check you meant to connect here before continuing.</p>
+    </div>
+  <% end %>
+
+  <%= form_with url: login_connection_path(@connection), method: :post, class: "grid gap-4" do %>
+    <div class="panel p-4 grid gap-4">
+      <div>
+        <label class="block text-sm font-medium" style="color: var(--color-ink)">Username</label>
+        <input type="text" name="username" required autofocus class="field-input mt-1" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium" style="color: var(--color-ink)">Password</label>
+        <input type="password" name="password" required class="field-input mt-1" />
+      </div>
+    </div>
+
+    <div class="panel p-4">
+      <label class="block text-sm font-medium" style="color: var(--color-ink)">Operator <span class="font-normal" style="color: var(--color-ink-soft)">(only if this is a shared credential)</span></label>
+      <input type="text" name="operator" class="field-input mt-1" />
+      <p class="text-xs mt-1.5" style="color: var(--color-ink-soft)">Required if this consumer is tagged <code class="font-mono">shared-credential</code> in Kong. Writes get recorded under this name.</p>
+    </div>
+
+    <button type="submit" class="btn-primary mt-1 justify-self-start px-4 py-2 text-sm">Connect</button>
+  <% end %>
+</div>

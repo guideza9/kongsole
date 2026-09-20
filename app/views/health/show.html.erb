@@ -1,0 +1,39 @@
+<% content_for :title, "Health" %>
+
+<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">Connection health</h1>
+<p class="text-sm mb-6" style="color: var(--color-ink-soft)">Every registered connection, and whether it's reachable.</p>
+
+<div class="overflow-x-auto panel">
+  <table class="w-full text-sm min-w-[720px]">
+    <thead>
+      <tr class="text-left" style="border-bottom: 1px solid var(--color-border); background: var(--color-surface-subtle)">
+        <th class="px-3 py-2 section-label">Connection</th>
+        <th class="px-3 py-2 section-label">Status</th>
+        <th class="px-3 py-2 section-label">Access</th>
+        <th class="px-3 py-2 section-label">Credential</th>
+        <th class="px-3 py-2 section-label">Admin path</th>
+        <th class="px-3 py-2 section-label">Last connected</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @connections.each do |connection| %>
+        <tr style="border-bottom: 1px solid var(--color-border)">
+          <td class="px-3 py-2.5">
+            <%= env_badge(connection) %>
+          </td>
+          <td class="px-3 py-2.5"><%= status_badge(connection.last_status) %></td>
+          <td class="px-3 py-2.5"><%= connection.access_level || "—" %></td>
+          <td class="px-3 py-2.5"><%= connection.credential_kind || "—" %></td>
+          <td class="px-3 py-2.5">
+            <% if connection.admin_path_fingerprint.present? && connection.admin_path_fingerprint["service_id"] %>
+              <span style="color: var(--color-success)">guarded</span>
+            <% else %>
+              <span style="color: var(--color-ink-soft)">unknown</span>
+            <% end %>
+          </td>
+          <td class="px-3 py-2.5 font-mono" style="color: var(--color-ink-soft)"><%= connection.last_connected_at&.to_fs(:short) || "never" %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>

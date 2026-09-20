@@ -1,0 +1,108 @@
+# Local, two-node Kong CE stack that fronts its own Admin API through the
+# loopback pattern (docs/DESIGN.md section 1): each node's `admin_listen` is
+# bound only to 127.0.0.1 inside its own container -- never published to the
+# host -- and is reachable only through the rw/ro routes on the shared
+# proxy, exactly like a real deployment. This is what M0's admin-path guard,
+# access probe, and credential classifier are meant to be exercised against.
+#
+# Usage:
+#   docker compose up -d
+#   bin/rails kong:load_connections   # registers dev/sit in the app's DB
+#   add to /etc/hosts:  127.0.0.1 kong-admin.internal kong-admin-ro.internal
+#   curl -u jakkapat:devpassword -H 'Host: kong-admin.internal' http://localhost:8000/
+#
+# kong-1 and kong-2 share one Postgres-backed config store, so entities
+# created via kong-1's Admin API (by the bootstrap job) are visible on both
+# nodes immediately -- real multi-node behavior, not two independent stacks.
+services:
+  kong-database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+    volumes:
+      - kong_database_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong -d kong"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  kong-migrations:
+    image: kong:3.7
+    command: kong migrations bootstrap
+    environment: &kong_db_env
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PG_DATABASE: kong
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    restart: "no"
+
+  kong-1:
+    image: kong:3.7
+    environment:
+      <<: *kong_db_env
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      # Loopback-only: never bound to 0.0.0.0, never published to the host.
+      # The only way into this Admin API is through the rw/ro routes below.
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  kong-2:
+    image: kong:3.7
+    environment:
+      <<: *kong_db_env
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+    ports:
+      - "8010:8000"
+      - "8011:8001"
+    depends_on:
+      kong-migrations:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  # One-off: creates the admin-path service/routes/plugins/consumers by
+  # talking to kong-1's Admin API over its OWN loopback -- shares kong-1's
+  # network namespace so 127.0.0.1:8001 resolves to kong-1, not to this
+  # container. See docker/kong/bootstrap.sh.
+  kong-1-bootstrap:
+    image: curlimages/curl:8.10.1
+    network_mode: "service:kong-1"
+    depends_on:
+      kong-1:
+        condition: service_healthy
+    volumes:
+      - ./docker/kong/bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ["sh", "/bootstrap.sh"]
+    restart: "no"
+
+volumes:
+  kong_database_data:

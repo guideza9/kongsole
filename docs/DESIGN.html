@@ -1,0 +1,944 @@
+<title>Kong Control Plane Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root{
+    --paper:#F2F5F7; --surface:#FFFFFF; --surface-2:#E8EDF1;
+    --ink:#111A22; --ink-2:#3A4A57; --muted:#66788A;
+    --line:#D3DCE3; --line-strong:#B4C1CC;
+    --accent:#A96A16; --accent-soft:#F3E7D4;
+    --teal:#186B6E; --teal-soft:#DDEDEC;
+    --ok:#2C6E4A; --crit:#A63A2C; --crit-soft:#F6E1DD;
+    --code-bg:#101922; --code-ink:#D9E4EC;
+    --shadow:0 1px 2px rgba(17,26,34,.06), 0 8px 24px -12px rgba(17,26,34,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0D141B; --surface:#141E27; --surface-2:#1C2833;
+      --ink:#E3EAF0; --ink-2:#B9C7D2; --muted:#8399A9;
+      --line:#26333F; --line-strong:#374856;
+      --accent:#DFA45E; --accent-soft:#302416;
+      --teal:#5FADAF; --teal-soft:#12292A;
+      --ok:#6FB88A; --crit:#E0847A; --crit-soft:#331C19;
+      --code-bg:#0A1017; --code-ink:#CBD9E4;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0D141B; --surface:#141E27; --surface-2:#1C2833;
+    --ink:#E3EAF0; --ink-2:#B9C7D2; --muted:#8399A9;
+    --line:#26333F; --line-strong:#374856;
+    --accent:#DFA45E; --accent-soft:#302416;
+    --teal:#5FADAF; --teal-soft:#12292A;
+    --ok:#6FB88A; --crit:#E0847A; --crit-soft:#331C19;
+    --code-bg:#0A1017; --code-ink:#CBD9E4;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);
+    font-family:"Source Serif 4","Iowan Old Style",Georgia,serif;
+    font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 96px}
+  .col{max-width:70ch}
+
+  h1,h2,h3,h4{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+  h1{font-size:clamp(2.1rem,4.6vw,3.2rem);line-height:1.05;letter-spacing:-.022em;font-weight:700;text-wrap:balance;margin:0}
+  h2{font-size:clamp(1.45rem,2.6vw,1.9rem);line-height:1.18;letter-spacing:-.015em;font-weight:700;text-wrap:balance;margin:0}
+  h3{font-size:1.12rem;line-height:1.3;letter-spacing:-.006em;font-weight:600;margin:0}
+  h4{font-size:.98rem;font-weight:600;margin:0;letter-spacing:-.003em}
+  p{margin:0}
+  a{color:var(--accent);text-underline-offset:3px}
+  a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+  code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.86em;
+    background:var(--surface-2);padding:.1em .36em;border-radius:3px;color:var(--ink)}
+  pre{background:var(--code-bg);color:var(--code-ink);
+    font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:13px;line-height:1.62;
+    padding:20px 22px;border-radius:6px;overflow-x:auto;margin:0;border:1px solid var(--line)}
+  pre code{background:none;padding:0;color:inherit;font-size:inherit}
+  .cmt{color:var(--muted)} .kw{color:var(--accent)} .str{color:var(--teal)}
+
+  header.mast{border-bottom:1px solid var(--line);background:var(--surface);padding:64px 0 40px;margin-bottom:8px}
+  .eyebrow{font-family:"JetBrains Mono",monospace;font-size:11.5px;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .eyebrow .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+  .lede{font-size:1.14rem;color:var(--ink-2);max-width:62ch}
+
+  .locked{display:grid;gap:1px;background:var(--line);
+    grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+    border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .locked > div{background:var(--surface);padding:13px 15px;display:flex;flex-direction:column;gap:4px}
+  .locked dt{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .locked dd{margin:0;font-family:Archivo,sans-serif;font-weight:600;font-size:.92rem;line-height:1.3;color:var(--ink)}
+  .locked div.new{background:var(--accent-soft)}
+  .locked div.new dd{color:var(--accent)}
+
+  section{padding:52px 0;border-top:1px solid var(--line)}
+  section:first-of-type{border-top:none}
+  .sec-head{display:flex;gap:16px;align-items:baseline;margin-bottom:22px}
+  .sec-num{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--accent);
+    letter-spacing:.08em;flex:none;padding-top:.35em;font-variant-numeric:tabular-nums}
+  .stack{display:flex;flex-direction:column;gap:20px}
+  .stack-sm{display:flex;flex-direction:column;gap:11px}
+  .sub{display:flex;flex-direction:column;gap:13px;padding-left:20px;border-left:2px solid var(--line)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:22px 24px;box-shadow:var(--shadow)}
+  .grid2{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+  .grid3{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+
+  .note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:16px 20px;border-radius:0 5px 5px 0;color:var(--ink)}
+  .note.crit{border-left-color:var(--crit);background:var(--crit-soft)}
+  .note.info{border-left-color:var(--teal);background:var(--teal-soft)}
+  .note h3,.note h4{margin-bottom:6px}
+  .note p + p{margin-top:8px}
+
+  .label{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:500;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+  .chip{display:inline-flex;align-items:center;gap:5px;font-family:"JetBrains Mono",monospace;
+    font-size:10.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;
+    padding:3px 8px;border-radius:3px;border:1px solid var(--line-strong);color:var(--muted);white-space:nowrap}
+  .chip.hi{color:var(--crit);border-color:var(--crit);background:var(--crit-soft)}
+  .chip.med{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+  .chip.lo{color:var(--ok);border-color:var(--ok)}
+  .chip.rd{color:var(--teal);border-color:var(--teal);background:var(--teal-soft)}
+  .chip.wr{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+
+  .tbox{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;min-width:600px;font-size:14.5px;line-height:1.5}
+  th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{font-family:Archivo,sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td.mono{font-family:"JetBrains Mono",monospace;font-size:12.5px}
+
+  figure{margin:0}
+  .figframe{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px;overflow-x:auto}
+  .figframe svg{display:block;min-width:880px;width:100%;height:auto}
+  svg text{font-family:"JetBrains Mono",ui-monospace,monospace}
+  figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;max-width:70ch}
+
+  ol.ms{list-style:none;padding:0;margin:0;display:flex;flex-direction:column}
+  ol.ms > li{display:grid;grid-template-columns:82px 1fr;gap:0 20px;padding:20px 0;border-top:1px solid var(--line)}
+  ol.ms > li:first-child{border-top:none;padding-top:4px}
+  .ms-tag{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px;color:var(--accent);
+    display:flex;flex-direction:column;gap:4px}
+  .ms-tag small{font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .ms-body{display:flex;flex-direction:column;gap:8px}
+  ul.tight{margin:0;padding-left:1.15em;display:flex;flex-direction:column;gap:4px;font-size:15.5px;color:var(--ink-2)}
+  ul.tight li::marker{color:var(--line-strong)}
+  .pass{font-size:15px;color:var(--ink-2);border-left:2px solid var(--teal);padding-left:12px}
+
+  ol.q{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:9px;font-size:16px;color:var(--ink-2)}
+  ol.q li::marker{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--accent)}
+  ol.q strong{color:var(--ink)}
+
+  .flow{display:flex;flex-direction:column}
+  .flow > div{display:grid;grid-template-columns:26px 1fr;gap:0 14px;padding:9px 0;border-top:1px dashed var(--line);font-size:15.5px;color:var(--ink-2)}
+  .flow > div:first-child{border-top:none}
+  .flow .n{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--accent);padding-top:2px}
+
+  .envbar{display:flex;gap:10px;flex-wrap:wrap}
+  .env{display:inline-flex;align-items:center;gap:7px;font-family:"JetBrains Mono",monospace;
+    font-size:11.5px;padding:5px 11px;border-radius:4px;border:1px solid var(--line-strong);color:var(--ink-2);background:var(--surface)}
+  .env i{width:9px;height:9px;border-radius:2px;display:block}
+
+  footer{border-top:1px solid var(--line);padding:36px 0 0;color:var(--muted);font-size:14px}
+
+  @media (max-width:640px){
+    body{font-size:16px}
+    header.mast{padding:44px 0 32px}
+    section{padding:40px 0}
+    ol.ms > li{grid-template-columns:1fr;gap:10px}
+    .sub{padding-left:14px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="stack">
+      <p class="eyebrow"><span class="dot"></span> Solution design &middot; rev 4 &middot; รอ verify ก่อนเริ่ม M0</p>
+      <h1>Kong CE Control Plane</h1>
+      <p class="lede">เครื่องมือจัดการ Kong Community Edition ที่มีทั้ง UI สำหรับคน และ MCP server สำหรับ Claude Code โดยใช้ backend, validation และ audit trail ชุดเดียวกัน</p>
+      <div class="locked" style="margin-top:14px">
+        <div><dt>Backend</dt><dd>Ruby on Rails 8</dd></div>
+        <div><dt>Kong integration</dt><dd>Proxy + read-model</dd></div>
+        <div><dt>Login</dt><dd>Connection + basic auth</dd></div>
+        <div class="new"><dt>Proxy หน้า Admin API</dt><dd>Kong เอง (loopback)</dd></div>
+        <div class="new"><dt>Credential</dt><dd>ต่อคน + ร่วมทีม</dd></div>
+        <div><dt>อยู่ร่วมกับ decK</dt><dd>PR ของ decK YAML</dd></div>
+        <div><dt>Node</dt><dd>Multi-node วันแรก</dd></div>
+        <div><dt>Pagination</dt><dd>Keyset ตั้งแต่ต้น</dd></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>tool จัดการสิ่งที่กั้นตัวมันเอง</h2></div>
+  <div class="stack">
+    <p class="col">Admin API ถูกครอบด้วย <strong>Kong เอง</strong> — loopback service ชี้ไป <code>http://127.0.0.1:8001</code> + route + basic-auth plugin แปลว่า <strong>เส้นทางเข้า Admin API ทั้งเส้นเป็น Kong entity ที่ tool จะเห็นและแก้ได้</strong> service, route, plugin, consumer จะโผล่ในตารางของ tool เอง ผลที่ตามมามีทั้งดีและอันตราย ต้องจัดการทุกข้อ</p>
+
+    <div class="note crit">
+      <h3>อันตรายข้อที่หนึ่ง — ลบตัวเองออกจากบ้าน</h3>
+      <p>ถ้าใครลบ route <code>admin-api</code> หรือ consumer ที่ถือ credential อยู่ → <strong>เข้า Admin API ไม่ได้อีกเลย และแก้กลับผ่าน Admin API ก็ไม่ได้เพราะมันหายไปแล้ว</strong> ต้องกู้ด้วย <code>kubectl exec</code> เข้าไปแก้ DB หรือ restart ด้วย declarative config</p>
+    </div>
+
+    <div class="sub">
+      <h4>Admin path guard — ทำที่ M0</h4>
+      <p style="font-size:15.5px;color:var(--ink-2)">ตอน sync ให้ tool หาเส้นทางนี้เองแล้วมาร์คไว้</p>
+<pre><code><span class="cmt">1.</span> เอา connection.admin_url                    → host + path
+<span class="cmt">2.</span> หา route ที่ match host/path นั้น
+<span class="cmt">3.</span> ไล่ route → service → ถ้า service.url ชี้ไป 127.0.0.1 / localhost
+   ที่ port ของ admin_listen                    → <span class="kw">นี่คือ admin path</span>
+<span class="cmt">4.</span> มาร์ค <span class="kw">is_admin_path = true</span> ให้:
+   service ตัวนั้น · route ทุกตัวของมัน
+   plugin บน service/route (basic-auth, acl, ip-restriction, rate-limiting, log)
+   consumer ที่อยู่ในกลุ่ม ACL ที่ route นั้นอนุญาต
+</code></pre>
+      <ul class="tight">
+        <li><strong>ลบ = บล็อกทั้งหมด</strong> ใน UI ต้องพิมพ์ชื่อ connection + ติ๊ก "ฉันรู้ว่านี่จะทำให้เข้าไม่ได้" · ใน <strong>MCP บล็อกสนิท ไม่มี override</strong> — agent ไม่มีทางลบเส้นทางเข้าได้</li>
+        <li><strong>แก้ = เตือน</strong> พร้อมแสดงว่าเปลี่ยนอะไรและกระทบการเข้าถึงยังไง</li>
+        <li>entity เหล่านี้ติด tag สงวน <code>kong-admin-path</code> และ <strong>tool ปฏิเสธที่จะใส่ลงใน decK YAML ที่มัน render</strong> ไม่ว่ากรณีใด</li>
+      </ul>
+    </div>
+
+    <div class="note crit">
+      <h3>อันตรายข้อที่สอง — <code>deck gateway sync</code> ลบเส้นทางเข้า</h3>
+      <p><strong>นี่คือความเสี่ยงที่รุนแรงที่สุดในโครงการนี้</strong> <code>deck gateway sync</code> ลบทุกอย่างใน Kong ที่ไม่มีในไฟล์ ถ้า admin path ไม่ได้อยู่ในไฟล์และไม่ได้ถูกกันด้วย select_tags → merge ครั้งแรก = ไม่มีใครเข้า Admin API ของ env นั้นได้อีก <strong>รวมทั้ง CI ที่จะ sync รอบต่อไปด้วย</strong></p>
+      <p>ต้องกันครบทั้งห้าชั้น ไม่ใช่เลือกชั้นเดียว: <strong>(1)</strong> อย่าให้ decK จัดการ admin path เลย ให้เกิดจาก Helm/bootstrap แทน <strong>(2)</strong> tool ไม่ render entity ที่ติด <code>kong-admin-path</code> <strong>(3)</strong> CI block PR ที่ <code>deck diff</code> แตะ entity ที่ติด tag นั้น <strong>(4)</strong> CI block PR ที่มี delete เกิน threshold <strong>(5)</strong> ซ้อมกับ uat ก่อนเสมอ</p>
+    </div>
+
+    <div class="sub">
+      <h4>read-only credential — ทำแบบ Kong-native</h4>
+      <p style="font-size:15.5px;color:var(--ink-2)">rev ก่อนเสนอ nginx <code>if</code> block ซึ่งใช้ไม่ได้แล้วเพราะ proxy คือ Kong ท่าที่ตรงกับ Kong คือ <strong>สอง route + ACL plugin</strong> — config ล้วน ไม่มี custom code อ่านง่ายตอน CAB รีวิว</p>
+<pre><code><span class="cmt"># admin access path — จัดการด้วย Helm/bootstrap ไม่ใช่ decK</span>
+services:
+  - name: admin-api
+    url: <span class="str">http://127.0.0.1:8001</span>
+    tags: [<span class="kw">kong-admin-path</span>]
+    routes:
+      - name: admin-api-rw
+        hosts: [kong-admin.internal]
+        tags: [<span class="kw">kong-admin-path</span>]
+        plugins:
+          - name: basic-auth
+            config: { hide_credentials: true }
+          - name: acl
+            config: { allow: [kong-admin-rw] }
+
+      - name: admin-api-ro
+        hosts: [kong-admin-<span class="kw">ro</span>.internal]   <span class="cmt"># คนละ host — สำคัญ</span>
+        <span class="kw">methods: [GET, HEAD]</span>              <span class="cmt"># ← กุญแจของ read-only</span>
+        tags: [<span class="kw">kong-admin-path</span>]
+        plugins:
+          - name: basic-auth
+            config: { hide_credentials: true }
+          - name: acl
+            config: { allow: [kong-admin-ro] }
+
+consumers:
+  - username: jakkapat
+    acls: [{ group: kong-admin-rw }]
+  - username: ro-kongctl
+    acls: [{ group: kong-admin-ro }]
+</code></pre>
+      <div class="note">
+        <h4>ทำไมต้องคนละ host</h4>
+        <p>router ของ Kong เลือก route จาก host/path/method <strong>ก่อน</strong>จะรู้ว่าใครเป็นคนยิง ถ้าสอง route ใช้ host เดียวกัน <code>DELETE</code> จะไปเข้า route rw แทน — การจำกัด method จึงไม่แยกตามผู้ใช้ ต้องแยก host (หรือแยก path prefix + <code>strip_path</code>) แล้วให้ ACL กันไม่ให้ consumer ข้ามฝั่ง</p>
+      </div>
+      <p style="font-size:15.5px;color:var(--ink-2)"><strong>พฤติกรรมที่ได้:</strong> <code>DELETE https://kong-admin-ro.internal/services/x</code> → ไม่มี route ไหน match → Kong ตอบ <code>404 {"message":"no Route matched with those values"}</code> · tool ต้องรู้จัก signature นี้แล้วรายงานว่า <em>"credential นี้เขียนไม่ได้"</em> ไม่ใช่ <em>"ไม่พบ entity"</em></p>
+      <p style="font-size:15.5px;color:var(--ink-2)"><strong>ทางเลือกที่เบากว่า</strong> ถ้าไม่อยากมีสอง route — <code>pre-function</code> plugin บน admin route (ทีมเขียนอยู่แล้ว) ที่เช็ค method กับ prefix ของ consumer แล้ว <code>kong.response.exit(405, …)</code> เหลือ route เดียว กันออกจาก deck ง่ายกว่า แต่เป็น custom logic ที่ต้องอธิบายตอน CAB — <strong>แนะนำสอง route + ACL เป็นหลัก</strong></p>
+    </div>
+
+    <div class="sub">
+      <h4>error mapping — แยก "proxy ปฏิเสธ" ออกจาก "Admin API ตอบ"</h4>
+      <p style="font-size:15.5px;color:var(--ink-2)">พอมี Kong คั่นกลาง response อาจมาจากสองชั้นที่ต่างกันโดยสิ้นเชิง ถ้าไม่แยกจะ debug กันตาย</p>
+      <div class="tbox">
+        <table>
+          <thead><tr><th style="width:78px">สถานะ</th><th>body</th><th>มาจาก</th><th>หมายถึง</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">401</td><td class="mono">{"message":"Unauthorized"}</td><td>basic-auth plugin</td><td>credential ผิดหรือไม่ได้ส่ง</td></tr>
+            <tr><td class="mono">403</td><td class="mono">{"message":"You cannot consume this service"}</td><td>ACL plugin</td><td>consumer ไม่อยู่ในกลุ่มที่อนุญาต</td></tr>
+            <tr><td class="mono">404</td><td class="mono">{"message":"no Route matched…"}</td><td>Kong router</td><td><strong>method ไม่ผ่าน — read-only ปฏิเสธ</strong> หรือ host/path ผิด</td></tr>
+            <tr><td class="mono">404</td><td class="mono">{"message":"Not found"}</td><td>Admin API</td><td>entity ไม่มีจริง</td></tr>
+            <tr><td class="mono">429</td><td class="mono">{"message":"API rate limit exceeded"}</td><td>rate-limiting plugin</td><td>ยิงถี่เกิน</td></tr>
+            <tr><td class="mono">502/503</td><td>Kong error</td><td>loopback service</td><td>Admin API listen ไม่ขึ้น</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:15.5px;color:var(--ink-2)"><code>Kong::Client</code> ต้อง map ทั้งหกกรณีเป็น exception คนละตัว และ UI ต้องแสดงข้อความคนละแบบ</p>
+    </div>
+
+    <div class="note info">
+      <h3>ข้อดีที่ได้ฟรี — Kong log กลายเป็น audit ชั้นที่สอง</h3>
+      <p>พอ Admin API วิ่งผ่าน Kong ทุก request ถูกบันทึกใน access log <strong>พร้อมชื่อ consumer</strong> แปะ <code>file-log</code> หรือ <code>http-log</code> บน admin route แล้วต่อเข้า log pipeline ที่ทีมมีอยู่ → ได้ audit trail ที่ <strong>อยู่นอกตัว tool</strong> และจับได้แม้แต่คนที่ <code>curl</code> ตรงเข้า admin host โดยไม่ผ่าน tool เลย</p>
+      <p>คำถาม <em>"ใครแก้ prod นอก PR"</em> เปลี่ยนจากการอนุมาน เป็นข้อเท็จจริงที่มีบันทึก — และเป็น drift source ที่สี่ ของฟรีอื่นบน admin route: <code>ip-restriction</code> จำกัด subnet, <code>rate-limiting</code> กัน agent ยิงถี่ตั้งแต่ชั้น gateway</p>
+    </div>
+
+    <div class="grid2">
+      <div class="card stack-sm">
+        <h4>Bootstrap chicken-and-egg</h4>
+        <p style="font-size:15px;color:var(--ink-2)">Kong เครื่องใหม่ยังไม่มี admin path → tool เชื่อมไม่ได้ ต้อง bootstrap ก่อนด้วย <code>kong config db_import</code> / Helm / declarative file <strong>งานนี้อยู่นอก tool</strong> — tool มีหน้าที่แค่ตรวจว่ามีแล้วหรือยัง แล้วบอกให้ชัดถ้ายังไม่มี</p>
+      </div>
+      <div class="card stack-sm">
+        <h4>กับดักของ decK กับ credential</h4>
+        <p style="font-size:15px;color:var(--ink-2)"><strong>basic-auth เก็บ password แบบ hash</strong> · <code>deck dump</code> จึงได้ค่า hash ไม่ใช่ password จริง ถ้าเอา YAML ไป sync ที่อื่น password จะกลายเป็นสตริง hash นั้น — พังเงียบ → <strong>อย่าให้ decK จัดการ credential ของ consumer</strong> และ tool ต้องปฏิเสธที่จะ render <code>basicauth_credentials</code> ลง YAML</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>Identity — credential มีทั้งต่อคนและร่วมทีม</h2></div>
+  <div class="stack">
+    <p class="col">สภาพจริงคือมีทั้งสองแบบ ดังนั้นแทนที่จะบังคับให้เลือกอย่างใดอย่างหนึ่ง ให้ tool <strong>รู้ว่ากำลังใช้แบบไหนอยู่ แล้วปรับพฤติกรรมตาม</strong></p>
+
+    <div class="card stack-sm">
+      <h4>จำแนกตอน login — tool อ่านข้อมูล consumer ของตัวเองได้</h4>
+      <p style="font-size:15px;color:var(--ink-2)">เนื่องจาก Admin API คือ Kong เอง:</p>
+<pre><code>GET /consumers/&lt;auth_username&gt;  →  อ่าน tags
+   tag <span class="str">"shared-credential"</span>  → credential ร่วม
+   ไม่มี tag                  → credential ต่อคน
+</code></pre>
+      <p style="font-size:15px;color:var(--ink-2)">ให้ทีมติด tag <code>shared-credential</code> บน consumer ที่ใช้ร่วมกัน (<code>kong-admin</code>, <code>deploy</code>) เป็นงานครั้งเดียว · ถ้าอ่านไม่ได้ fallback ไปที่ <code>shared_usernames</code> ใน <code>connections.yml</code></p>
+    </div>
+
+    <div class="tbox">
+      <table>
+        <thead><tr><th></th><th><span class="chip lo">credential ต่อคน</span></th><th><span class="chip med">credential ร่วม</span></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">actor_username</td><td>username นั้น</td><td>username นั้น</td></tr>
+          <tr><td class="mono">actor_operator</td><td>= username</td><td><strong>ต้องระบุ ถามตอน login</strong> (prefill จาก <span class="mono">git config user.email</span>)</td></tr>
+          <tr><td>เขียนได้เลยไหม</td><td>ได้</td><td><strong>ไม่ได้จนกว่าจะมี operator</strong></td></tr>
+          <tr><td>แถบใน UI</td><td>ปกติ</td><td><em>"ใช้ credential ร่วม — บันทึกในนาม &lt;operator&gt;"</em></td></tr>
+          <tr><td><span class="mono">rank ≥ 2</span> + write</td><td>re-auth ตามปกติ</td><td>re-auth <strong>และ</strong>ยืนยัน operator ใหม่ ไม่ใช้ค่าใน session เงียบ ๆ</td></tr>
+          <tr><td>PAT สำหรับ MCP</td><td>ผูก operator = เจ้าของ</td><td>ผูก operator ของคนที่ออก token · แสดงชัดในหน้า token</td></tr>
+          <tr><td>PR body / commit</td><td>ปกติ</td><td>เพิ่ม trailer <span class="mono">Changed-by: &lt;operator&gt;</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <h3>สองข้อที่ต้องบังคับในโค้ด</h3>
+      <p><strong>ถ้ามีทั้งสองแบบสำหรับ connection เดียวกัน tool ต้อง default ไปที่ credential ต่อคน</strong> และขึ้นเตือนเมื่อมีคนเลือกใช้ credential ร่วมเพื่อเขียนบน <code>rank ≥ 2</code></p>
+      <p><strong>แนะนำเพิ่ม:</strong> ให้ connection ของ uat/prod ผูกกับ credential read-only ที่เป็นของ <em>tool</em> (<code>ro-kongctl</code>) แล้วให้ operator เป็นตัวระบุคนแทน — เพราะบน PR mode ตัว tool ไม่เขียนอยู่แล้ว ตัวตนที่เป็นทางการคือ commit author ใน git</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>Login และ connection</h2></div>
+  <div class="stack">
+    <p class="col"><strong>ไม่มี user database ของ tool เอง — credential ของ Kong Admin API <em>คือ</em> การ login</strong> connection หนึ่งตัว = Kong หนึ่งเครื่อง สลับได้จาก header</p>
+<pre><code>kong_connections
+  id, name, env, <span class="kw">rank</span>,         <span class="cmt"># dev=0 sit=1 uat=2 prod=3</span>
+  color_tag, admin_url,        <span class="cmt"># บังคับ https:// ยกเว้น localhost</span>
+  auth_type, auth_username,
+  auth_secret_encrypted,       <span class="cmt"># ActiveRecord::Encryption — ไม่เคยคืนออก API</span>
+  <span class="kw">credential_kind</span>,             <span class="cmt"># personal | shared — จาก tag ของ consumer</span>
+  <span class="kw">credential_mode</span>,             <span class="cmt"># session | stored</span>
+  <span class="kw">access_level</span>,                <span class="cmt"># rw | ro — จากผล probe ตอน connect</span>
+  verify_ssl, ca_bundle_path,
+  apply_mode, writable,        <span class="cmt"># direct | pr</span>
+  git_repo, git_branch, git_path, select_tags <span class="kw">text[]</span>,
+  kong_version, mode, plugins_available <span class="kw">jsonb</span>,
+  <span class="kw">admin_path_fingerprint</span>,      <span class="cmt"># id ของ service/route/consumer ที่เป็นเส้นทางเข้า</span>
+  last_connected_at, last_status,
+  sync_interval_seconds, last_synced_at, last_sync_status
+</code></pre>
+
+    <div class="card">
+      <h4 style="margin-bottom:10px">Flow ตอน login</h4>
+      <div class="flow">
+        <div><span class="n">1</span><span>หน้า <strong>Connections</strong> แสดง connection ทั้งหมด พร้อมสถานะและป้ายสี</span></div>
+        <div><span class="n">2</span><span>เลือก connection → ฟอร์ม username / password</span></div>
+        <div><span class="n">3</span><span><code>GET /</code> ด้วย Basic auth → 200 = ผ่าน เก็บ <code>kong_version</code> + plugin ที่เครื่องนั้นมี</span></div>
+        <div><span class="n">4</span><span><strong>Probe สิทธิ์</strong> — ยิง write method ที่ไม่มีผลข้างเคียง (เช่น <code>PATCH</code> ไปที่ id ที่ไม่มีจริง) → ได้ <code>no Route matched</code> = <code>ro</code> · ได้ 404 ของ Admin API = <code>rw</code> · UI จะได้ไม่ต้องโชว์ปุ่มที่กดไม่ได้</span></div>
+        <div><span class="n">5</span><span><strong>จำแนก credential</strong> — <code>GET /consumers/&lt;username&gt;</code> → tag → <code>personal</code> / <code>shared</code> · ถ้า shared ถาม operator ต่อ</span></div>
+        <div><span class="n">6</span><span><strong>ตรวจ admin path</strong> แล้วเก็บ <code>admin_path_fingerprint</code></span></div>
+        <div><span class="n">7</span><span>แยก error ตามตารางข้อ 01 ไม่รวมเป็น "เชื่อมต่อไม่ได้" ก้อนเดียว</span></div>
+      </div>
+    </div>
+
+    <div class="tbox">
+      <table>
+        <thead><tr><th></th><th><span class="chip">session</span></th><th><span class="chip lo">stored</span></th></tr></thead>
+        <tbody>
+          <tr><td>เก็บที่ไหน</td><td>encrypted session cookie เท่านั้น <strong>ไม่แตะ DB</strong></td><td>DB เข้ารหัสด้วย ActiveRecord::Encryption</td></tr>
+          <tr><td>Background sync</td><td><strong>ทำไม่ได้</strong> — อ่านสด + cache ในหน่วยความจำอายุสั้น</td><td>ทำได้</td></tr>
+          <tr><td>MCP ใช้ได้ไหม</td><td><strong>ไม่ได้</strong> — ไม่ปรากฏใน MCP เลย</td><td>ได้</td></tr>
+          <tr><td>filter / sort เต็มรูปแบบ</td><td>ได้เฉพาะชุดที่ดึงมา (<span class="mono">meta.partial: true</span>)</td><td>ได้เต็ม</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note info">
+      <p><strong>ที่แนะนำ:</strong> uat/prod ใช้ <code>stored</code> + credential <code>ro-kongctl</code> ที่เขียนไม่ได้ที่ชั้น Kong → ได้ sync, drift, MCP ครบ โดยไม่มีความเสี่ยงเรื่องเขียนเลย</p>
+    </div>
+
+    <h3 style="margin-top:6px">แยก registry ออกจาก credential</h3>
+<pre><code><span class="cmt"># config/connections.yml — อยู่ใน git ของทีม ไม่มี secret</span>
+- name: dev
+  env: dev
+  rank: 0
+  admin_url: <span class="str">https://kong-dev-admin.internal</span>
+  apply_mode: direct
+  color_tag: green
+- name: prod
+  env: prod
+  rank: 3
+  admin_url: <span class="str">https://kong-prod-admin-ro.internal</span>   <span class="cmt"># host ของ route read-only</span>
+  apply_mode: pr
+  color_tag: red
+  select_tags: [managed-by-kongctl]
+  shared_usernames: [kong-admin]              <span class="cmt"># fallback ถ้าอ่าน tag ไม่ได้</span>
+</code></pre>
+    <p class="col" style="font-size:15.5px;color:var(--ink-2)">credential แต่ละคนอยู่ใน DB ในเครื่องตัวเอง ไม่เคยเข้า git — <strong>คนใหม่เข้าทีม pull repo แล้วเห็น connection ครบทุกตัว ใส่ credential ของตัวเอง แล้วพร้อมใช้</strong></p>
+
+    <div class="card stack-sm">
+      <h4>กฎความปลอดภัยของ connection</h4>
+      <ul class="tight">
+        <li>ปฏิเสธ <code>http://</code> ยกเว้น localhost — ข้ามได้ด้วย flag ในไฟล์ config เท่านั้น <strong>ไม่ใช่ checkbox ใน UI</strong></li>
+        <li><code>verify_ssl</code> default true · internal CA ให้ใส่ <code>ca_bundle_path</code> <strong>ไม่ใช่ปิด verify</strong></li>
+        <li>ห้าม log header <code>Authorization</code> เด็ดขาด — spec assert ว่า log ไม่มีสตริง <code>Basic&nbsp;</code></li>
+        <li>credential ไม่เคยถูกคืนจาก API ใด ๆ — คืนแค่ <code>auth_username</code>, <code>has_credential</code>, <code>credential_kind</code>, <code>access_level</code></li>
+        <li>rate limit หน้า login (และแปะ <code>rate-limiting</code> บน admin route ด้วยยิ่งดี) · session timeout · re-auth ก่อน apply บน <code>rank ≥ 2</code></li>
+        <li>ปุ่ม "ลืมทุก credential" ล้าง stored credential ทั้งหมดทันที</li>
+      </ul>
+    </div>
+
+    <div class="stack-sm">
+      <p class="label">ป้ายสีคือ guardrail ที่ถูกที่สุดและได้ผลที่สุด</p>
+      <div class="envbar">
+        <span class="env"><i style="background:#2C6E4A"></i> dev · direct · rw</span>
+        <span class="env"><i style="background:#186B6E"></i> sit · direct · rw</span>
+        <span class="env"><i style="background:#A96A16"></i> uat · pr · ro</span>
+        <span class="env" style="border-color:var(--crit);color:var(--crit)"><i style="background:#A63A2C"></i> prod · pr · ro</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>สถาปัตยกรรม</h2></div>
+  <div class="stack">
+    <figure>
+      <div class="figframe">
+        <svg viewBox="0 0 900 452" role="img" aria-label="แผนภาพ: ผู้ใช้ล็อกอินด้วย connection และ basic auth เข้า Rails ซึ่งถือ credential ไว้เอง แล้วแตกเป็นสองเส้นทาง — direct ผ่าน route rw ของ Kong ไปยัง Admin API ของ dev/sit และ PR ไป git repo สำหรับ uat/prod โดยอ่านผ่าน route ro">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--line-strong)"/></marker>
+            <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--accent)"/></marker>
+            <marker id="art" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="var(--teal)"/></marker>
+          </defs>
+
+          <rect x="8" y="34" width="116" height="48" rx="5" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+          <text x="66" y="55" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">Claude Code</text>
+          <text x="66" y="70" text-anchor="middle" font-size="9" fill="var(--muted)">agent</text>
+
+          <rect x="8" y="136" width="116" height="54" rx="5" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+          <text x="66" y="156" text-anchor="middle" font-size="11" font-weight="700" fill="var(--ink)">Browser</text>
+          <text x="66" y="171" text-anchor="middle" font-size="8.5" fill="var(--muted)">connection +</text>
+          <text x="66" y="182" text-anchor="middle" font-size="8.5" fill="var(--muted)">basic auth</text>
+
+          <rect x="148" y="30" width="106" height="54" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="201" y="50" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">MCP server</text>
+          <text x="201" y="65" text-anchor="middle" font-size="8.5" fill="var(--muted)">PAT · ไม่เห็น</text>
+          <text x="201" y="76" text-anchor="middle" font-size="8.5" fill="var(--muted)">credential</text>
+
+          <rect x="284" y="20" width="192" height="252" rx="6" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="1.5"/>
+          <text x="297" y="42" font-size="11.5" font-weight="700" fill="var(--ink)">Rails 8 · kongctl</text>
+          <line x1="297" y1="51" x2="463" y2="51" stroke="var(--line)"/>
+          <rect x="297" y="60" width="166" height="25" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="306" y="77" font-size="9.5" fill="var(--ink-2)">ConnectionAuth · ถือ cred</text>
+          <rect x="297" y="90" width="166" height="25" rx="4" fill="var(--crit-soft)" stroke="var(--crit)"/>
+          <text x="306" y="107" font-size="9.5" fill="var(--ink-2)">AdminPathGuard</text>
+          <rect x="297" y="120" width="166" height="25" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+          <text x="306" y="137" font-size="9.5" fill="var(--ink-2)">EntityQuery · keyset</text>
+          <rect x="297" y="150" width="166" height="25" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+          <text x="306" y="167" font-size="9.5" fill="var(--ink-2)">Redactor · secrets out</text>
+          <rect x="297" y="180" width="166" height="25" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="306" y="197" font-size="9.5" fill="var(--ink-2)">ChangePlan · direct | pr</text>
+          <rect x="297" y="210" width="166" height="25" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+          <text x="306" y="227" font-size="9.5" fill="var(--ink-2)">DeckRenderer + GitClient</text>
+          <rect x="297" y="240" width="166" height="25" rx="4" fill="var(--surface-2)" stroke="var(--line)"/>
+          <text x="306" y="257" font-size="9.5" fill="var(--ink-2)">AuditLog · append-only</text>
+
+          <rect x="284" y="312" width="192" height="48" rx="5" fill="var(--teal-soft)" stroke="var(--teal)"/>
+          <text x="380" y="333" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">Postgres read-model</text>
+          <text x="380" y="348" text-anchor="middle" font-size="8.5" fill="var(--muted)">keyset · audit · plans · cred</text>
+
+          <rect x="540" y="22" width="164" height="60" rx="5" fill="var(--surface)" stroke="var(--accent)"/>
+          <text x="622" y="41" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">Kong route rw</text>
+          <text x="622" y="55" text-anchor="middle" font-size="8.5" fill="var(--muted)">basic-auth + acl(rw)</text>
+          <text x="622" y="68" text-anchor="middle" font-size="8.5" fill="var(--muted)">ทุก method</text>
+
+          <rect x="540" y="122" width="164" height="60" rx="5" fill="var(--crit-soft)" stroke="var(--crit)"/>
+          <text x="622" y="141" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">Kong route ro</text>
+          <text x="622" y="155" text-anchor="middle" font-size="8.5" fill="var(--crit)">methods: GET, HEAD</text>
+          <text x="622" y="168" text-anchor="middle" font-size="8.5" fill="var(--muted)">อื่น → no Route matched</text>
+
+          <rect x="540" y="222" width="164" height="52" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="622" y="242" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">Git config repo</text>
+          <text x="622" y="257" text-anchor="middle" font-size="8.5" fill="var(--muted)">decK YAML · select_tags</text>
+
+          <rect x="540" y="304" width="164" height="46" rx="5" fill="var(--surface)" stroke="var(--line-strong)"/>
+          <text x="622" y="323" text-anchor="middle" font-size="10" font-weight="700" fill="var(--ink)">PR → CAB → merge</text>
+          <text x="622" y="338" text-anchor="middle" font-size="8.5" fill="var(--muted)">CI: deck gateway sync</text>
+
+          <rect x="746" y="22" width="146" height="60" rx="5" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+          <text x="819" y="46" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">Admin API :8001</text>
+          <text x="819" y="62" text-anchor="middle" font-size="8.5" fill="var(--muted)">Kong CE dev / sit</text>
+
+          <rect x="746" y="122" width="146" height="228" rx="5" fill="var(--surface-2)" stroke="var(--line-strong)"/>
+          <text x="819" y="226" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">Kong CE</text>
+          <text x="819" y="242" text-anchor="middle" font-size="8.5" fill="var(--muted)">uat / prod · AKS</text>
+          <text x="819" y="258" text-anchor="middle" font-size="8.5" fill="var(--muted)">Admin API :8001</text>
+
+          <line x1="124" y1="56" x2="142" y2="56" stroke="var(--line-strong)" stroke-width="1.4" marker-end="url(#ar)"/>
+          <line x1="254" y1="56" x2="278" y2="56" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#ara)"/>
+          <path d="M124,163 L201,163 L201,132 L278,132" fill="none" stroke="var(--line-strong)" stroke-width="1.4" marker-end="url(#ar)"/>
+
+          <path d="M476,72 L508,72 L508,52 L534,52" fill="none" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#ara)"/>
+          <text x="508" y="88" text-anchor="middle" font-size="8.5" fill="var(--muted)">direct</text>
+          <path d="M476,132 L508,132 L508,152 L534,152" fill="none" stroke="var(--teal)" stroke-width="1.4" marker-end="url(#art)"/>
+          <text x="508" y="123" text-anchor="middle" font-size="8.5" fill="var(--muted)">อ่าน</text>
+          <path d="M476,192 L508,192 L508,248 L534,248" fill="none" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#ara)"/>
+          <text x="508" y="208" text-anchor="middle" font-size="8.5" fill="var(--muted)">PR</text>
+
+          <line x1="704" y1="52" x2="740" y2="52" stroke="var(--line-strong)" stroke-width="1.3" marker-end="url(#ar)"/>
+          <line x1="704" y1="152" x2="740" y2="152" stroke="var(--line-strong)" stroke-width="1.3" marker-end="url(#ar)"/>
+          <line x1="622" y1="274" x2="622" y2="298" stroke="var(--line-strong)" stroke-width="1.3" marker-end="url(#ar)"/>
+          <path d="M704,327 L726,327 L726,290 L740,290" fill="none" stroke="var(--line-strong)" stroke-width="1.3" marker-end="url(#ar)"/>
+
+          <line x1="380" y1="272" x2="380" y2="306" stroke="var(--teal)" stroke-width="1.4" marker-end="url(#art)"/>
+          <path d="M540,152 L500,152 L500,336 L482,336" fill="none" stroke="var(--teal)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#art)"/>
+          <text x="452" y="354" text-anchor="middle" font-size="8.5" fill="var(--muted)">reconcile</text>
+        </svg>
+      </div>
+      <figcaption>Rails เป็นที่เดียวที่ถือ basic auth credential — MCP เรียก Rails ด้วย PAT และไม่เคยเห็น credential ของ Kong เลย · กล่องแดงคือ route ที่รับแค่ GET/HEAD ทำให้ credential ของ uat/prod เขียนอะไรไม่ได้ตั้งแต่ชั้น Kong</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>Apply mode และ decK PR</h2></div>
+  <div class="stack">
+    <div class="tbox">
+      <table>
+        <thead><tr><th></th><th><span class="chip">direct</span></th><th><span class="chip wr">pr</span></th></tr></thead>
+        <tbody>
+          <tr><td>ใช้กับ</td><td>dev, sit</td><td>uat, prod</td></tr>
+          <tr><td>ปลายทาง</td><td>Admin API ผ่าน route rw</td><td>branch + PR ใน config repo</td></tr>
+          <tr><td>Credential ที่ใช้</td><td>rw</td><td><strong>ro — เขียนไม่ได้ที่ชั้น Kong</strong></td></tr>
+          <tr><td>ใครอนุมัติ</td><td>คนกดใน tool (rank≥2 ต้อง re-auth)</td><td>reviewer + CAB บน PR</td></tr>
+          <tr><td>Audit trail</td><td><span class="mono">audit_events</span> + Kong access log</td><td>PR + commit + Kong access log</td></tr>
+        </tbody>
+      </table>
+    </div>
+<pre><code><span class="cmt">1.</span> เสนอการเปลี่ยนแปลง                     → สร้าง change_plan
+<span class="cmt">2.</span> git pull config repo (shallow, cached) → <span class="kw">parse</span> YAML ของ env นั้น
+<span class="cmt">3.</span> แก้บนโครงสร้างที่ parse มา              → serialize ด้วย canonical serializer
+<span class="cmt">4.</span> deck gateway diff กับ Kong ของ env นั้น <span class="cmt">// ใช้ credential ro — ปลอดภัย</span>
+<span class="cmt">5.</span> เปิด branch + PR    → YAML diff + ผล deck diff + ลิงก์ plan
+                        + trailer <span class="kw">Changed-by</span> ถ้าใช้ credential ร่วม
+<span class="cmt">6.</span> CI: deck gateway validate + diff --json-output
+     + <span class="kw">gate: block ถ้าแตะ entity ที่ติด kong-admin-path</span>
+<span class="cmt">7.</span> merge → CI รัน deck gateway sync
+<span class="cmt">8.</span> ติดตาม pr_state → reconcile รอบถัดไปยืนยันของจริง drift หาย
+</code></pre>
+    <div class="note crit">
+      <h3>กฎเหล็กสี่ข้อ</h3>
+      <p><strong>ก.</strong> สร้าง YAML จาก git เสมอ ห้ามจาก <code>deck dump</code> — ไม่งั้นได้ diff ปลอมจากการเรียงลำดับ &nbsp;·&nbsp; <strong>ข.</strong> <code>_info.select_tags</code> เป็นข้อบังคับ &nbsp;·&nbsp; <strong>ค.</strong> round-trip test byte-for-byte ตั้งแต่ M2 &nbsp;·&nbsp; <strong>ง.</strong> ห้าม render entity ที่ติด <code>kong-admin-path</code> และ credential ของ consumer ลง YAML</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>Data model</h2></div>
+  <div class="stack">
+<pre><code>kong_entities
+  id, connection_id, entity_type, kong_id <span class="kw">uuid</span>,
+  name         <span class="kw">citext</span>,          <span class="cmt"># display name</span>
+  logical_key  <span class="kw">citext</span>,          <span class="cmt"># ใช้เทียบข้าม connection</span>
+  tags <span class="kw">text[]</span>, kong_created_at, kong_updated_at,
+  parent_type, parent_kong_id, enabled,
+  <span class="kw">is_admin_path boolean</span>,        <span class="cmt"># ← ห้ามลบ ห้าม render ลง YAML</span>
+  data         <span class="kw">jsonb</span>,           <span class="cmt"># **ผ่าน redactor ก่อนเสมอ**</span>
+  digest       <span class="kw">text</span>,            <span class="cmt"># sha256 ของ data ที่ redact แล้ว</span>
+  not_after    <span class="kw">timestamptz</span>,     <span class="cmt"># certificate เท่านั้น</span>
+  first_seen_at, synced_at, deleted_at
+
+  <span class="cmt"># index ต้องตรงกับ sort key เป๊ะ ไม่งั้น keyset ช้าและผิด</span>
+  (connection_id, entity_type, name, id)
+  (connection_id, entity_type, kong_created_at <span class="kw">desc</span>, id <span class="kw">desc</span>)
+  (connection_id, entity_type, kong_updated_at <span class="kw">desc</span>, id <span class="kw">desc</span>)
+  (connection_id, entity_type, not_after) <span class="kw">where</span> not_after <span class="kw">is not null</span>
+  <span class="kw">gin</span>(tags) · <span class="kw">gin</span>(data jsonb_path_ops) · <span class="kw">gin</span>(name gin_trgm_ops)
+
+change_plans
+  id, connection_id, <span class="kw">actor_username, actor_operator</span>, actor_kind,
+  before/after/diff <span class="kw">jsonb</span>, apply_mode, base_updated_at,
+  status, pr_url, pr_number, pr_state, commit_sha, deck_diff
+
+audit_events  <span class="cmt"># append-only — actor = username + operator</span>
+</code></pre>
+    <div class="tbox">
+      <table>
+        <thead><tr><th>entity_type</th><th>display name</th><th>logical_key</th><th>parent</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">service</td><td class="mono">name</td><td class="mono">name</td><td>—</td></tr>
+          <tr><td class="mono">route</td><td class="mono">name หรือ id[0..7]</td><td class="mono">service.name + "/" + name</td><td>service</td></tr>
+          <tr><td class="mono">consumer</td><td class="mono">username หรือ custom_id</td><td class="mono">username</td><td>—</td></tr>
+          <tr><td class="mono">plugin</td><td class="mono">name</td><td class="mono">name + "@" + scope</td><td>หลายแบบ</td></tr>
+          <tr><td class="mono">upstream</td><td class="mono">name</td><td class="mono">name</td><td>—</td></tr>
+          <tr><td class="mono">target</td><td class="mono">target (host:port)</td><td class="mono">upstream.name + "/" + target</td><td>upstream</td></tr>
+          <tr><td class="mono">certificate</td><td class="mono">SNI ตัวแรก / fingerprint[0..11]</td><td class="mono">เซ็ตของ SNI ที่เรียงแล้ว</td><td>—</td></tr>
+          <tr><td class="mono">sni</td><td class="mono">name</td><td class="mono">name</td><td>certificate</td></tr>
+          <tr><td class="mono">ca_certificate</td><td class="mono">cert_digest[0..11]</td><td class="mono">cert_digest</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="col" style="font-size:15.5px;color:var(--ink-2)"><strong>ต้อง spike ก่อน M5:</strong> semantic ของ <code>target</code> ต่างจาก entity อื่น (เคยเป็น append-only, มี <code>/upstreams/:id/targets/all</code>) — ยืนยันกับเวอร์ชันที่ใช้จริงก่อนออกแบบ UI</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">07</span><h2>Certificate และความลับ</h2></div>
+  <div class="stack">
+    <div class="note crit">
+      <h3>Kong CE รองรับ vault backend แค่ <code>env</code></h3>
+      <p>Azure Key Vault backend เป็นของ Enterprise แผนที่จะอ้าง AKV ตรงจาก Kong ใช้กับ CE ไม่ได้</p>
+    </div>
+    <div class="grid2">
+      <div class="card stack-sm">
+        <p class="label">ทาง ก — แนะนำ</p>
+        <h4>Kong env vault + CSI driver</h4>
+        <p style="font-size:15px;color:var(--ink-2)"><code>key: "{vault://env/cert-payments-key}"</code> โดย CSI Secret Store Driver ป้อน env var เข้า pod ของ Kong จาก AKV</p>
+        <p style="font-size:14.5px;color:var(--ok)">→ private key ไม่อยู่ทั้งใน git และ Kong DB</p>
+      </div>
+      <div class="card stack-sm">
+        <p class="label">ทาง ข — fallback</p>
+        <h4>decK env substitution</h4>
+        <p style="font-size:15px;color:var(--ink-2)"><code>key: ${{ env "DECK_CERT_PAYMENTS_KEY" }}</code> · CI ดึงจาก AKV แล้ว export ก่อน sync</p>
+        <p style="font-size:14.5px;color:var(--muted)">→ git สะอาด แต่ plaintext ไปอยู่ใน Kong DB</p>
+      </div>
+    </div>
+    <div class="card stack-sm">
+      <h4>กฎของ tool เหมือนกันทั้งสองทาง</h4>
+      <ul class="tight">
+        <li>redactor ทำงาน<strong>ก่อน</strong> <code>data</code> เขียนลง read-model — <code>certificates.key</code>, <code>basicauth_credentials.password</code> (แม้เป็น hash), <code>keyauth_credentials.key</code>, field ที่ schema ทำเครื่องหมาย <code>encrypted</code>/<code>referenceable</code> → <code>"[REDACTED]"</code></li>
+        <li>MCP ไม่คืนค่าเหล่านี้ทุกกรณี <strong>ไม่มี flag ให้ปลด</strong></li>
+        <li>แคชเฉพาะ metadata ของ cert: id, tags, SNIs, subject, issuer, <code>not_before</code>/<code>not_after</code>, fingerprint</li>
+        <li><code>digest</code> คำนวณจาก data ที่ redact แล้ว — ไม่งั้น drift detection รั่วข้อมูลผ่านการเปรียบเทียบ</li>
+      </ul>
+    </div>
+    <div class="note info">
+      <p><strong>ผลพลอยได้:</strong> parse <code>not_after</code> เก็บไว้ → dashboard cert หมดอายุข้ามทุก connection ฟรี และได้ MCP tool <code>kong_certs_expiring</code> ต่อยอดงาน cert rotation ได้ตรง ๆ</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">08</span><h2>API contract — filter, ordering, keyset</h2></div>
+  <div class="stack">
+<pre><code>GET /api/v1/entities
+
+  connection=prod  type=service   <span class="cmt"># บังคับทั้งคู่</span>
+  q=payment                       <span class="cmt"># trigram บน name + host + path</span>
+  tags=core,payment               <span class="cmt"># AND (ไม่จำกัด 5 tag)</span>
+  tags_any=beta,canary            <span class="cmt"># OR</span>
+  tags_none=deprecated            <span class="cmt"># NOT — Kong ทำไม่ได้</span>
+  created_after=  created_before=  updated_after=
+  sort=-updated_at                <span class="cmt"># allowlist: name|created_at|updated_at</span>
+  limit=50   cursor=&lt;opaque&gt;
+  fields=id,name,tags,updated_at  <span class="cmt"># สำคัญมากสำหรับ MCP — ลด token</span>
+
+{ <span class="str">"data"</span>: [ … ],
+  <span class="str">"meta"</span>: { <span class="str">"has_more"</span>: <span class="kw">true</span>, <span class="str">"next_cursor"</span>: <span class="str">"eyJrIjpb…"</span>,
+             <span class="str">"connection"</span>: <span class="str">"prod"</span>, <span class="str">"credential_mode"</span>: <span class="str">"stored"</span>,
+             <span class="str">"access_level"</span>: <span class="str">"ro"</span>, <span class="str">"credential_kind"</span>: <span class="str">"shared"</span>,
+             <span class="str">"stale_seconds"</span>: 47, <span class="str">"desired_state"</span>: <span class="str">"git@…#a3f19c2"</span> } }
+</code></pre>
+    <div class="card stack-sm">
+      <h4>keyset ที่ต้องทำถูกตั้งแต่ต้น</h4>
+      <ul class="tight">
+        <li>ทุก sort ต้องมี tiebreaker: <code>ORDER BY kong_updated_at DESC, id DESC</code> — ไม่มี = แถวซ้ำหรือหายแบบเงียบ</li>
+        <li>index ต้องตรงกับ sort key เป๊ะ → <strong>จำกัด sort เป็น allowlist</strong> ห้ามต่อ input ผู้ใช้เข้า ORDER BY</li>
+        <li>cursor = base64url <code>{"k":[…,&lt;id&gt;],"s":"-updated_at","f":"&lt;hash ของ filter&gt;"}</code> + HMAC · <code>f</code> ทำให้เปลี่ยนฟิลเตอร์กลางทางแล้ว cursor เสียทันที</li>
+        <li>ไม่มี <code>total</code> ฟรี — UI ใช้ปุ่ม "โหลดเพิ่ม" ไม่ใช่เลขหน้า</li>
+        <li><code>session</code> mode → <code>meta.partial: true</code> + แบนเนอร์ · <strong><code>access_level: ro</code> → UI ซ่อนปุ่มเขียนตั้งแต่แรก ไม่ใช่ให้กดแล้วค่อย error</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">09</span><h2>Drift สี่ทาง</h2></div>
+  <div class="stack">
+    <div class="tbox">
+      <table>
+        <thead><tr><th>เทียบอะไร</th><th>แปลว่า</th><th>ทำยังไง</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">cache ≠ Kong</td><td>cache เก่า</td><td>reconcile รอบถัดไปแก้เอง</td></tr>
+          <tr><td class="mono">Kong ≠ git</td><td><strong>มีคนแก้ Kong ตรง ข้าม PR</strong></td><td>แจ้งเตือน</td></tr>
+          <tr><td class="mono">git ≠ Kong หลัง merge</td><td>CI sync พังหรือยังไม่รัน</td><td>เช็ค pipeline</td></tr>
+          <tr><td class="mono">Kong access log มี write<br>ที่ไม่มี change_plan</td><td><strong>มีคนยิง Admin API ตรง โดยไม่ผ่าน tool เลย</strong></td><td>ระบุตัวได้จาก consumer ใน log</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="col" style="font-size:15.5px;color:var(--ink-2)">คู่ที่สี่มาจากข้อ 01 — เป็นชั้นเดียวที่จับคนที่ไม่ใช้ tool เลยได้ · <strong>Sync สามชั้น:</strong> write-through หลัง mutate (direct) · full reconcile ต่อ connection ทุก 2–5 นาทีแบบ jitter และ <strong>fail closed</strong> (sync ไม่ครบ = ไม่ soft-delete อะไรเลย) · digest diff → drift event</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">10</span><h2>MCP server</h2></div>
+  <div class="stack">
+    <div class="tbox">
+      <table>
+        <thead><tr><th>Tool</th><th></th><th>ทำอะไร</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">kong_connections</td><td><span class="chip rd">read</span></td><td>list connection ที่ PAT เข้าถึงได้ + version, apply_mode, access_level, drift</td></tr>
+          <tr><td class="mono">kong_search</td><td><span class="chip rd">read</span></td><td>ตัวหลัก — connection + type + filter/sort/keyset คืนตารางย่อ</td></tr>
+          <tr><td class="mono">kong_get</td><td><span class="chip rd">read</span></td><td>entity เต็มพร้อม relation</td></tr>
+          <tr><td class="mono">kong_schema</td><td><span class="chip rd">read</span></td><td>schema ของ entity/plugin</td></tr>
+          <tr><td class="mono">kong_diff</td><td><span class="chip rd">read</span></td><td>เทียบสอง connection ด้วย <span class="mono">logical_key</span> หรือเทียบ Kong กับ git</td></tr>
+          <tr><td class="mono">kong_drift</td><td><span class="chip rd">read</span></td><td>รายการที่ Kong ต่างจาก git (รวมคู่ที่สี่จาก access log)</td></tr>
+          <tr><td class="mono">kong_certs_expiring</td><td><span class="chip rd">read</span></td><td>cert ใกล้หมดอายุข้ามทุก connection</td></tr>
+          <tr><td class="mono">kong_audit</td><td><span class="chip rd">read</span></td><td>ประวัติการเปลี่ยนแปลง</td></tr>
+          <tr><td class="mono">kong_plan</td><td><span class="chip wr">write</span></td><td>เสนอ create/update/delete → diff + plan_id · ไม่มี side effect</td></tr>
+          <tr><td class="mono">kong_apply</td><td><span class="chip wr">write</span></td><td>direct → ยิง Admin API · pr → เปิด PR แล้วคืน URL</td></tr>
+          <tr><td class="mono">kong_export</td><td><span class="chip rd">read</span></td><td>decK YAML ตาม filter — <strong>ตัด admin path + credential ออกเสมอ</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid2">
+      <div class="card stack-sm">
+        <h4>กฎกันพัง — สี่ชั้นซ้อนกัน</h4>
+        <ul class="tight">
+          <li><code>connection</code> เป็นพารามิเตอร์บังคับทุก tool ไม่มี default</li>
+          <li><code>kong_apply</code> บน <code>rank ≥ 2</code> ทำได้เฉพาะ PR mode</li>
+          <li>entity ที่ <code>is_admin_path</code> — <strong>MCP ลบไม่ได้เลย ไม่มี override</strong></li>
+          <li>credential ของ prod เขียนไม่ได้อยู่แล้วที่ชั้น Kong (route ro)</li>
+        </ul>
+      </div>
+      <div class="card stack-sm">
+        <h4>PAT</h4>
+        <p style="font-size:15px;color:var(--ink-2)">ผูกกับ operator + เซ็ตของ connection ที่เป็น <code>stored</code> · connection ที่เป็น <code>session</code> ไม่ปรากฏใน MCP เลย · ถ้าออกภายใต้ credential ร่วม ต้องบันทึก operator ของคนที่ออก · PAT ไม่เคยเห็น basic auth credential</p>
+        <p style="font-size:15px;color:var(--ink-2)"><strong>ประหยัด token:</strong> default ของ <code>kong_search</code> คืนแค่ 4 field — service 400 ตัวกิน ~2k token แทน 80k</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">11</span><h2>ความปลอดภัยรวม</h2></div>
+  <div class="stack">
+    <div class="tbox">
+      <table>
+        <thead><tr><th>ชั้น</th><th>ตอนนี้ — local team tool</th><th>ตอน deploy</th></tr></thead>
+        <tbody>
+          <tr><td>ตัวตนผู้ใช้</td><td>basic auth ของ Kong เอง + <span class="mono">operator</span> เมื่อใช้ credential ร่วม</td><td>เพิ่ม OIDC ครอบ แล้ว map เป็น operator</td></tr>
+          <tr><td>กั้น Admin API</td><td>Kong loopback + basic-auth + ACL + ip-restriction</td><td>เหมือนเดิม + NetworkPolicy</td></tr>
+          <tr><td>สิทธิ์เขียน dev/sit</td><td>ACL กลุ่ม rw</td><td>+ RBAC ในtool</td></tr>
+          <tr><td><strong>สิทธิ์เขียน prod</strong></td><td><strong>route ro (GET/HEAD) + ทางเข้าเดียวคือ PR</strong></td><td>เหมือนเดิม</td></tr>
+          <tr><td>ป้องกันลบเส้นทางเข้า</td><td><span class="mono">is_admin_path</span> guard + tag สงวน + CI gate</td><td>เหมือนเดิม</td></tr>
+          <tr><td>เก็บ credential</td><td><span class="mono">stored</span> = ActiveRecord::Encryption ในเครื่อง · <span class="mono">session</span> = cookie</td><td>AKV ผ่าน CSI driver</td></tr>
+          <tr><td>Audit</td><td><span class="mono">audit_events</span> ในเครื่อง + <strong>Kong access log (ส่วนกลาง)</strong> + PR history</td><td>shared Postgres</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note info">
+      <h3>Kong access log ทำให้โหมด local ปลอดภัยขึ้นมาก</h3>
+      <p>ถึง DB ของ tool จะกระจายตามเครื่องแต่ละคน แต่ access log ของ Kong เป็นส่วนกลางและบันทึกทุก request พร้อมชื่อ consumer — จุดอ่อนที่ใหญ่ที่สุดของโหมด local หายไปเกือบหมด</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">12</span><h2>หน้าบ้าน</h2></div>
+  <div class="stack">
+    <p class="col"><strong>Rails 8 + Hotwire (Turbo Frames/Streams) + Stimulus + ViewComponent + Tailwind</strong> — codebase เดียว ไม่มี build pipeline แยก ไม่มี CORS งานหลักคือ "ตาราง + ฟิลเตอร์ + ฟอร์ม" ซึ่ง Turbo Frame แข็งที่สุด และ keyset เข้ากับ Turbo Stream append พอดี</p>
+    <div class="grid2">
+      <div class="card stack-sm">
+        <h4>หน้าจอ</h4>
+        <ul class="tight">
+          <li><strong>Connections</strong> — list / add / edit / test / delete พร้อมสถานะ, ป้ายสี, <code>access_level</code>, <code>credential_kind</code></li>
+          <li><strong>Login</strong> — basic auth + ช่อง operator (ถ้าเป็น credential ร่วม) + error ที่แยกตามตารางข้อ 01</li>
+          <li><strong>Switcher ใน header</strong> — prod แถบแดงเต็ม + ป้าย "read-only" + ป้าย "credential ร่วม — บันทึกในนาม X"</li>
+          <li>ตาราง entity — แถวที่ <code>is_admin_path</code> มีไอคอนกุญแจและปุ่มลบถูกปิด</li>
+          <li>รายละเอียด: Overview / ลูก ๆ / Plugins / Raw JSON / History</li>
+          <li>Review diff · Audit log · drift (สี่ทาง) · cert หมดอายุ · PR ค้าง · หน้า PAT</li>
+        </ul>
+      </div>
+      <div class="card stack-sm">
+        <h4>ฟอร์ม plugin สร้างจาก schema</h4>
+        <p style="font-size:15px;color:var(--ink-2)">ดึง <code>GET /schemas/plugins/:name</code> มา render อัตโนมัติ แล้วเขียน custom UI ทับเฉพาะที่ใช้บ่อย (rate-limiting, key-auth, pre/post-function ของทีม) รองรับ custom plugin ได้ฟรี</p>
+        <p style="font-size:15px;color:var(--ink-2)"><strong>plugin บน admin route</strong> (basic-auth, acl, ip-restriction) แสดงเป็น read-only</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">13</span><h2>แผนการดำเนินงาน</h2></div>
+  <div class="stack">
+    <ol class="ms">
+      <li>
+        <div class="ms-tag">M0<small>4–5 วัน</small></div>
+        <div class="ms-body">
+          <h3>ตั้งฐาน + connection + admin path guard</h3>
+          <ul class="tight">
+            <li>Rails 8 + Postgres + Solid Queue, RSpec, CI</li>
+            <li><strong><code>compose.yaml</code>: Kong CE สอง node ที่ครอบ Admin API ด้วยตัวเอง (loopback + basic-auth + ACL) พร้อม route rw และ ro</strong> → ทดสอบ login, สิทธิ์ และ error ทุกแบบจริงตั้งแต่วันแรก</li>
+            <li><code>kong_connections</code> + CRUD + login + test connection + <strong>probe <code>access_level</code></strong></li>
+            <li><strong>จำแนก <code>credential_kind</code> จาก tag ของ consumer</strong> + ช่อง operator</li>
+            <li><strong>AdminPathGuard</strong> — หา admin path, มาร์ค <code>is_admin_path</code>, บล็อกการลบ</li>
+            <li>ActiveRecord::Encryption + <code>credential_mode</code> สองแบบ</li>
+            <li><code>Kong::Client</code> — <strong>error mapping ครบหกกรณี</strong> · <strong>Redactor + spec</strong> + spec ที่ assert ว่า log ไม่มี <code>Basic&nbsp;</code></li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M1<small>~1.5 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>Thin vertical slice — Services, direct mode</h3>
+          <ul class="tight">
+            <li><code>kong_entities</code> + sync services + digest</li>
+            <li><code>EntityQuery</code> ครบ filter/sort/<strong>keyset</strong> + cursor ที่เซ็นแล้ว + spec เคสขอบ</li>
+            <li>REST <code>/api/v1</code> + หน้าเว็บ list &amp; detail + switcher พร้อมป้ายสี/ro/shared</li>
+            <li>CRUD แบบ direct ผ่าน plan→apply + audit (username + operator) + optimistic lock</li>
+            <li>PAT + MCP 4 tool</li>
+          </ul>
+          <p class="pass"><strong>เกณฑ์ผ่าน:</strong> สั่ง Claude Code ว่า "หา service ใน connection dev ที่ติด tag payment แก้ล่าสุดใน 7 วัน เรียงตาม updated_at แล้วเสนอเพิ่ม tag deprecated ให้ตัวที่ไม่มี route" → ได้ diff ให้กดอนุมัติ · audit ระบุคนได้ · <strong>ลบ admin path ไม่ได้</strong> · เห็นเฉพาะ connection ที่ผูกกับ token</p>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M2<small>~1.5–2 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>decK PR mode</h3>
+          <ul class="tight">
+            <li><code>GitClient</code> + clone/pull cache · <code>DeckRenderer</code> + <strong>round-trip test byte-for-byte</strong></li>
+            <li>บังคับ <code>select_tags</code> · <strong>ตัด <code>kong-admin-path</code> และ credential ออกจาก YAML เสมอ</strong></li>
+            <li><code>deck gateway validate</code>/<code>diff</code> ใส่ PR body + trailer <code>Changed-by</code></li>
+            <li><strong>CI gate: block PR ที่แตะ <code>kong-admin-path</code> หรือมี delete เกิน threshold</strong></li>
+            <li><strong>ตั้ง connection ของ uat ให้ใช้ route ro แล้วพิสูจน์ว่าเขียนไม่ได้จริง</strong></li>
+          </ul>
+          <p class="pass"><strong>เกณฑ์ผ่าน:</strong> เปลี่ยน service ใน uat → PR diff สะอาด ไม่มี noise · เขียนตรงได้ <code>no Route matched</code> และ tool รายงานว่า "credential นี้เขียนไม่ได้" · PR ที่แตะ admin path ถูก CI block</p>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M3<small>~1 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>Routes + Consumers</h3>
+          <ul class="tight">
+            <li>route↔service, แท็บลูก, cascade preview ก่อนลบ</li>
+            <li>credential ของ consumer (key-auth, basic-auth) — sub-entity + redactor</li>
+            <li><strong>ระวังเป็นพิเศษ: consumer ที่ถือ credential ของ admin path ห้ามลบ</strong></li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M4<small>~1.5 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>Plugins</h3>
+          <ul class="tight">
+            <li>catalog จาก <code>GET /</code> ของแต่ละ connection · ฟอร์มจาก schema + override</li>
+            <li>ผูก plugin ระดับ global / service / route / consumer + toggle</li>
+            <li>plugin บน admin route แสดงเป็น read-only</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M5<small>~1–1.5 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>Upstreams, Targets, Certificates, SNIs</h3>
+          <ul class="tight">
+            <li>upstream + target (spike semantic ก่อน)</li>
+            <li>certificate + SNI + ca_certificate + parse <code>not_after</code>, subject, issuer, fingerprint</li>
+            <li>dashboard cert หมดอายุ + <code>kong_certs_expiring</code> · ตัดสินใจทาง ก หรือ ข ของข้อ 07</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="ms-tag">M6<small>~1 สัปดาห์</small></div>
+        <div class="ms-body">
+          <h3>Drift + hardening</h3>
+          <ul class="tight">
+            <li><strong>drift สี่ทาง</strong> รวมการดูด Kong access log มาเทียบกับ change_plan</li>
+            <li>rate limit, circuit breaker, structured log, Prometheus metric</li>
+            <li>seam ของ multi-operator · <code>deck</code> import เป็น baseline</li>
+          </ul>
+        </div>
+      </li>
+    </ol>
+    <p class="col" style="font-size:15.5px;color:var(--ink-2)">รวมประมาณ <strong>8–9 สัปดาห์</strong> ถ้าทำคนเดียวเต็มเวลา — ใช้งานจริงได้ตั้งแต่จบ <strong>M2</strong></p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">14</span><h2>ความเสี่ยง</h2></div>
+  <div class="tbox">
+    <table>
+      <thead><tr><th style="width:80px">ระดับ</th><th>ความเสี่ยง</th><th>วิธีรับมือ</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip hi">สูงสุด</span></td><td><strong><span class="mono">deck gateway sync</span> ลบ admin path → ไม่มีใครเข้า Admin API ได้อีก รวมทั้ง CI</strong></td><td>อย่าให้ deck จัดการ admin path · tag สงวน · tool ไม่ render ลง YAML · CI gate · ซ้อมกับ uat</td></tr>
+        <tr><td><span class="chip hi">สูงสุด</span></td><td><strong>tool ลบ/แก้เส้นทางเข้าของตัวเอง</strong></td><td><span class="mono">is_admin_path</span> guard · ลบต้องพิมพ์ชื่อ + ติ๊กยืนยัน · <strong>MCP บล็อกสนิท</strong></td></tr>
+        <tr><td><span class="chip hi">สูง</span></td><td>YAML round-trip ไม่ nice → PR เต็ม noise จนไม่มีใครรีวิว</td><td>round-trip test เป็น gate ของ M2 · สร้างจาก git เสมอ</td></tr>
+        <tr><td><span class="chip hi">สูง</span></td><td>private key ของ cert / credential ของ consumer หลุดเข้า read-model, git, MCP</td><td>redactor ที่ <strong>M0</strong> · digest หลัง redact · ไม่มี flag ปลด · ไม่ render credential ลง YAML</td></tr>
+        <tr><td><span class="chip hi">สูง</span></td><td>credential ร่วมทำให้ audit ระบุคนไม่ได้</td><td>บังคับ <span class="mono">operator</span> ก่อนเขียน · trailer ใน commit · default ไป credential ต่อคน · <strong>Kong access log เป็นชั้นสำรอง</strong></td></tr>
+        <tr><td><span class="chip hi">สูง</span></td><td>credential ที่เก็บไว้หลุดจากเครื่องที่ถูกเจาะ</td><td>prod ใช้ route ro · ActiveRecord::Encryption · ปุ่มลืมทุก credential · ไม่มี API ที่คืน credential</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td><span class="mono">deck dump</span> ได้ password แบบ hash แล้ว sync ต่อทำให้ password พัง</td><td>ไม่ให้ deck จัดการ credential (<span class="mono">--skip-consumers</span> / select_tags)</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td>สับสนระหว่าง "proxy ปฏิเสธ" กับ "Admin API ตอบ"</td><td>error mapping หกกรณี · <span class="mono">access_level</span> ซ่อนปุ่มที่กดไม่ได้</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td>basic auth บน HTTP = password plaintext</td><td>ปฏิเสธ <span class="mono">http://</span> ยกเว้น localhost · ข้ามได้ทาง config file เท่านั้น</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td><span class="mono">credential_mode=session</span> ทำให้ filter/sort ไม่ครบแล้วผู้ใช้ไม่รู้</td><td><span class="mono">meta.partial: true</span> + แบนเนอร์</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td>Kong CE ไม่มี AKV vault backend</td><td>ทาง ก หรือ ข ของข้อ 07 — ตัดสินใจก่อน M5</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td>keyset ผิดแล้วแถวซ้ำ/หายแบบเงียบ</td><td>tiebreaker ทุก sort · index ตรง sort key · spec ที่ insert ระหว่างไล่ page</td></tr>
+        <tr><td><span class="chip med">กลาง</span></td><td>ทำผิดเครื่อง</td><td>ป้ายสี · prod แถบแดง · re-auth บน rank≥2 · MCP บังคับระบุ connection</td></tr>
+        <tr><td><span class="chip lo">ต่ำ</span></td><td>agent ยิงถี่จน Admin API รับไม่ไหว</td><td>อ่านจาก cache · rate limit ต่อ token · <strong><span class="mono">rate-limiting</span> plugin บน admin route</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">15</span><h2>ที่ยังต้องรู้</h2></div>
+  <div class="stack">
+    <div class="card stack-sm">
+      <p class="label">ก่อน M0 — สามข้อนี้ block</p>
+      <ol class="q">
+        <li><strong>admin route ตอนนี้แยก rw/ro แล้วหรือยัง</strong> ถ้ายัง — สร้างเพิ่มได้ไหม (สอง host หรือสอง path) หรือจะใช้ท่า <code>pre-function</code> แทน</li>
+        <li><strong>admin path ตอนนี้เกิดจากอะไร</strong> — Helm values / declarative bootstrap / คนสร้างมือ → กำหนดว่าจะกันออกจาก deck ยังไง</li>
+        <li><strong>consumer ที่ใช้ร่วมกันมีตัวไหนบ้าง</strong> → เอาไปติด tag <code>shared-credential</code> ครั้งเดียว</li>
+      </ol>
+    </div>
+    <div class="card stack-sm">
+      <p class="label">ก่อน M2</p>
+      <ol class="q" start="4">
+        <li><strong>Git host อะไร</strong> — GitHub / GitLab / Azure DevOps / Bitbucket</li>
+        <li><strong>config repo มีอยู่แล้วหรือยัง</strong> และ prod จัดการด้วย deck 100% หรือบางส่วน</li>
+        <li><strong>decK เวอร์ชันไหน</strong> — <code>deck sync</code> vs <code>deck gateway sync</code></li>
+      </ol>
+    </div>
+    <div class="card stack-sm">
+      <p class="label">ก่อน M5</p>
+      <ol class="q" start="7">
+        <li><strong>ตอนนี้ private key ของ cert อยู่ที่ไหน</strong> — inline ใน Kong, env var, หรือ AKV แล้ว</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    <p>อ้างอิงพฤติกรรมของ Kong Gateway 3.x และ decK — ตรวจกับเวอร์ชันที่ใช้จริงก่อนล็อก contract · rev 4, 28 ส.ค. 2026</p>
+  </div>
+</footer>
+
+</div>

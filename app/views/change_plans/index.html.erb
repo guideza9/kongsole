@@ -1,0 +1,41 @@
+<% content_for :title, "Pending PRs" %>
+
+<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">Pending PRs</h1>
+<p class="text-sm mb-6" style="color: var(--color-ink-soft)">Every PR-mode change plan on <%= current_connection.name %>, newest first.</p>
+
+<% if @change_plans.empty? %>
+  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">No PR-mode changes have been proposed on this connection yet.</div>
+<% else %>
+  <div class="overflow-x-auto panel">
+    <table class="w-full text-sm min-w-[720px]">
+      <thead>
+        <tr class="text-left" style="border-bottom: 1px solid var(--color-border); background: var(--color-surface-subtle)">
+          <th class="px-3 py-2 section-label">Proposed</th>
+          <th class="px-3 py-2 section-label">Actor</th>
+          <th class="px-3 py-2 section-label">Operation</th>
+          <th class="px-3 py-2 section-label">Entity</th>
+          <th class="px-3 py-2 section-label">Status</th>
+          <th class="px-3 py-2 section-label">PR state</th>
+          <th class="px-3 py-2 section-label">Commit</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @change_plans.each do |plan| %>
+          <tr style="border-bottom: 1px solid var(--color-border)">
+            <td class="px-3 py-2.5 font-mono" style="color: var(--color-ink-soft)"><%= plan.created_at.to_fs(:short) %></td>
+            <td class="px-3 py-2.5">
+              <%= plan.actor_username %><% if plan.actor_operator.present? %>
+                <span style="color: var(--color-ink-soft)"> (as <%= plan.actor_operator %>)</span>
+              <% end %>
+            </td>
+            <td class="px-3 py-2.5"><span class="tag"><%= plan.operation %></span></td>
+            <td class="px-3 py-2.5"><%= link_to (plan.before["name"] || plan.after["name"]), change_plan_path(plan) %></td>
+            <td class="px-3 py-2.5"><%= plan.status %></td>
+            <td class="px-3 py-2.5"><%= plan.pr_state || "—" %></td>
+            <td class="px-3 py-2.5 font-mono text-xs" style="color: var(--color-ink-soft)"><%= plan.commit_sha&.first(8) || "—" %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>

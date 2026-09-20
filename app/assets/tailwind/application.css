@@ -1,0 +1,406 @@
+@import "tailwindcss";
+
+/*
+  QUIET CONSOLE — direction contract
+  THESIS: the interface gets out of the way of the data. No chassis, no
+  texture, no ornament standing between the operator and the state of a
+  connection — replaces the prior switchboard world (docs/UI-DESIGN.md rev 1).
+  OWN-WORLD: near-white ground, near-black ink, one quiet steel-blue accent
+  for focus and primary actions; hairline borders instead of panels-with-
+  shadow; a single sans throughout, mono only where the value is genuinely
+  data (URLs, tags, ids). Status/env color-coding stays functional (the
+  guardrail docs/DESIGN.md §14 requires) but renders as a flat, small dot
+  + label rather than a lit lamp.
+  STORY: an operator scans a plain list, reads status at a glance from a
+  small colored dot, and never has to parse decoration to find the fact.
+  FIRST VIEWPORT: connections index as a plain bordered list on white,
+  generous line height, one primary "Add connection" action top-right.
+  FORM: direction pinned directly by the user's request ("Minimalist style
+  but still polite"); concept tournament skipped by design. "Polite" is
+  carried in copy register (considerate confirmations, gentle warnings),
+  not in ornament.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with
+  the finish review, the verdict, DESIGN.md, and every shipping raster
+  carrying its provenance.
+*/
+
+@theme {
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-bg: #fdfdfc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f5f5f3;
+  --color-border: #e3e3df;
+  --color-border-strong: #cbcbc5;
+  --color-ink: #18181a;
+  --color-ink-soft: #6c6c67;
+  --color-ink-faint: #9a9a93;
+  --color-accent: #3c5a78;
+  --color-accent-strong: #2c4460;
+  --color-accent-tint: #eaeff3;
+  --color-danger: #a3312a;
+  --color-danger-tint: #f8ecea;
+  --color-success: #2f6b45;
+  --color-success-tint: #ecf3ec;
+  --color-warning: #93600f;
+  --color-warning-tint: #f7efe0;
+
+  /* Raw JSON syntax highlighting only (Entities/ChangePlans "Raw JSON"
+     panels) -- three hues chosen to sit clearly apart from each other and
+     from the semantic danger/warning/success tokens above, at a lightness
+     that holds 4.5:1+ on --color-surface-subtle. Keys reuse the app's own
+     accent (a key is a label, the same role links/actions already own). */
+  --color-json-string: #6b4c93;
+  --color-json-number: #1f6b7a;
+  --color-json-bool: #a34a7a;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+* {
+  scrollbar-color: var(--color-border-strong) var(--color-bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.topbar {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wordmark {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+}
+
+.row-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+  transition: border-color 120ms ease;
+}
+
+.row-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+/* A dense, hairline-divided list row -- for a short nested list (a
+   service's routes, a consumer's credentials on entities#show) where a
+   full column-aligned table would be more chrome than the handful of rows
+   need. One .panel wraps the whole list; each row is a full-width link so
+   the entire row is the click target, not just the name text. */
+.entity-row-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 120ms ease;
+}
+
+.entity-row-compact:last-child {
+  border-bottom: none;
+}
+
+.entity-row-compact:hover {
+  background: var(--color-surface-subtle);
+}
+
+/* The entities#index browser table -- real, column-aligned rows (one grid
+   template shared by the header and every data row via --entity-cols, set
+   once on .entity-table) that still keep the whole row as one click
+   target: an <a> as a grid container reads and behaves like a table row
+   without table markup's inability to make <tr> itself the link. */
+.entity-table {
+  overflow: hidden;
+}
+
+.entity-table .entity-row {
+  display: grid;
+  grid-template-columns: var(--entity-cols);
+  align-items: center;
+  column-gap: 1rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.entity-table .entity-row:last-child {
+  border-bottom: none;
+}
+
+a.entity-row {
+  transition: background 120ms ease;
+}
+
+a.entity-row:hover {
+  background: var(--color-surface-subtle);
+}
+
+.entity-row--head {
+  background: var(--color-surface-subtle);
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.entity-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem 0.2rem 0.5rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.chip-lg {
+  padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.chip-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+.tag {
+  display: inline-block;
+  border-radius: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-border);
+}
+
+.btn-primary {
+  font-weight: 600;
+  border-radius: 0.4rem;
+  background: var(--color-ink);
+  color: var(--color-surface);
+  transition: background 120ms ease;
+}
+
+.btn-primary:hover {
+  background: var(--color-accent-strong);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  font-weight: 600;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-ink-faint);
+}
+
+.btn-text-danger {
+  font-weight: 600;
+  color: var(--color-danger);
+  border-radius: 0.4rem;
+  transition: background 120ms ease;
+}
+
+.btn-text-danger:hover {
+  background: var(--color-danger-tint);
+}
+
+.btn-text {
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  border-radius: 0.4rem;
+  transition: color 120ms ease;
+}
+
+.btn-text:hover {
+  color: var(--color-ink);
+}
+
+.field-input {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.65rem;
+  color: var(--color-ink);
+}
+
+.field-input:focus {
+  border-color: var(--color-accent);
+}
+
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.notice-banner {
+  border-radius: 0.5rem;
+  border: 1px solid;
+  padding: 0.6rem 0.9rem;
+  font-weight: 500;
+}
+
+/* Raw JSON syntax highlighting -- see ApplicationHelper#highlight_json.
+   Structure (braces, brackets, commas, indentation) stays the pre's default
+   ink-soft so the four colored roles read as the signal, not one hue among
+   many; only key/string/number/bool/null carry a role. */
+.json-viewer {
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+}
+
+.json-key {
+  color: var(--color-accent-strong);
+  font-weight: 600;
+}
+
+.json-string {
+  color: var(--color-json-string);
+}
+
+.json-number {
+  color: var(--color-json-number);
+}
+
+.json-bool {
+  color: var(--color-json-bool);
+  font-weight: 600;
+}
+
+.json-null {
+  /* Not --color-ink-faint: it reads fine as a decorative meta hint
+     elsewhere, but "null" is text a reader needs to actually read, and
+     ink-faint only holds ~2.6:1 on this panel's background -- short of
+     the 4.5:1 body-text floor. ink-soft (~4.8:1) plus italic still reads
+     as the quietest token without failing contrast. */
+  color: var(--color-ink-soft);
+  font-style: italic;
+}
+
+/* change_plans#show's diff -- see ApplicationHelper#diff_chip and the
+   `changed_keys`/`tone` args on #highlight_json. Reuses the app's existing
+   danger/success semantics (removed/old = danger, added/new = success)
+   rather than a diff-specific palette, so a reviewer already reading
+   danger-tint as "destructive" elsewhere in the app reads it the same way
+   here. */
+.diff-chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.35rem;
+  word-break: break-all;
+}
+
+/* A full-width line highlight inside a .json-viewer <pre>, for the one
+   field among a dozen that a diff actually touched -- bleeds to the
+   panel's own padding (p-3 = 0.75rem) so the tint reads as a highlighted
+   row, not a floating fragment. */
+.json-diff-removed,
+.json-diff-added {
+  display: block;
+  margin: 0 -0.75rem;
+  padding: 0 0.75rem;
+}
+
+.json-diff-removed {
+  background: var(--color-danger-tint);
+}
+
+.json-diff-added {
+  background: var(--color-success-tint);
+}
+
+/* entities#edit's Full JSON panel -- a syntax-highlighted <pre> sits
+   beneath the real <textarea>; the textarea keeps every native behavior
+   (typing, selection, undo, screen readers) and renders its own text fully
+   transparent so the highlighted copy shows through instead. Both share
+   one font/padding/line-height so characters land exactly on top of each
+   other -- see json_editor_controller.js, which keeps the two in sync on
+   every keystroke and scroll event. */
+.json-editor {
+  position: relative;
+}
+
+.json-editor__highlight,
+.json-editor__textarea {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  tab-size: 2;
+}
+
+.json-editor__highlight {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  pointer-events: none;
+  border-color: transparent;
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-soft);
+}
+
+.json-editor__textarea {
+  position: relative;
+  width: 100%;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--color-ink);
+  resize: vertical;
+}
+
+.json-editor__textarea::selection {
+  background: var(--color-accent-tint);
+}
+
+.json-editor--invalid .json-editor__textarea {
+  border-color: var(--color-danger);
+}

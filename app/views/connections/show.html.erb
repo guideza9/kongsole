@@ -1,0 +1,43 @@
+<% content_for :title, @connection.name %>
+
+<div class="flex items-center gap-3 mb-8">
+  <h1 class="sr-only">Connection: <%= @connection.name %></h1>
+  <%= env_badge(@connection, size: :lg) %>
+  <%= status_badge(@connection.last_status) %>
+</div>
+
+<div class="max-w-xl grid gap-4">
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Connectivity &amp; policy</h2>
+    <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt style="color: var(--color-ink-soft)">Admin URL</dt><dd class="font-mono"><%= @connection.admin_url %></dd>
+      <dt style="color: var(--color-ink-soft)">Rank</dt><dd><%= @connection.rank %></dd>
+      <dt style="color: var(--color-ink-soft)">Apply mode</dt><dd><%= @connection.apply_mode %></dd>
+      <dt style="color: var(--color-ink-soft)">Credential mode</dt><dd><%= @connection.credential_mode %></dd>
+    </dl>
+  </section>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Discovered from Kong</h2>
+    <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt style="color: var(--color-ink-soft)">Access level</dt><dd><%= @connection.access_level || "unknown — log in to probe" %></dd>
+      <dt style="color: var(--color-ink-soft)">Credential kind</dt><dd><%= @connection.credential_kind || "unknown — log in to classify" %></dd>
+      <dt style="color: var(--color-ink-soft)">Kong version</dt><dd><%= @connection.kong_version || "—" %></dd>
+      <dt style="color: var(--color-ink-soft)">Last connected</dt><dd><%= @connection.last_connected_at&.to_fs(:long) || "never" %></dd>
+      <dt style="color: var(--color-ink-soft)">Admin path fingerprint</dt>
+      <dd>
+        <% if @connection.admin_path_fingerprint.present? && @connection.admin_path_fingerprint["service_id"] %>
+          <span style="color: var(--color-success)">found — service <%= @connection.admin_path_fingerprint["service_id"] %>, <%= Array(@connection.admin_path_fingerprint["route_ids"]).size %> route(s), <%= Array(@connection.admin_path_fingerprint["consumer_ids"]).size %> consumer(s) guarded</span>
+        <% else %>
+          <span style="color: var(--color-ink-soft)">not found yet — log in to run the admin path guard</span>
+        <% end %>
+      </dd>
+    </dl>
+  </section>
+</div>
+
+<div class="mt-6 flex gap-2">
+  <%= link_to "Log in", login_connection_path(@connection), class: "btn-primary px-3 py-1.5 text-sm" %>
+  <%= link_to "Edit", edit_connection_path(@connection), class: "btn-secondary px-3 py-1.5 text-sm" %>
+  <%= link_to "Back", connections_path, class: "btn-text px-3 py-1.5 text-sm" %>
+</div>

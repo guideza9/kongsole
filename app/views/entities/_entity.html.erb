@@ -1,0 +1,23 @@
+<%= link_to entity_path(entity), class: "entity-row-compact" do %>
+  <span class="font-semibold text-sm shrink-0 truncate max-w-[45%]" style="color: var(--color-ink)"><%= entity.name %></span>
+  <% if entity.is_admin_path? %>
+    <span class="chip shrink-0" style="background-color: var(--color-warning-tint); color: var(--color-warning)">
+      <svg class="chip-dot" width="10" height="10" viewBox="0 0 10 10" fill="none" style="border-radius:0">
+        <rect x="2" y="4.2" width="6" height="4.3" rx="0.8" stroke="currentColor" stroke-width="1"/>
+        <path d="M3.2 4.2V3a1.8 1.8 0 0 1 3.6 0v1.2" stroke="currentColor" stroke-width="1" fill="none"/>
+      </svg>
+      protected
+    </span>
+  <% end %>
+  <% unless entity.enabled %>
+    <span class="tag shrink-0">disabled</span>
+  <% end %>
+  <div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
+    <% entity.tags.each do |tag| %>
+      <span class="tag"><%= tag %></span>
+    <% end %>
+  </div>
+  <span class="text-xs shrink-0" style="color: var(--color-ink-faint)">
+    <%= entity.kong_updated_at&.to_fs(:short) || "—" %>
+  </span>
+<% end %>

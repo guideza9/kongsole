@@ -1,0 +1,71 @@
+<% content_for :title, entity_type_label(@type) %>
+
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+  <div>
+    <h1 class="text-xl font-semibold" style="color: var(--color-ink)"><%= entity_type_label(@type) %></h1>
+    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">Synced from <%= current_connection.name %>.</p>
+  </div>
+  <div class="flex gap-2">
+    <% if @type == "plugin" %>
+      <%= link_to "New global plugin", new_plugin_path, class: "btn-primary px-3.5 py-2 text-sm" %>
+    <% end %>
+    <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-secondary px-3.5 py-2 text-sm cursor-pointer" %>
+  </div>
+</div>
+
+<nav class="flex gap-1 mb-6" style="border-bottom: 1px solid var(--color-border)">
+  <% %w[service route consumer plugin].each do |type| %>
+    <%= link_to entity_type_label(type), entities_path(type: type),
+          class: "px-3 py-2 text-sm #{'font-semibold' if @type == type}",
+          style: @type == type ? "color: var(--color-ink); border-bottom: 2px solid var(--color-accent)" : "color: var(--color-ink-soft)" %>
+  <% end %>
+</nav>
+
+<%= form_with url: entities_path, method: :get, class: "panel p-4 mb-5 flex flex-wrap items-end gap-4" do %>
+  <input type="hidden" name="type" value="<%= @type %>" />
+  <div class="flex-1 min-w-[180px]">
+    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Search</label>
+    <input type="text" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" />
+  </div>
+  <div class="flex-1 min-w-[180px]">
+    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Tags <span class="font-normal" style="color: var(--color-ink-soft)">(comma separated, matches all)</span></label>
+    <input type="text" name="tags" value="<%= @filters[:tags] %>" placeholder="payment, core" class="field-input font-mono text-sm" />
+  </div>
+  <div>
+    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Sort</label>
+    <select name="sort" class="field-input">
+      <% [["Updated (newest)", "-updated_at"], ["Updated (oldest)", "updated_at"],
+          ["Created (newest)", "-created_at"], ["Created (oldest)", "created_at"],
+          ["Name (A–Z)", "name"], ["Name (Z–A)", "-name"]].each do |label, value| %>
+        <option value="<%= value %>" <%= "selected" if @filters[:sort] == value %>><%= label %></option>
+      <% end %>
+    </select>
+  </div>
+  <button type="submit" class="btn-primary px-4 py-2 text-sm">Filter</button>
+<% end %>
+
+<% if @entities.empty? %>
+  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+    No <%= entity_type_label(@type).downcase %> match this filter yet. Try
+    <%= link_to "clearing the filter", entities_path(type: @type) %>, or
+    <%= button_to "sync now", sync_entities_path(type: @type), method: :post, class: "inline underline bg-transparent border-0 cursor-pointer p-0", style: "color: var(--color-accent)" %>
+    if this connection has never been synced.
+  </div>
+<% else %>
+  <%= render "count" %>
+
+  <div class="overflow-x-auto panel entity-table">
+    <div style="--entity-cols: <%= entity_table_grid_columns(@type) %>; min-width: <%= entity_table_min_width(@type) %>">
+      <div class="entity-row entity-row--head">
+        <% entity_table_headers(@type).each do |label| %>
+          <span class="section-label"><%= label %></span>
+        <% end %>
+      </div>
+      <div id="entities-list">
+        <%= render partial: "entity_row", collection: @entities, as: :entity, locals: { type: @type } %>
+      </div>
+    </div>
+  </div>
+
+  <%= render "pagination" %>
+<% end %>

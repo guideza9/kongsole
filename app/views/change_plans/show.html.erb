@@ -1,0 +1,141 @@
+<% content_for :title, "Review change" %>
+
+<div class="flex flex-wrap items-center gap-2 mb-1">
+  <h1 class="text-xl font-semibold" style="color: var(--color-ink)">
+    <%= @change_plan.operation.capitalize %> <%= @change_plan.before["name"] || @change_plan.after["name"] %>
+  </h1>
+  <span class="tag"><%= @change_plan.entity_type %></span>
+</div>
+<p class="text-sm mb-6" style="color: var(--color-ink-soft)">
+  Proposed by <%= @change_plan.actor_username %><%= " (as #{@change_plan.actor_operator})" if @change_plan.actor_operator.present? %>
+  · expires <%= @change_plan.expires_at.to_fs(:short) %>
+</p>
+
+<% if @change_plan.status == "pending" && @change_plan.expired? %>
+  <p class="notice-banner mb-6" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+    This plan expired. Nothing was applied. Go back and propose the change again.
+  </p>
+<% elsif @change_plan.status == "applied" && @change_plan.apply_mode == "pr" %>
+  <p class="notice-banner mb-6" style="background: var(--color-success-tint); border-color: var(--color-success); color: var(--color-success)">
+    Pushed to branch <code class="font-mono"><%= "kongctl/#{@change_plan.id}" %></code> (commit <code class="font-mono"><%= @change_plan.commit_sha&.first(8) %></code>) — nothing in Kong changes until this is reviewed and merged.
+  </p>
+<% elsif @change_plan.status == "applied" %>
+  <p class="notice-banner mb-6" style="background: var(--color-success-tint); border-color: var(--color-success); color: var(--color-success)">
+    Applied. This plan is done — propose a new change to make another edit.
+  </p>
+<% elsif @change_plan.status == "failed" %>
+  <p class="notice-banner mb-6" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+    Kong rejected this change, so nothing was applied. Go back and propose the change again.
+  </p>
+<% end %>
+
+<% if @dependent_routes.present? %>
+  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+    Kong will reject this delete until these <%= @dependent_routes.size %> route<%= "s" unless @dependent_routes.size == 1 %> are removed first: <%= @dependent_routes.map(&:name).join(", ") %>
+  </p>
+<% end %>
+
+<div class="max-w-2xl grid gap-4">
+  <%
+    # What "changed from original" means per operation -- shared by the
+    # Changes table below and the Raw JSON panels' line highlighting, so
+    # both sections agree on exactly which fields are colored and why.
+    changed_keys = case @change_plan.operation
+    when "create" then @change_plan.after.keys
+    when "delete" then @change_plan.before.keys
+    else @change_plan.diff.keys
+    end
+  %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Changes</h2>
+    <% if @change_plan.operation == "delete" %>
+      <p class="text-sm mb-3" style="color: var(--color-danger)">This permanently removes the <%= @change_plan.entity_type.humanize.downcase %> and every field below from Kong.</p>
+      <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+        <dt class="section-label">Field</dt><dt class="section-label">Removed value</dt>
+        <% @change_plan.before.each do |field, value| %>
+          <dt class="font-mono"><%= field %></dt>
+          <dd><%= diff_chip(value, tone: :removed) %></dd>
+        <% end %>
+      </dl>
+    <% elsif @change_plan.operation == "create" %>
+      <p class="text-sm mb-3" style="color: var(--color-success)">This creates a new <%= @change_plan.entity_type.humanize.downcase %> in Kong with every field below.</p>
+      <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+        <dt class="section-label">Field</dt><dt class="section-label">New value</dt>
+        <% @change_plan.after.each do |field, value| %>
+          <dt class="font-mono"><%= field %></dt>
+          <dd><%= diff_chip(value, tone: :added) %></dd>
+        <% end %>
+      </dl>
+    <% elsif @change_plan.diff.empty? %>
+      <p class="text-sm" style="color: var(--color-ink-soft)">No fields changed.</p>
+    <% else %>
+      <dl class="grid grid-cols-[max-content_1fr_1fr] gap-x-6 gap-y-2 text-sm">
+        <dt class="section-label">Field</dt><dt class="section-label">From</dt><dt class="section-label">To</dt>
+        <% @change_plan.diff.each do |field, change| %>
+          <dt class="font-mono"><%= field %></dt>
+          <dd><%= diff_chip(change["from"], tone: :removed) %></dd>
+          <dd><%= diff_chip(change["to"], tone: :added) %></dd>
+        <% end %>
+      </dl>
+    <% end %>
+  </section>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Raw JSON</h2>
+    <p class="text-xs mb-3" style="color: var(--color-ink-faint)">
+      <% if changed_keys.present? && @change_plan.operation != "create" %>
+        <span class="diff-chip" style="background: var(--color-danger-tint); color: var(--color-danger)">old value</span>
+      <% end %>
+      <% if changed_keys.present? && @change_plan.operation != "delete" %>
+        <span class="diff-chip ml-1" style="background: var(--color-success-tint); color: var(--color-success)">new value</span>
+      <% end %>
+    </p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <p class="text-xs mb-1" style="color: var(--color-ink-faint)">Before</p>
+        <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@change_plan.before, changed_keys: changed_keys, tone: :removed) %></pre>
+      </div>
+      <div>
+        <p class="text-xs mb-1" style="color: var(--color-ink-faint)">After</p>
+        <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= @change_plan.operation == "delete" ? "(deleted)" : highlight_json(@change_plan.after, changed_keys: changed_keys, tone: :added) %></pre>
+      </div>
+    </div>
+  </section>
+
+  <% if @change_plan.deck_diff.present? %>
+    <section class="panel p-4">
+      <h2 class="section-label mb-3">deck gateway diff</h2>
+      <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@change_plan.deck_diff) %></pre>
+    </section>
+  <% end %>
+
+  <% if @change_plan.status == "pending" && !@change_plan.expired? %>
+    <%= form_with url: apply_change_plan_path(@change_plan), method: :post, class: "panel p-4 grid gap-4" do %>
+      <% if @requires_confirmation_name %>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--color-danger)">
+            This is protected. Type <span class="font-mono"><%= @change_plan.before["name"] %></span> to confirm deletion.
+          </label>
+          <input type="text" name="confirmation_name" class="field-input font-mono text-sm" autocomplete="off" />
+        </div>
+      <% end %>
+      <% if @requires_reauth %>
+        <div>
+          <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">
+            This connection is rank <%= current_connection.rank %> — confirm your password to apply.
+          </label>
+          <input type="password" name="password" class="field-input" autocomplete="current-password" />
+        </div>
+      <% end %>
+      <div class="flex gap-2">
+        <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer"><%= @change_plan.apply_mode == "pr" ? "Push branch" : "Apply" %></button>
+        <%= link_to "Cancel", entities_path(type: @change_plan.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
+      </div>
+    <% end %>
+  <% else %>
+    <div>
+      <%= link_to "Back to #{entity_type_label(@change_plan.entity_type).downcase}", entities_path(type: @change_plan.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
+    </div>
+  <% end %>
+</div>

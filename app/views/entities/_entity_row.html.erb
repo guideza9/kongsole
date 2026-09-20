@@ -1,0 +1,52 @@
+<%= link_to entity_path(entity), class: "entity-row" do %>
+  <span class="entity-cell font-semibold text-sm" style="color: var(--color-ink)" title="<%= entity.name %>"><%= entity.name %></span>
+
+  <% if type == "route" %>
+    <% path = route_path_summary(entity) %>
+    <span class="entity-cell font-mono text-xs" title="<%= path[:methods] %> <%= path[:path] %>">
+      <span style="color: var(--color-ink-soft)"><%= path[:methods] %></span>
+      <span style="color: var(--color-ink)"><%= path[:path] %></span>
+    </span>
+  <% end %>
+
+  <% if type == "plugin" %>
+    <span class="entity-cell text-xs" style="color: var(--color-ink-soft)"><%= plugin_scope_label(entity) %></span>
+  <% end %>
+
+  <div class="entity-cell flex items-center gap-1.5">
+    <% visible_tags(entity).each do |tag| %>
+      <span class="tag"><%= tag %></span>
+    <% end %>
+    <% if hidden_tag_count(entity).positive? %>
+      <span class="text-xs shrink-0" style="color: var(--color-ink-faint)">+<%= hidden_tag_count(entity) %></span>
+    <% end %>
+  </div>
+
+  <%# Kong's Route/Consumer/credential schemas have no `enabled` field at
+      all -- confirmed live (PATCHing a route with `enabled` present is a
+      400 "unknown field") -- so their Status can only ever be "protected"
+      or nothing. service and plugin are the two types that genuinely have
+      the field. %>
+  <% has_enabled_field = type.in?(%w[service plugin]) %>
+  <div class="entity-cell flex items-center gap-1.5">
+    <% if entity.is_admin_path? %>
+      <span class="chip shrink-0" style="background-color: var(--color-warning-tint); color: var(--color-warning)">
+        <svg class="chip-dot" width="10" height="10" viewBox="0 0 10 10" fill="none" style="border-radius:0">
+          <rect x="2" y="4.2" width="6" height="4.3" rx="0.8" stroke="currentColor" stroke-width="1"/>
+          <path d="M3.2 4.2V3a1.8 1.8 0 0 1 3.6 0v1.2" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+        protected
+      </span>
+    <% end %>
+    <% if has_enabled_field && !entity.enabled %>
+      <span class="tag shrink-0">disabled</span>
+    <% end %>
+    <% unless entity.is_admin_path? || (has_enabled_field && !entity.enabled) %>
+      <span style="color: var(--color-ink-faint)">—</span>
+    <% end %>
+  </div>
+
+  <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-faint)">
+    <%= entity.kong_updated_at&.to_fs(:short) || "—" %>
+  </span>
+<% end %>

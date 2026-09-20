@@ -1,0 +1,7 @@
+<div id="entities-pagination" class="text-center mt-4">
+  <% if @has_more %>
+    <%= link_to "Load more",
+          entities_path(request.query_parameters.merge(cursor: @next_cursor, shown: @shown_count)),
+          class: "btn-secondary px-4 py-2 text-sm inline-block", data: { turbo_stream: true } %>
+  <% end %>
+</div>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Kong CE Control Plane" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Kong Integration">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
+    <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <%# Includes all stylesheet files in app/assets/stylesheets %>
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="font-sans">
+    <header class="topbar px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 sticky top-0 z-10">
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+        <%= link_to "Kongsole", root_path, class: "wordmark text-[15px] whitespace-nowrap" %>
+        <nav class="flex items-center gap-4 text-sm" style="color:var(--color-ink-soft)">
+          <%= link_to "Connections", connections_path, class: "hover:text-[var(--color-ink)] transition-colors" %>
+          <% if signed_in? %>
+            <%= link_to "Entities", entities_path, class: "hover:text-[var(--color-ink)] transition-colors" %>
+            <%= link_to "Audit", audit_events_path, class: "hover:text-[var(--color-ink)] transition-colors" %>
+            <%= link_to "Tokens", personal_access_tokens_path, class: "hover:text-[var(--color-ink)] transition-colors" %>
+          <% end %>
+          <%= link_to "Health", health_path, class: "hover:text-[var(--color-ink)] transition-colors" %>
+        </nav>
+      </div>
+      <% if signed_in? %>
+        <div class="flex flex-wrap items-center gap-2.5 text-sm">
+          <%= env_badge(current_connection, size: :lg) %>
+          <% if current_connection.read_only? %>
+            <span class="tag text-[11px] uppercase tracking-wide">read-only</span>
+          <% end %>
+          <% if current_connection.shared_credential? %>
+            <span class="text-xs sm:text-sm" style="color:var(--color-ink-soft)">shared credential — as <%= current_operator %></span>
+          <% end %>
+          <%= link_to "Switch", connections_path, class: "btn-text text-xs px-2 py-1" %>
+          <%= button_to "Sign out", logout_path, method: :delete, class: "btn-text text-xs px-2 py-1 cursor-pointer" %>
+        </div>
+      <% end %>
+    </header>
+
+    <main class="w-full max-w-5xl mx-auto mt-8 px-4 sm:px-6 pb-16">
+      <% if notice %>
+        <p class="notice-banner mb-6" style="background:var(--color-success-tint); border-color:var(--color-success); color:var(--color-success)"><%= notice %></p>
+      <% end %>
+      <% if alert %>
+        <p class="notice-banner mb-6" style="background:var(--color-danger-tint); border-color:var(--color-danger); color:var(--color-danger)"><%= alert %></p>
+      <% end %>
+
+      <%= yield %>
+    </main>
+  </body>
+</html>

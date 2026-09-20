@@ -1,0 +1,84 @@
+<%= form_with model: connection, scope: :kong_connection,
+      url: (connection.persisted? ? connection_path(connection) : connections_path),
+      class: "max-w-xl" do |f| %>
+  <% if connection.errors.any? %>
+    <div class="notice-banner mb-6 text-sm" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+      <ul>
+        <% connection.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Identity</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= f.text_field :name, class: "field-input mt-1" %>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <%= f.label :env, class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+          <%= f.select :env, KongConnection::ENVS, {}, class: "field-input mt-1" %>
+        </div>
+        <div>
+          <%= f.label :rank, "Rank (0=dev … 3=prod)", class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+          <%= f.number_field :rank, class: "field-input mt-1" %>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Connectivity</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :admin_url, "Admin URL", class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= f.text_field :admin_url, placeholder: "https://kong-admin.internal", class: "field-input mt-1 font-mono text-sm" %>
+        <p class="text-xs mt-1.5" style="color: var(--color-ink-soft)">https:// required unless it points at localhost — <code class="font-mono">insecure_http</code> in connections.yml is the only exception, never this form.</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <%= f.check_box :verify_ssl, style: "accent-color: var(--color-accent)" %>
+        <%= f.label :verify_ssl, "Verify SSL", class: "text-sm", style: "color: var(--color-ink)" %>
+      </div>
+
+      <div>
+        <%= f.label :ca_bundle_path, "CA bundle path (optional)", class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= f.text_field :ca_bundle_path, class: "field-input mt-1" %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Access policy</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :apply_mode, class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= f.select :apply_mode, KongConnection::APPLY_MODES, {}, class: "field-input mt-1" %>
+      </div>
+
+      <div>
+        <%= f.label :credential_mode, class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= f.select :credential_mode, KongConnection::CREDENTIAL_MODES, {}, class: "field-input mt-1" %>
+        <p class="text-xs mt-1.5" style="color: var(--color-ink-soft)">
+          <code class="font-mono">session</code>: credential lives only in the browser session, never touches the DB — no background sync, not usable from MCP.
+          <code class="font-mono">stored</code>: encrypted in the DB — required for sync and MCP.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">PR mode (uat/prod)</h2>
+    <div>
+      <%= f.label :select_tags_raw, "select_tags (comma separated)", class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+      <%= f.text_field :select_tags_raw, class: "field-input mt-1 font-mono text-sm" %>
+    </div>
+  </section>
+
+  <%= f.submit class: "btn-primary mt-6 px-4 py-2 text-sm cursor-pointer" %>
+<% end %>
