@@ -97,7 +97,8 @@ module Kong
 
     # `select_tags` first, then whatever else `_info` holds (decK's `defaults`),
     # sorted and kept. An empty `select_tags` is written `[]`: decK rejects the
-    # bare null a naive writer would produce (measured, 1.51.1 and 1.66.1).
+    # bare null a naive writer would produce (measured, 1.51.1 and 1.66.1). An empty
+    # list means "no filter" to decK: Kong::ChangeApplier#require_select_tags! refuses it first.
     def self.info_lines(info)
       info = info.is_a?(Hash) ? info : {}
       info = info.merge("select_tags" => Array(info["select_tags"]))

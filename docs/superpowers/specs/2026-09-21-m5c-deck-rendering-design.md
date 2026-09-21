@@ -139,7 +139,7 @@ YAML at all. Measured:
 | `key: "${{ env 'X' }}"` | FAIL | parses |
 | `key: "{vault://env/…}"` | PASS | parses |
 
-**M5c emits the single-quoted form.** It is the only form both decK and this
+**M5c emits the single-quoted form** *(superseded -- see the Outcome note below)*. It is the only form both decK and this
 tool's own parser accept, which the round-trip guard requires.
 
 > **Superseded (2026-09-21):** the live check (section 9) showed the
@@ -276,7 +276,8 @@ to private keys.
 
 The public `cert` PEM belongs in the YAML. The private key never does: `key` is
 always a reference, either `{vault://env/cert-x-key}` or, in PR mode,
-`'${{ env "DECK_CERT_X_KEY" }}'` in the single-quoted form §1.5 established.
+`"${{ env "DECK_CERT_X_KEY" }}"` in the double-quoted form (see §1.5 and §9: the
+single-quoted form never delivers a usable key).
 `Kong::CertificateKeyPolicy` already rejects anything else at plan and apply
 time, so the renderer inherits that guarantee rather than re-implementing it.
 

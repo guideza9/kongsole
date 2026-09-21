@@ -428,6 +428,155 @@ RSpec.describe Kong::DeckRenderer do
       end
     end
 
+    describe "moving a child between parents" do
+      let(:other_svc) { "aaaaaaaa-0000-0000-0000-0000000000aa" }
+      let(:other_up) { "aaaaaaaa-0000-0000-0000-0000000000ab" }
+      let(:other_cert) { "11111111-2222-3333-4444-5555555555ff" }
+
+      def untouched(&block)
+        snapshot = Marshal.load(Marshal.dump(doc))
+        expect(&block).to raise_error(Kong::DeckRenderer::Unrenderable, /moving a .+ between .+s is not supported in PR mode; delete it and create it again/)
+        expect(doc).to eq(snapshot)
+      end
+
+      it "refuses re-pointing an SNI at another certificate, and leaves the document untouched" do
+        doc["certificates"] = [ { "id" => cert_id, "cert" => pem, "snis" => [ { "name" => "a.example.internal" } ] } ]
+
+        untouched do
+          render_change(entity_type: "sni", operation: "update", parent_kong_id: cert_id,
+            before: { "name" => "a.example.internal", "certificate" => { "id" => cert_id } },
+            after: { "name" => "a.example.internal", "certificate" => { "id" => other_cert } })
+        end
+      end
+
+      it "refuses the web-controller shape: parent_kong_id is the current parent, after names the new one" do
+        doc["certificates"] = [ { "id" => cert_id, "cert" => pem, "snis" => [ { "name" => "a.example.internal" } ] } ]
+
+        untouched do
+          render_change(entity_type: "sni", operation: "update", parent_kong_id: cert_id,
+            before: { "name" => "a.example.internal" }, after: { "name" => "a.example.internal", "certificate" => { "id" => other_cert } })
+        end
+      end
+
+      it "refuses a route whose service changes" do
+        doc["services"] = [ { "name" => "orders", "routes" => [ { "name" => "orders-route", "paths" => [ "/o" ] } ] } ]
+
+        untouched do
+          render_change(entity_type: "route", operation: "update", parent_kong_id: svc_id,
+            before: { "name" => "orders-route", "service" => { "id" => svc_id } },
+            after: { "name" => "orders-route", "paths" => [ "/o" ], "service" => { "id" => other_svc } })
+        end
+      end
+
+      it "refuses a route whose service is set to null" do
+        doc["services"] = [ { "name" => "orders", "routes" => [ { "name" => "orders-route" } ] } ]
+
+        untouched do
+          render_change(entity_type: "route", operation: "update", before: { "name" => "orders-route", "service" => { "id" => svc_id } },
+            after: { "name" => "orders-route", "service" => nil })
+        end
+      end
+
+      it "refuses a target whose upstream changes" do
+        doc["upstreams"] = [ { "name" => "orders-up", "targets" => [ { "target" => "10.0.0.1:80" } ] } ]
+
+        untouched do
+          render_change(entity_type: "target", operation: "update", parent_kong_id: up_id,
+            before: { "target" => "10.0.0.1:80", "upstream" => { "id" => up_id } },
+            after: { "target" => "10.0.0.1:80", "weight" => 5, "upstream" => { "id" => other_up } })
+        end
+      end
+
+      it "still updates a child that keeps its parent, with or without the reference repeated in after" do
+        doc["certificates"] = [ { "id" => cert_id, "cert" => pem, "snis" => [ { "name" => "a.example.internal" } ] } ]
+
+        render_change(entity_type: "sni", operation: "update", parent_kong_id: cert_id,
+          before: { "name" => "a.example.internal", "certificate" => { "id" => cert_id } },
+          after: { "name" => "a.example.internal", "certificate" => { "id" => cert_id }, "tags" => [ "t" ] })
+        render_change(entity_type: "sni", operation: "update", parent_kong_id: cert_id,
+          before: { "name" => "a.example.internal", "certificate" => { "id" => cert_id } }, after: { "name" => "a.example.internal", "tags" => %w[t u] })
+
+        expect(doc["certificates"][0]["snis"]).to eq([ { "name" => "a.example.internal", "tags" => %w[t u] } ])
+      end
+    end
+
+    describe "ids on update" do
+      let(:kong_uuid) { "99999999-0000-0000-0000-000000000009" }
+      let(:cases) do
+        {
+          "service" => {
+            doc: { "services" => [ { "name" => "orders" } ] },
+            plan: { before: { "name" => "orders" }, after: { "id" => kong_uuid, "name" => "orders", "tags" => [ "x" ] } },
+            entry: ->(d) { d["services"][0] }
+          },
+          "route" => {
+            doc: { "services" => [ { "name" => "orders", "routes" => [ { "name" => "orders-route" } ] } ] },
+            plan: { before: { "name" => "orders-route", "service" => { "id" => svc_id } },
+                    after: { "id" => kong_uuid, "name" => "orders-route", "service" => { "id" => svc_id }, "tags" => [ "x" ] } },
+            entry: ->(d) { d["services"][0]["routes"][0] }
+          },
+          "consumer" => {
+            doc: { "consumers" => [ { "username" => "reporting-bot" } ] },
+            plan: { before: { "username" => "reporting-bot" }, after: { "id" => kong_uuid, "username" => "reporting-bot", "tags" => [ "x" ] } },
+            entry: ->(d) { d["consumers"][0] }
+          },
+          "plugin" => {
+            doc: { "plugins" => [ { "name" => "cors" } ] },
+            plan: { before: { "name" => "cors" }, after: { "id" => kong_uuid, "name" => "cors", "config" => {} } },
+            entry: ->(d) { d["plugins"][0] }
+          },
+          "upstream" => {
+            doc: { "upstreams" => [ { "name" => "orders-up" } ] },
+            plan: { before: { "name" => "orders-up" }, after: { "id" => kong_uuid, "name" => "orders-up", "slots" => 10 } },
+            entry: ->(d) { d["upstreams"][0] }
+          },
+          "target" => {
+            doc: { "upstreams" => [ { "name" => "orders-up", "targets" => [ { "target" => "10.0.0.1:80" } ] } ] },
+            plan: { parent_kong_id: up_id, before: { "target" => "10.0.0.1:80", "upstream" => { "id" => up_id } },
+                    after: { "id" => kong_uuid, "target" => "10.0.0.1:80", "weight" => 5, "upstream" => { "id" => up_id } } },
+            entry: ->(d) { d["upstreams"][0]["targets"][0] }
+          },
+          "sni" => {
+            doc: { "certificates" => [ { "id" => cert_id, "cert" => "x", "snis" => [ { "name" => "a.example.internal" } ] } ] },
+            plan: { parent_kong_id: cert_id, before: { "name" => "a.example.internal", "certificate" => { "id" => cert_id } },
+                    after: { "id" => kong_uuid, "name" => "a.example.internal", "certificate" => { "id" => cert_id }, "tags" => [ "x" ] } },
+            entry: ->(d) { d["certificates"][0]["snis"][0] }
+          }
+        }
+      end
+
+      it "does not write Kong's own uuid into an entry that had no id, for any type but a certificate" do
+        cases.each do |type, spec|
+          spec[:doc].each { |key, value| doc[key] = Marshal.load(Marshal.dump(value)) }
+
+          render_change(entity_type: type, operation: "update", **spec[:plan])
+
+          expect(spec[:entry].call(doc)).not_to have_key("id"), "#{type} update wrote an id"
+          expect(Kong::DeckDocument.serialize(doc)).not_to include(kong_uuid), "#{type} update leaked Kong's uuid"
+        end
+      end
+
+      it "keeps an id the YAML entry already had (hand-authored), and does not replace it with Kong's" do
+        cases.each do |type, spec|
+          spec[:doc].each { |key, value| doc[key] = Marshal.load(Marshal.dump(value)) }
+          spec[:entry].call(doc)["id"] = "hand-authored"
+
+          render_change(entity_type: type, operation: "update", **spec[:plan])
+
+          expect(spec[:entry].call(doc)["id"]).to eq("hand-authored"), "#{type} update lost the existing id"
+        end
+      end
+
+      it "keeps a certificate's id on update" do
+        doc["certificates"] = [ { "id" => cert_id, "cert" => pem, "tags" => [ "x" ] } ]
+
+        render_change(entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+          before: { "id" => cert_id }, after: { "id" => cert_id, "tags" => %w[x y] })
+
+        expect(doc["certificates"][0]["id"]).to eq(cert_id)
+      end
+    end
+
     describe "credentials" do
       it "are deliberately never rendered (docs/DESIGN.md 1.7), and say so" do
         %w[keyauth_credential basicauth_credential].each do |type|

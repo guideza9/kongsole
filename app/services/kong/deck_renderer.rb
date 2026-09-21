@@ -37,7 +37,7 @@ module Kong
     def self.apply_change(doc, change_plan, resolver: Kong::DeckReadModelResolver.new(change_plan.kong_connection))
       assert_supported!(change_plan.entity_type)
       definition = Kong::EntityTypes.fetch(change_plan.entity_type)
-      refuse_scope_move!(change_plan)
+      refuse_parent_move!(change_plan, definition)
       list = container(doc, change_plan, resolver)
 
       case change_plan.operation
@@ -231,19 +231,33 @@ module Kong
     end
     private_class_method :scope_id
 
-    # Moving a plugin between scopes would mean removing it from one nesting and
-    # writing it into another; that is not implemented, and rendering it under
-    # either scope alone would be wrong. So it is refused, never approximated.
-    def self.refuse_scope_move!(plan)
-      return unless plan.entity_type == "plugin" && plan.operation == "update"
+    # Moving an entity between parents (a plugin between scopes, a route between
+    # services, a target between upstreams, an SNI between certificates) would
+    # mean removing it from one nesting and writing it into another. That is not
+    # implemented, and rendering it under either parent alone would be wrong
+    # (the old parent wins silently and the new reference is dropped). So an
+    # update whose parent differs -- between before and after, or between the
+    # parent the planner recorded and the one after names -- is refused, never
+    # approximated. An explicit nil in after counts as "no parent"; a key absent
+    # from after means unchanged.
+    def self.refuse_parent_move!(plan, definition)
+      return unless plan.operation == "update" && definition.deck_refs.any?
 
-      before_scope = %w[service route consumer].map { |scope| (ref = plan.before[scope]).is_a?(Hash) ? ref["id"] : nil }
-      after_scope = %w[service route consumer].map { |scope| scope_id(plan, scope) }
-      return if before_scope == after_scope
+      before_parents = definition.deck_refs.map { |ref| reference_id(plan.before[ref]) }
+      after_parents = definition.deck_refs.map { |ref| scope_id(plan, ref) }
+      recorded = plan.parent_kong_id.presence
+      moved = before_parents != after_parents || (recorded && after_parents.compact.any? && !after_parents.include?(recorded))
+      return unless moved
 
-      raise Unrenderable, "moving a plugin between scopes is not supported in PR mode; delete it and create it again"
+      noun = definition.deck_refs.size > 1 ? "scope" : definition.deck_refs.first
+      raise Unrenderable, "moving a #{plan.entity_type} between #{noun}s is not supported in PR mode; delete it and create it again"
     end
-    private_class_method :refuse_scope_move!
+    private_class_method :refuse_parent_move!
+
+    def self.reference_id(value)
+      value.is_a?(Hash) ? value["id"] : nil
+    end
+    private_class_method :reference_id
 
     # What a document may hold once it is a decK entry: no Kong bookkeeping, no
     # reference to the parent it is nested inside, and no nulls -- decK rejects

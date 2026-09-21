@@ -276,6 +276,21 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(response).to have_http_status(:bad_gateway)
       expect(JSON.parse(response.body)["error"]).to include("git push failed")
     end
+
+    it "scrubs a PEM block out of the 502 body when git's stderr echoes file content" do
+      connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword")
+      token = token_for(connection)
+      plan = create(:change_plan, kong_connection: connection, actor_kind: "agent")
+      allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+        .and_raise(Kong::GitClient::Error, "git push failed\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+      post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(JSON.parse(response.body)["error"]).to include("git push failed")
+      expect(response.body).not_to include("AAAA")
+      expect(response.body).not_to include("PRIVATE KEY-----")
+    end
   end
 
   describe "a non-String connection param" do

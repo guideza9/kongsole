@@ -169,6 +169,20 @@ RSpec.describe "ChangePlans (web)", type: :request do
     expect(flash[:alert]).to include("git push failed")
   end
 
+  it "scrubs a PEM block out of a git failure, since git's stderr can echo file content" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+      .and_raise(Kong::GitClient::Error, "git push failed: remote rejected\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("git push failed")
+    expect(flash[:alert]).not_to include("AAAA")
+    expect(flash[:alert]).not_to include("PRIVATE KEY-----\nAAAA")
+  end
+
   it "rejects deleting an admin-path entity without the typed confirmation" do
     sign_in
     kong_id = "77777777-7777-7777-7777-777777777777"

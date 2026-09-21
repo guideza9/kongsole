@@ -424,6 +424,42 @@ RSpec.describe Kong::ChangeApplier do
       expect(branches).not_to include("kongctl/#{plan.id}")
     end
 
+    it "refuses a connection with no select_tags before pulling the repo: decK would treat an empty filter as the whole workspace" do
+      [ [], [ "" ], [ " ", "" ], nil ].each do |tags|
+        pr_connection.update_columns(select_tags: tags)
+        plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+        expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /no select_tags.*whole workspace.*set select_tags on the connection first/)
+
+        expect(plan.reload.status).to eq("pending")
+        expect(Kong::GitClient).not_to have_received(:new)
+        expect(branches).not_to include("kongctl/#{plan.id}")
+      end
+    end
+
+    it "still applies for a connection that has select_tags" do
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      apply_pr(plan)
+
+      expect(plan.reload.status).to eq("applied")
+      expect(pushed_yaml(plan)).to include("managed-by-kongctl")
+    end
+
+    it "says where a serializer bug bites: the round-trip refusal carries the first-difference line" do
+      calls = 0
+      allow(Kong::DeckDocument).to receive(:verify_input!).and_wrap_original do |original, text|
+        calls += 1
+        calls == 1 ? original.call(text) : raise(Kong::DeckDocument::Unparseable, "the config YAML would not survive a re-render unchanged (first difference at line 7) -- rewrite it")
+      end
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /did not round-trip byte-for-byte.*first difference at line 7/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
     it "raises the deliberate NotImplementedError for a credential before it even pulls the repo" do
       consumer_id = "aaaaaaaa-0000-0000-0000-0000000000a3"
       plan = pr_plan(entity_type: "keyauth_credential", parent_kong_id: consumer_id, after: { "key" => "x" })

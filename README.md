@@ -68,7 +68,8 @@ section 15, M5), in **direct mode**:
   `{vault://env/cert-payments-key}` makes Kong read `CERT_PAYMENTS_KEY` from its own
   environment, so the key is in neither git nor Kong's database. A pasted PEM is rejected
   with an error (never silently dropped); the API answers 422. In PR mode a decK
-  placeholder `"${{ env "DECK_CERT_PAYMENTS_KEY" }}"` is also accepted (see M5c below).
+  placeholder is also accepted: enter it as `${{ env "DECK_CERT_PAYMENTS_KEY" }}`, and the tool writes it into the
+  config file double-quoted, `"${{ env "DECK_CERT_PAYMENTS_KEY" }}"` (see M5c below).
 - **Kong does not validate a vault reference**, and a missing variable makes TLS for that
   hostname fail. So applying a certificate whose key reference is new or changed requires
   confirming the variable exists on every Kong node (a checkbox on the review page,
@@ -92,9 +93,13 @@ a PR-mode plan for one is refused with a message saying so.
   byte for byte, and refuses if not — comments, YAML anchors and hand formatting cannot be preserved, and
   `deck gateway sync` deletes whatever is absent from the file. Keys it does not manage (`vaults`, `consumer_groups`,
   flat `routes`) are kept as they are. A file written by an older version of the tool is refused by this input guard
-  and must be rewritten in the current format: a bare `services:` line (what `rake kong:seed` wrote before M5c, which
+  and must be rewritten in the current format: a bare managed-collection line such as `services:` (what `rake kong:seed` wrote before M5c, which
   decK itself rejects) is tolerated once and dropped on the next render, but a bare `select_tags:` line or the old
-  single-quoted key placeholder are not.
+  single-quoted key placeholder are not. A file written by an older version can also be refused because an
+  empty-hash value (the old writer wrote `key:`, the new one renders `key: null`) or a value the old writer folded across
+  lines is not reproduced byte for byte: rewrite it once in the tool's format.
+- **A PR-mode connection must have `select_tags`.** Otherwise the apply is refused: decK reads an empty list as the whole
+  workspace, so `deck gateway sync` would delete everything absent from the file.
 - **decK must be installed** on the machine that applies (tested with 1.51.1 and 1.66.1). Set `DECK_BIN` to use a binary
   that is not on `PATH`. The tool runs `deck file validate` (offline) and `deck gateway diff` (read-only credential).
 - **The tool never sees a private key.** A certificate's `key` is a vault reference, or in PR mode a decK placeholder

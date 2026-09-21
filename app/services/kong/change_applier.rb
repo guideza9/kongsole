@@ -206,6 +206,7 @@ module Kong
     # branch is touched: the repo is left clean and the plan stays pending.
     def execute_pr!
       Kong::DeckRenderer.assert_supported!(@change_plan.entity_type)
+      require_select_tags!
 
       git = Kong::GitClient.new(connection: @connection).pull!
 
@@ -233,6 +234,19 @@ module Kong
         target_kong_id: @change_plan.target_kong_id)
     end
 
+    # decK reads an empty `select_tags` as "no filter": `deck gateway sync` would
+    # then treat the whole workspace as managed and delete everything the file
+    # does not list. So a PR-mode connection must name its tags; refused before
+    # the repo is pulled. (Kong::DeckDocument writes `select_tags: []` faithfully;
+    # this is the enforcement point.)
+    def require_select_tags!
+      return if Array(@connection.select_tags).map(&:to_s).reject(&:blank?).any?
+
+      raise Kong::ChangeGuardrails::Violation,
+        "this connection has no select_tags -- decK would sync the whole workspace and delete everything absent from " \
+        "the config file; set select_tags on the connection first"
+    end
+
     def read_yaml(git)
       path = git.working_dir.join(@connection.git_path)
       File.exist?(path) ? File.read(path) : nil
@@ -240,9 +254,11 @@ module Kong
 
     def verify_round_trip!(rendered)
       Kong::DeckDocument.verify_input!(rendered)
-    rescue Kong::DeckDocument::Unparseable
+    rescue Kong::DeckDocument::Unparseable => e
+      # e.message names only a line number (never a value), so an operator can see
+      # where a serializer bug bites.
       raise Kong::ChangeGuardrails::Violation,
-        "rendered YAML did not round-trip byte-for-byte -- refusing to push a diff that would be noisy to review"
+        "rendered YAML did not round-trip byte-for-byte (#{e.message}) -- refusing to push a diff that would be noisy to review"
     end
 
     def commit_message
