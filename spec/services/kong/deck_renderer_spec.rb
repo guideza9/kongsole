@@ -71,6 +71,31 @@ RSpec.describe Kong::DeckRenderer do
         expect(doc["services"]).to eq([ { "name" => "keep-me" } ])
       end
 
+      it "deliberately takes a deleted service's nested routes with it" do
+        doc["services"] = [ { "name" => "payments-api", "routes" => [ { "name" => "pay-route" } ] }, { "name" => "keep-me" } ]
+
+        render_change(entity_type: "service", operation: "delete", before: { "name" => "payments-api" })
+
+        expect(doc["services"]).to eq([ { "name" => "keep-me" } ])
+      end
+
+      it "renames a service onto a free name without leaving an orphan or a duplicate" do
+        doc["services"] = [ { "name" => "old-name", "port" => 80 }, { "name" => "other" } ]
+
+        render_change(entity_type: "service", operation: "update", before: { "name" => "old-name" }, after: { "name" => "new-name", "port" => 80 })
+
+        expect(doc["services"]).to eq([ { "name" => "new-name", "port" => 80 }, { "name" => "other" } ])
+      end
+
+      it "refuses a rename onto a name another service already has" do
+        doc["services"] = [ { "name" => "old-name" }, { "name" => "taken" } ]
+
+        expect {
+          render_change(entity_type: "service", operation: "update", before: { "name" => "old-name" }, after: { "name" => "taken" })
+        }.to raise_error(Kong::DeckRenderer::Unrenderable, /service taken is already in this YAML/)
+        expect(doc["services"]).to eq([ { "name" => "old-name" }, { "name" => "taken" } ])
+      end
+
       it "refuses rather than silently no-op when the update target isn't in the YAML" do
         expect {
           render_change(entity_type: "service", operation: "update", before: { "name" => "missing" }, after: { "name" => "missing" })
@@ -224,6 +249,66 @@ RSpec.describe Kong::DeckRenderer do
         }.to raise_error(Kong::DeckRenderer::Unrenderable, /scoped to service and consumer can't be written/)
       end
 
+      it "refuses to move a plugin from a service to global, rather than rewriting it under the old scope" do
+        doc["services"][0]["plugins"] = [ { "name" => "cors", "config" => {} } ]
+
+        expect {
+          render_change(entity_type: "plugin", operation: "update", before: { "name" => "cors", "service" => { "id" => svc_id } },
+            after: { "name" => "cors", "service" => nil, "route" => nil, "consumer" => nil, "config" => {} })
+        }.to raise_error(Kong::DeckRenderer::Unrenderable, /moving a plugin between scopes is not supported in PR mode; delete it and create it again/)
+        expect(doc["services"][0]["plugins"]).to eq([ { "name" => "cors", "config" => {} } ])
+        expect(doc).not_to have_key("plugins")
+      end
+
+      it "refuses to move a plugin from global to a service" do
+        doc["plugins"] = [ { "name" => "cors", "config" => {} } ]
+
+        expect {
+          render_change(entity_type: "plugin", operation: "update", before: { "name" => "cors", "service" => nil },
+            after: { "name" => "cors", "service" => { "id" => svc_id }, "config" => {} })
+        }.to raise_error(Kong::DeckRenderer::Unrenderable, /moving a plugin between scopes/)
+        expect(doc["plugins"]).to eq([ { "name" => "cors", "config" => {} } ])
+      end
+
+      it "refuses to move a plugin from one service to another" do
+        doc["services"] << { "name" => "billing" }
+        other_svc = "aaaaaaaa-0000-0000-0000-0000000000aa"
+        doc["services"][0]["plugins"] = [ { "name" => "cors", "config" => {} } ]
+
+        expect {
+          render_change(entity_type: "plugin", operation: "update", before: { "name" => "cors", "service" => { "id" => svc_id } },
+            after: { "name" => "cors", "service" => { "id" => other_svc }, "config" => {} })
+        }.to raise_error(Kong::DeckRenderer::Unrenderable, /moving a plugin between scopes/)
+        expect(doc["services"][0]["plugins"]).to eq([ { "name" => "cors", "config" => {} } ])
+        expect(doc["services"][1]).not_to have_key("plugins")
+      end
+
+      it "still updates a plugin whose scope is unchanged, including when the after JSON repeats it" do
+        doc["services"][0]["plugins"] = [ { "name" => "cors", "config" => {} } ]
+        scope = { "service" => { "id" => svc_id }, "route" => nil, "consumer" => nil }
+
+        render_change(entity_type: "plugin", operation: "update", before: { "name" => "cors" }.merge(scope),
+          after: { "name" => "cors", "config" => { "credentials" => true } }.merge(scope))
+
+        expect(doc["services"][0]["plugins"]).to eq([ { "name" => "cors", "config" => { "credentials" => true } } ])
+      end
+
+      it "resolves two same-named plugins on different scopes correctly, on update and on delete" do
+        doc["services"][0]["plugins"] = [ { "name" => "rate-limiting", "config" => { "minute" => 1 } } ]
+        doc["services"][0]["routes"][0]["plugins"] = [ { "name" => "rate-limiting", "config" => { "minute" => 2 } } ]
+        service_scope = { "service" => { "id" => svc_id } }
+        route_scope = { "route" => { "id" => route_id } }
+
+        render_change(entity_type: "plugin", operation: "update", before: { "name" => "rate-limiting" }.merge(route_scope),
+          after: { "name" => "rate-limiting", "config" => { "minute" => 20 } }.merge(route_scope))
+        expect(doc["services"][0]["routes"][0]["plugins"]).to eq([ { "name" => "rate-limiting", "config" => { "minute" => 20 } } ])
+        expect(doc["services"][0]["plugins"]).to eq([ { "name" => "rate-limiting", "config" => { "minute" => 1 } } ])
+
+        render_change(entity_type: "plugin", operation: "delete", before: { "name" => "rate-limiting" }.merge(service_scope))
+        expect(doc["services"][0]["plugins"]).to eq([])
+        expect(doc["services"][0]["routes"][0]["plugins"]).to eq([ { "name" => "rate-limiting", "config" => { "minute" => 20 } } ])
+      end
+
       it "finds a plugin to update or delete by name inside its scope" do
         doc["services"][0]["plugins"] = [ { "name" => "request-size-limiting", "config" => { "allowed_payload_size" => 8 } } ]
         scope = { "service" => { "id" => svc_id } }
@@ -312,6 +397,33 @@ RSpec.describe Kong::DeckRenderer do
         expect {
           render_change(entity_type: "sni", operation: "create", parent_kong_id: cert_id, after: { "name" => "b.example.internal" })
         }.to raise_error(Kong::DeckRenderer::Unrenderable, /the certificate #{cert_id} isn't in this YAML/)
+      end
+
+      it "refuses a certificate create whose id is already in the YAML, leaving exactly one entry" do
+        doc["certificates"] = [ { "id" => cert_id, "cert" => pem } ]
+
+        expect {
+          render_change(entity_type: "certificate", operation: "create", target_kong_id: cert_id, after: create_after)
+        }.to raise_error(Kong::DeckRenderer::Unrenderable, /certificate #{cert_id} is already in this YAML/)
+        expect(doc["certificates"].size).to eq(1)
+      end
+
+      it "refuses a CA certificate rename onto cert text another entry has, without echoing the PEM" do
+        other_pem = "-----BEGIN CERTIFICATE-----\nCCCC\n-----END CERTIFICATE-----\n"
+        doc["ca_certificates"] = [ { "cert" => pem }, { "cert" => other_pem } ]
+
+        expect {
+          render_change(entity_type: "ca_certificate", operation: "update", before: { "cert" => pem }, after: { "cert" => other_pem })
+        }.to raise_error(Kong::DeckRenderer::Unrenderable) { |error|
+          expect(error.message).to eq("ca_certificate with this cert is already in this YAML")
+          expect(error.message).not_to include("CCCC")
+        }
+        expect(doc["ca_certificates"]).to eq([ { "cert" => pem }, { "cert" => other_pem } ])
+      end
+
+      it "words a missing CA certificate without repeating itself or echoing the PEM" do
+        expect { render_change(entity_type: "ca_certificate", operation: "delete", before: { "cert" => pem }) }
+          .to raise_error(Kong::DeckRenderer::Unrenderable, /\Ano ca_certificate with this cert in this YAML/)
       end
 
       it "renders a CA certificate without an id (decK does not require one)" do

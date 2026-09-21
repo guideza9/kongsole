@@ -59,6 +59,7 @@ module Kong
     def self.apply_change(doc, change_plan, resolver: Kong::DeckReadModelResolver.new(change_plan.kong_connection))
       assert_supported!(change_plan.entity_type)
       definition = Kong::EntityTypes.fetch(change_plan.entity_type)
+      refuse_scope_move!(change_plan)
       list = container(doc, change_plan, resolver)
 
       case change_plan.operation
@@ -75,6 +76,7 @@ module Kong
       entry = renderable(plan.after, definition)
       if plan.entity_type == "certificate"
         entry["id"] = (plan.target_kong_id ||= SecureRandom.uuid)
+        raise Unrenderable, "certificate #{entry['id']} is already in this YAML" if list.any? { |existing| existing.is_a?(Hash) && existing["id"] == entry["id"] }
       else
         raise Unrenderable, "a #{plan.entity_type} needs a #{definition.deck_key} to be written into decK YAML" if identity_missing?(plan, definition)
         raise Unrenderable, "#{plan.entity_type} #{identity_label(plan, definition)} is already in this YAML" if find_index(list, plan, definition)
@@ -86,6 +88,7 @@ module Kong
 
     def self.update(list, plan, definition)
       index = locate!(list, plan, definition)
+      refuse_rename_onto_taken!(list, index, plan, definition)
       existing = list[index]
       incoming = plan.after.except(*MANAGED)
       incoming["snis"] = keep_sni_entries(existing["snis"], incoming["snis"]) if plan.entity_type == "certificate" && incoming["snis"].is_a?(Array)
@@ -93,6 +96,29 @@ module Kong
       list[index] = renderable(existing.merge(incoming), definition, keep_id: true)
     end
     private_class_method :update
+
+    # A rename (the identity field differs before and after) must not land on an
+    # identity another entry in the list already has: that would write two
+    # entries decK cannot tell apart. Never echoes a certificate's PEM.
+    def self.refuse_rename_onto_taken!(list, index, plan, definition)
+      if plan.entity_type == "ca_certificate"
+        old_cert = plan.before["cert"].to_s.strip
+        new_cert = plan.after["cert"].to_s.strip
+        return if old_cert.blank? || new_cert.blank? || old_cert == new_cert
+
+        taken = list.each_with_index.any? { |entry, i| i != index && entry.is_a?(Hash) && entry["cert"].to_s.strip == new_cert }
+        raise Unrenderable, "#{plan.entity_type} #{identity_label(plan, definition)} is already in this YAML" if taken
+      else
+        key = definition.deck_key
+        old_value = plan.before[key].presence
+        new_value = plan.after[key].presence
+        return if key == "id" || old_value.nil? || new_value.nil? || old_value == new_value
+
+        taken = list.each_with_index.any? { |entry, i| i != index && entry.is_a?(Hash) && entry[key] == new_value }
+        raise Unrenderable, "#{plan.entity_type} #{new_value} is already in this YAML" if taken
+      end
+    end
+    private_class_method :refuse_rename_onto_taken!
 
     def self.delete(list, plan, definition)
       list.delete_at(locate!(list, plan, definition))
@@ -111,7 +137,7 @@ module Kong
       raise Unrenderable, "can't tell which #{plan.entity_type} this is (no #{definition.deck_key})" if identity_missing?(plan, definition)
 
       find_index(list, plan, definition) ||
-        raise(Unrenderable, "no #{plan.entity_type} with #{definition.deck_key} #{identity_label(plan, definition)} in this YAML " \
+        raise(Unrenderable, "no #{plan.entity_type} #{identity_description(plan, definition)} in this YAML " \
           "-- it isn't managed through the config repo")
     end
     private_class_method :locate!
@@ -145,6 +171,11 @@ module Kong
       identity_value(plan, definition).blank?
     end
     private_class_method :identity_missing?
+
+    def self.identity_description(plan, definition)
+      plan.entity_type == "ca_certificate" ? identity_label(plan, definition) : "with #{definition.deck_key} #{identity_label(plan, definition)}"
+    end
+    private_class_method :identity_description
 
     def self.identity_label(plan, definition)
       plan.entity_type == "ca_certificate" ? "with this cert" : identity_value(plan, definition)
@@ -210,11 +241,31 @@ module Kong
     end
     private_class_method :parent_id
 
+    # Where the change places the entity: a delete removes what `before` says is
+    # there, a create or update writes what `after` says. An explicit nil in the
+    # chosen side means "no reference" -- it must not fall through to the other
+    # side, or a re-scoped plugin would be rendered into its old scope.
     def self.scope_id(plan, reference)
-      value = plan.after[reference] || plan.before[reference]
+      sides = plan.operation == "delete" ? [ plan.before, plan.after ] : [ plan.after, plan.before ]
+      side = sides.find { |attrs| attrs.key?(reference) }
+      value = side && side[reference]
       value.is_a?(Hash) ? value["id"] : nil
     end
     private_class_method :scope_id
+
+    # Moving a plugin between scopes would mean removing it from one nesting and
+    # writing it into another; that is not implemented, and rendering it under
+    # either scope alone would be wrong. So it is refused, never approximated.
+    def self.refuse_scope_move!(plan)
+      return unless plan.entity_type == "plugin" && plan.operation == "update"
+
+      before_scope = %w[service route consumer].map { |scope| (ref = plan.before[scope]).is_a?(Hash) ? ref["id"] : nil }
+      after_scope = %w[service route consumer].map { |scope| scope_id(plan, scope) }
+      return if before_scope == after_scope
+
+      raise Unrenderable, "moving a plugin between scopes is not supported in PR mode; delete it and create it again"
+    end
+    private_class_method :refuse_scope_move!
 
     # What a document may hold once it is a decK entry: no Kong bookkeeping, no
     # reference to the parent it is nested inside, and no nulls -- decK rejects
