@@ -58,7 +58,7 @@ RSpec.describe Kong::CiGate do
     end
 
     it "passes a real diff that only creates something" do
-      result = described_class.check(deck_diff: fixture("gateway_diff_creating.json"), admin_path_names: [ "admin-api" ])
+      result = described_class.check(deck_diff: fixture("gateway_diff_creating.json"), admin_path_names: [ "admin-api" ], delete_threshold: 0)
 
       expect(result).to be_passed
       expect(result.reasons).to eq([])
@@ -92,6 +92,48 @@ RSpec.describe Kong::CiGate do
       result = described_class.check(deck_diff: legacy, admin_path_names: [], delete_threshold: 0)
 
       expect(result.reasons.join).to match(/deletes 1 entities/)
+    end
+
+    it "blocks a diff whose changes hash has a bucket the gate does not know" do
+      diff = { "changes" => { "creating" => [], "removing" => [ { "name" => "x" } ] } }
+
+      result = described_class.check(deck_diff: diff, admin_path_names: [], delete_threshold: 99)
+
+      expect(result).not_to be_passed
+      expect(result.reasons.join).to match(/diff shape was not recognised/)
+    end
+
+    it "blocks a bucket that is not an array, and an entry that is not a hash" do
+      bad_bucket = { "changes" => { "deleting" => "svc-a" } }
+      bad_entry = { "changes" => { "deleting" => [ "svc-a" ] } }
+
+      [ bad_bucket, bad_entry ].each do |diff|
+        result = described_class.check(deck_diff: diff, admin_path_names: [], delete_threshold: 99)
+
+        expect(result).not_to be_passed
+        expect(result.reasons.join).to match(/diff shape was not recognised/)
+      end
+    end
+
+    it "blocks a diff in which decK reported errors, scrubbing any private key" do
+      pem = "-----BEGIN PRIVATE KEY-----
+abc
+-----END PRIVATE KEY-----"
+      diff = fixture("gateway_diff_creating.json").merge("errors" => [ "cannot reach admin api", pem ])
+
+      result = described_class.check(deck_diff: diff, admin_path_names: [], delete_threshold: 99)
+
+      expect(result).not_to be_passed
+      expect(result.reasons.join).to match(/decK reported errors in the diff: cannot reach admin api/)
+      expect(result.reasons.join).not_to include("BEGIN PRIVATE KEY")
+    end
+
+    it "passes a diff with an empty changes hash or empty buckets" do
+      [ { "changes" => {} }, { "changes" => { "creating" => [], "updating" => [], "deleting" => [] }, "errors" => [] } ].each do |diff|
+        result = described_class.check(deck_diff: diff, admin_path_names: [ "admin-api" ], delete_threshold: 0)
+
+        expect(result).to be_passed
+      end
     end
   end
 end
