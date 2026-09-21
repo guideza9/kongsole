@@ -3007,3 +3007,14 @@ git add README.md docs/DESIGN.md docs/DESIGN.html
 git commit -m "docs(m5c): PR mode renders every managed type; decK findings recorded" -m "Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```
 
+
+---
+
+## Amendments made during execution
+
+- Task 2 follow-ups: `CiGate` now blocks on an unrecognised diff shape, on decK `errors`, and on a diff with no `changes` key, because real decK ALWAYS emits `changes`.
+- Task 4 hardening: arrays are handled recursively; `\r` and control characters fall back to a quoted scalar; `_info` extras are preserved; an empty `select_tags` is written as `[]`.
+- Task 5 refusals: plugin scope moves, a duplicate certificate id, and a rename onto a taken identity.
+- Task 6: a minted certificate id is persisted only on success.
+- Task 7: non-JSON `deck gateway diff` output raises `DeckCli::Error`.
+- Task 10b: the decK placeholder is double-quoted (`key: "${{ env "DECK_X" }}"`), superseding the single-quoted form in the global constraints; see spec section 9.

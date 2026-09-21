@@ -139,8 +139,12 @@ YAML at all. Measured:
 | `key: "${{ env 'X' }}"` | FAIL | parses |
 | `key: "{vault://env/…}"` | PASS | parses |
 
-**M5c emits the single-quoted form.** It is the only form both decK and this
+**M5c emits the single-quoted form** *(superseded -- see the Outcome note below)*. It is the only form both decK and this
 tool's own parser accept, which the round-trip guard requires.
+
+> **Superseded (2026-09-21):** the live check (section 9) showed the
+> single-quoted form never delivers a usable key. M5c emits the double-quoted
+> form instead, and `DeckDocument.parse` uses a sentinel to read it.
 
 A related measurement: substituting a value containing real newlines produces
 `error converting YAML to JSON: yaml: line 27: could not find expected ':'`.
@@ -272,7 +276,8 @@ to private keys.
 
 The public `cert` PEM belongs in the YAML. The private key never does: `key` is
 always a reference, either `{vault://env/cert-x-key}` or, in PR mode,
-`'${{ env "DECK_CERT_X_KEY" }}'` in the single-quoted form §1.5 established.
+`"${{ env "DECK_CERT_X_KEY" }}"` in the double-quoted form (see §1.5 and §9: the
+single-quoted form never delivers a usable key).
 `Kong::CertificateKeyPolicy` already rejects anything else at plan and apply
 time, so the renderer inherits that guarantee rather than re-implementing it.
 
@@ -337,6 +342,23 @@ a 422, and the web re-renders with the message. Messages pass through
 ---
 
 ## 9. Open risk, to be settled by the live check
+
+> **Outcome (2026-09-21) — resolved.** Measured on real Kong 3.7 with decK
+> 1.51.1 and 1.66.1 (identical on both):
+>
+> - Single-quoted placeholder, with a literal-`\n` value or a real-newline
+>   value: **fails** on sync (`invalid key: pkey.new:load_key`).
+> - Double-quoted placeholder with a one-line literal-`\n` value: validates,
+>   syncs, Kong stores the key exactly, and the proxy serves the certificate.
+> - Double-quoted with real newlines: fails.
+> - Block scalar (`key: |`) with a pre-indented value: works, but couples the
+>   value to the document's indentation, so it is rejected as fragile.
+>
+> **Decision:** implement the double-quoted form, with a sentinel
+> pre-substitution in `DeckDocument.parse` (the form is not valid YAML for
+> Ruby's parser). The CI variable must hold the PEM on one line with literal
+> `\n` escapes. The withdrawal path described below is not taken. The text
+> below is kept as the original question.
 
 With the single-quoted placeholder, decK substitutes textually and the quotes
 survive, so `\n` escapes in the variable stay literal. Whether Kong then

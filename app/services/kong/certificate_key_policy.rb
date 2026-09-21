@@ -100,6 +100,27 @@ module Kong
       end.uniq
     end
 
+    # The decK placeholders a pending PR-mode plan sets or changes. A vault
+    # reference is checked by nobody, so env_vars_for asks the operator to
+    # confirm it; a placeholder is resolved by CI, where an unset variable makes
+    # `deck gateway sync` fail before anything reaches Kong. It needs no
+    # acknowledgement -- but the review page says so.
+    def self.deck_vars_for(change_plan)
+      return [] unless applies_to?(change_plan.entity_type) && change_plan.apply_mode == "pr"
+
+      fields =
+        case change_plan.operation
+        when "create" then KEY_FIELDS
+        when "update" then KEY_FIELDS & change_plan.diff.keys
+        else []
+        end
+
+      fields.filter_map do |field|
+        value = change_plan.after[field]
+        DECK_REFERENCE.match(value)[1] if deck_reference?(value)
+      end.uniq
+    end
+
     # Text that is about to be shown back to the operator (an error page that
     # re-renders what they typed) must never carry a private key they pasted.
     def self.scrub(text)

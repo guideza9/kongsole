@@ -66,6 +66,10 @@ module Api
         render json: { error: safe_message(e.message) }, status: :forbidden
       rescue Kong::Client::Error => e
         render json: { error: safe_message("Kong rejected this request: #{e.message}") }, status: :bad_gateway
+      rescue Kong::DeckCli::Error => e
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
+      rescue Kong::GitClient::Error => e
+        render json: { error: safe_message(e.message) }, status: :bad_gateway
       rescue NotImplementedError => e
         render json: { error: safe_message(e.message) }, status: :unprocessable_entity
       end

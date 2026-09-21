@@ -218,7 +218,7 @@ RSpec.describe Kong::ChangeApplier do
       sh!("git", "init", "--bare", "--initial-branch=main", bare_repo.to_s, chdir: @tmp)
       scratch = @tmp.join("seed")
       sh!("git", "clone", bare_repo.to_s, scratch.to_s, chdir: @tmp)
-      File.write(scratch.join("kong.yaml"), Kong::DeckRenderer.serialize(Kong::DeckRenderer.parse(nil, select_tags: [ "managed-by-kongctl" ])))
+      File.write(scratch.join("kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ])))
       sh!("git", "add", "-A", chdir: scratch)
       sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", chdir: scratch)
       sh!("git", "push", "origin", "main", chdir: scratch)
@@ -286,27 +286,188 @@ RSpec.describe Kong::ChangeApplier do
       expect(Kong::GitClient).not_to have_received(:new)
     end
 
-    it "raises a clear NotImplementedError for a PR-mode plan on any entity_type but service" do
-      plan = create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: "route", operation: "create",
-        target_kong_id: nil, before: {}, after: { "name" => "charge" }, base_updated_at: nil)
-
-      expect {
-        described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw").call
-      }.to raise_error(NotImplementedError, /not yet rendered/)
-      expect(Kong::GitClient).not_to have_received(:new)
+    def seed!(text)
+      dir = @tmp.join("reseed-#{SecureRandom.hex(4)}")
+      sh!("git", "clone", bare_repo.to_s, dir.to_s, chdir: @tmp)
+      File.write(dir.join("kong.yaml"), text)
+      sh!("git", "add", "-A", chdir: dir)
+      sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "reseed", chdir: dir)
+      sh!("git", "push", "origin", "main", chdir: dir)
     end
 
-    it "leaves an upstream or target PR-mode plan pending, untouched, until M5c renders them into decK YAML" do
-      %w[upstream target].each do |type|
-        plan = create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: type, operation: "create",
-          target_kong_id: nil, parent_kong_id: (type == "target" ? "aaaaaaaa-0000-0000-0000-00000000000a" : nil),
-          before: {}, after: { "name" => "x" }, base_updated_at: nil)
+    def tool_yaml(text)
+      Kong::DeckDocument.serialize(Kong::DeckDocument.parse(text, select_tags: [ "managed-by-kongctl" ]))
+    end
 
-        expect {
-          described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw").call
-        }.to raise_error(NotImplementedError)
+    def pushed_yaml(plan)
+      out, = Open3.capture3("git", "show", "kongctl/#{plan.id}:kong.yaml", chdir: bare_repo.to_s)
+      out
+    end
+
+    def branches
+      Open3.capture3("git", "branch", "-a", chdir: bare_repo.to_s).first
+    end
+
+    def apply_pr(plan, **extra)
+      described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw", **extra).call
+    end
+
+    def pr_plan(entity_type:, operation: "create", after: {}, before: {}, target_kong_id: nil, parent_kong_id: nil)
+      create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: entity_type, operation: operation,
+        target_kong_id: target_kong_id, parent_kong_id: parent_kong_id, before: before, after: after, base_updated_at: nil)
+    end
+
+    it "renders a route nested under its service, found through the read-model" do
+      service_id = "aaaaaaaa-0000-0000-0000-0000000000a1"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "service", kong_id: service_id, name: "orders")
+      seed!(tool_yaml("services:\n  - name: orders\n    url: http://orders:80\n"))
+      plan = pr_plan(entity_type: "route", after: { "name" => "orders-route", "paths" => [ "/o" ], "service" => { "id" => service_id } })
+
+      apply_pr(plan)
+
+      expect(YAML.safe_load(pushed_yaml(plan))["services"][0]["routes"]).to eq([ { "name" => "orders-route", "paths" => [ "/o" ] } ])
+      expect(plan.reload.status).to eq("applied")
+    end
+
+    it "renders an upstream, and a target nested under it" do
+      upstream_id = "aaaaaaaa-0000-0000-0000-0000000000a2"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "upstream", kong_id: upstream_id, name: "orders-up")
+      seed!(tool_yaml("upstreams:\n  - name: orders-up\n"))
+      plan = pr_plan(entity_type: "target", parent_kong_id: upstream_id, after: { "target" => "10.0.0.1:80", "weight" => 100 })
+
+      apply_pr(plan)
+
+      expect(YAML.safe_load(pushed_yaml(plan))["upstreams"][0]["targets"]).to eq([ { "target" => "10.0.0.1:80", "weight" => 100 } ])
+    end
+
+    it "mints the certificate id, persists it on the plan and records it in the audit event; a vault-referenced key still needs the acknowledgement" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => "{vault://env/cert-pay-key}", "snis" => [ "pay.example.internal" ] })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+      expect(plan.reload.status).to eq("pending")
+
+      result = apply_pr(plan, env_acknowledged: true)
+
+      minted = plan.reload.target_kong_id
+      expect(minted).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+      expect(result.audit_event.target_kong_id).to eq(minted)
+      expect(result.audit_event.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+      certificate = YAML.safe_load(pushed_yaml(plan))["certificates"][0]
+      expect(certificate).to include("id" => minted, "key" => "{vault://env/cert-pay-key}", "snis" => [ { "name" => "pay.example.internal" } ])
+    end
+
+    it "does not persist a freshly minted certificate id when a later step fails: the plan is failed with no target_kong_id" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      allow(Kong::DeckCli).to receive(:validate).and_raise(Kong::DeckCli::Error, "deck file validate failed: boom")
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckCli::Error)
+
+      expect(plan.target_kong_id).to be_nil
+      expect(plan.reload.status).to eq("failed")
+      expect(plan.target_kong_id).to be_nil
+    end
+
+    it "does not persist a minted certificate id when a refusal follows the render: the plan stays pending" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+      allow(Kong::DeckDocument).to receive(:serialize).and_raise(Kong::DeckDocument::Unparseable, "cannot reproduce")
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckDocument::Unparseable)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(plan.target_kong_id).to be_nil
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "renders a decK placeholder double-quoted for decK and asks for no acknowledgement: CI resolves the variable, not this tool" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      apply_pr(plan)
+
+      expect(pushed_yaml(plan)).to include(%q(key: "${{ env "DECK_CERT_PAY_KEY" }}"))
+      expect(Kong::DeckCli).to have_received(:validate)
+    end
+
+    it "keeps what it does not manage: vaults, consumer_groups and flat routes survive an edit" do
+      seed!(tool_yaml("vaults:\n  - name: env\n    prefix: env\nconsumer_groups:\n  - name: gold-tier\nroutes:\n  - name: flat-route\n"))
+      plan = pr_plan(entity_type: "service", after: { "name" => "orders", "url" => "http://orders:80" })
+
+      apply_pr(plan)
+
+      out = pushed_yaml(plan)
+      expect(out).to include("vaults:", "gold-tier", "flat-route", "name: orders")
+    end
+
+    it "refuses a config file it could not reproduce, before touching the repo: nothing pushed, plan still pending" do
+      seed!("_format_version: '3.0'\n_info:\n  select_tags: [managed-by-kongctl]\nservices:\n  - {name: orders, url: 'http://orders:80'}\n")
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckDocument::Unparseable, /would not survive a re-render/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+      expect(Kong::DeckCli).not_to have_received(:validate)
+    end
+
+    it "refuses a change it cannot render faithfully (an unnamed route), before touching the repo" do
+      service_id = "aaaaaaaa-0000-0000-0000-0000000000a1"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "service", kong_id: service_id, name: "orders")
+      seed!(tool_yaml("services:\n  - name: orders\n"))
+      plan = pr_plan(entity_type: "route", after: { "paths" => [ "/o" ], "service" => { "id" => service_id } })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckRenderer::Unrenderable, /a route needs a name/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "refuses a connection with no select_tags before pulling the repo: decK would treat an empty filter as the whole workspace" do
+      [ [], [ "" ], [ " ", "" ], nil ].each do |tags|
+        pr_connection.update_columns(select_tags: tags)
+        plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+        expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /no select_tags.*whole workspace.*set select_tags on the connection first/)
+
         expect(plan.reload.status).to eq("pending")
+        expect(Kong::GitClient).not_to have_received(:new)
+        expect(branches).not_to include("kongctl/#{plan.id}")
       end
+    end
+
+    it "still applies for a connection that has select_tags" do
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      apply_pr(plan)
+
+      expect(plan.reload.status).to eq("applied")
+      expect(pushed_yaml(plan)).to include("managed-by-kongctl")
+    end
+
+    it "says where a serializer bug bites: the round-trip refusal carries the first-difference line" do
+      calls = 0
+      allow(Kong::DeckDocument).to receive(:verify_input!).and_wrap_original do |original, text|
+        calls += 1
+        calls == 1 ? original.call(text) : raise(Kong::DeckDocument::Unparseable, "the config YAML would not survive a re-render unchanged (first difference at line 7) -- rewrite it")
+      end
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /did not round-trip byte-for-byte.*first difference at line 7/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "raises the deliberate NotImplementedError for a credential before it even pulls the repo" do
+      consumer_id = "aaaaaaaa-0000-0000-0000-0000000000a3"
+      plan = pr_plan(entity_type: "keyauth_credential", parent_kong_id: consumer_id, after: { "key" => "x" })
+
+      expect { apply_pr(plan) }.to raise_error(NotImplementedError, /keyauth_credential is deliberately never rendered/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(Kong::GitClient).not_to have_received(:new)
     end
   end
 

@@ -145,6 +145,44 @@ RSpec.describe "ChangePlans (web)", type: :request do
     end
   end
 
+  it "shows decK's own message instead of a 500 when deck rejects the rendered YAML, scrubbed of any key" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+      .and_raise(Kong::DeckCli::Error, "deck file validate failed: routes.0: name is required\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("name is required")
+    expect(flash[:alert]).not_to include("AAAA")
+  end
+
+  it "shows a git failure the same way" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call).and_raise(Kong::GitClient::Error, "git push failed: remote rejected")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("git push failed")
+  end
+
+  it "scrubs a PEM block out of a git failure, since git's stderr can echo file content" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+      .and_raise(Kong::GitClient::Error, "git push failed: remote rejected\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("git push failed")
+    expect(flash[:alert]).not_to include("AAAA")
+    expect(flash[:alert]).not_to include("PRIVATE KEY-----\nAAAA")
+  end
+
   it "rejects deleting an admin-path entity without the typed confirmation" do
     sign_in
     kong_id = "77777777-7777-7777-7777-777777777777"
@@ -237,7 +275,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
       sh!("git", "init", "--bare", "--initial-branch=main", bare_repo.to_s, chdir: @tmp)
       scratch = @tmp.join("seed")
       sh!("git", "clone", bare_repo.to_s, scratch.to_s, chdir: @tmp)
-      File.write(scratch.join("kong.yaml"), Kong::DeckRenderer.serialize(Kong::DeckRenderer.parse(nil, select_tags: [ "managed-by-kongctl" ])))
+      File.write(scratch.join("kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ])))
       sh!("git", "add", "-A", chdir: scratch)
       sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", chdir: scratch)
       sh!("git", "push", "origin", "main", chdir: scratch)
@@ -286,6 +324,26 @@ RSpec.describe "ChangePlans (web)", type: :request do
       expect(response.body).to include("CERT_PAY_KEY")
       expect(response.body).to include('name="acknowledge_env_vars"')
       expect(response.body).to include("Kong doesn").and include("check")
+    end
+
+    it "tells the operator CI resolves a decK placeholder, and asks for no acknowledgement" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", entity_type: "certificate", operation: "create", target_kong_id: nil,
+        before: {}, after: { "cert" => fixture[:cert_pem], "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("DECK_CERT_PAY_KEY", "CI environment", "ONE line", 'literal \n escapes', "shows the certificate")
+      expect(response.body).not_to include("acknowledge_env_vars")
+    end
+
+    it "shows no decK note for a vault reference (that one asks for the acknowledgement instead), or for a direct-mode plan" do
+      sign_in
+
+      get change_plan_path(create_cert_plan)
+
+      expect(response.body).not_to include("CI environment")
     end
 
     it "shows no such checkbox for an edit that leaves the key alone, or once applied" do
