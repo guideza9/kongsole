@@ -11,7 +11,8 @@ module Kong
 
     Result = Struct.new(:change_plan, :audit_event, keyword_init: true)
 
-    def initialize(change_plan:, client:, actor_username:, actor_operator: nil, confirmation_name: nil, secret: nil)
+    def initialize(change_plan:, client:, actor_username:, actor_operator: nil, confirmation_name: nil, secret: nil,
+                    env_acknowledged: false)
       @change_plan = change_plan
       @connection = change_plan.kong_connection
       @client = client
@@ -19,6 +20,8 @@ module Kong
       @actor_operator = actor_operator
       @confirmation_name = confirmation_name
       @secret = secret
+      @env_acknowledged = env_acknowledged == true
+      @env_vars = []
       @definition = Kong::EntityTypes.fetch(change_plan.entity_type)
     end
 
@@ -32,6 +35,14 @@ module Kong
         target: @change_plan.operation == "create" ? nil : { "id" => @change_plan.target_kong_id },
         scope_kong_id: @change_plan.operation == "create" ? @change_plan.parent_kong_id : nil
       )
+
+      # M5b: re-check the key policy against the *current* apply_mode (a plan
+      # can sit pending 15 minutes) and demand the env-var acknowledgement.
+      Kong::CertificateKeyPolicy.check!(
+        @change_plan.after, entity_type: @change_plan.entity_type, apply_mode: @connection.apply_mode,
+        operation: @change_plan.operation
+      )
+      require_env_acknowledgement!
 
       if @change_plan.operation == "delete"
         Kong::ChangeGuardrails.check_delete_confirmation!(
@@ -57,25 +68,40 @@ module Kong
 
     private
 
+    # A nested type (target) resolves every path through its upstream, which
+    # the planner stored on the plan as parent_kong_id.
+    def member_path
+      @definition.member_path(@change_plan.target_kong_id, parent_kong_id: @change_plan.parent_kong_id)
+    end
+
     def check_optimistic_lock!
       current = fetch_current
       return if @change_plan.base_updated_at.blank?
       return if current["updated_at"].blank?
-      return if Time.zone.at(current["updated_at"]) == @change_plan.base_updated_at
+      return if same_instant?(Time.zone.at(current["updated_at"]), @change_plan.base_updated_at)
 
       raise Kong::ChangeGuardrails::Violation,
-        "this service was changed by someone else since this plan was proposed -- review the new state and re-propose"
+        "this #{@change_plan.entity_type} was changed by someone else since this plan was proposed -- review the new state and re-propose"
+    end
+
+    # Most Kong entities stamp updated_at in whole seconds, but a target's
+    # carries milliseconds (1789914728.226). The plan's copy has been through
+    # the database's microsecond rounding while this side is a bare float, so
+    # an exact == never matches for those. Milliseconds is Kong's own finest
+    # resolution, so comparing there loses nothing real.
+    def same_instant?(a, b)
+      a.round(3) == b.round(3)
     end
 
     def fetch_current
-      response = @client.get("#{@definition.list_path}/#{@change_plan.target_kong_id}")
+      response = @client.get(member_path)
       body = response.body
       body.is_a?(String) ? JSON.parse(body) : body
     end
 
     def execute!
       if @change_plan.apply_mode == "pr"
-        execute_pr!
+        execute_pr_discarding_unsaved_id!
       else
         case @change_plan.operation
         when "create" then execute_create!
@@ -93,7 +119,8 @@ module Kong
     def execute_create!
       response = @client.post(@definition.create_path(parent_kong_id: @change_plan.parent_kong_id), body: @change_plan.after)
       raw = parse(response)
-      Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      refresh_parent_certificate(entity.parent_kong_id) if @change_plan.entity_type == "sni"
     end
 
     # Sends only the fields that actually changed, not the whole merged
@@ -105,33 +132,90 @@ module Kong
     # value this plan happened to read.
     def execute_update!
       body = @change_plan.diff.each_with_object({}) { |(field, change), acc| acc[field] = change["to"] }
-      response = @client.patch("#{@definition.list_path}/#{@change_plan.target_kong_id}", body: body)
+      response = @client.patch(member_path, body: body)
       raw = parse(response)
-      Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
+      refresh_parents_after_sni_update(entity) if @change_plan.entity_type == "sni"
+    end
+
+    # Re-pointing an SNI moves it between certificates: the new parent gains a
+    # name/SNI and the old one loses it, so both need refreshing.
+    def refresh_parents_after_sni_update(entity)
+      refresh_parent_certificate(entity.parent_kong_id)
+      previous = @change_plan.before.dig("certificate", "id")
+      refresh_parent_certificate(previous) if previous.present? && previous != entity.parent_kong_id
     end
 
     def execute_delete!
-      @client.delete("#{@definition.list_path}/#{@change_plan.target_kong_id}")
+      @client.delete(member_path)
       KongEntity.active
         .where(kong_connection: @connection, entity_type: @change_plan.entity_type, kong_id: @change_plan.target_kong_id)
         .update_all(deleted_at: Time.current)
+      soft_delete_children
+      refresh_parent_certificate(@change_plan.before.dig("certificate", "id") || @change_plan.parent_kong_id) if @change_plan.entity_type == "sni"
+    end
+
+    # Kong accepts a broken {vault://env/...} reference silently and the
+    # hostname's TLS then fails (M5b spec section 1), and this tool cannot see
+    # Kong's environment. So the operator (or agent) must state, out of band,
+    # that the variable exists on every node.
+    def require_env_acknowledgement!
+      @env_vars = Kong::CertificateKeyPolicy.env_vars_for(@change_plan)
+      return if @env_vars.empty? || @env_acknowledged
+
+      raise Kong::ChangeGuardrails::Violation,
+        "this makes Kong read #{@env_vars.join(', ')} -- confirm that variable is set on every Kong node " \
+        "(acknowledge_env_vars) before applying; Kong won't notice if it is missing"
+    end
+
+    # After a child write, the parent's derived name/logical_key may have moved
+    # (a certificate is named by its first SNI). The write already happened, so
+    # a failed refresh must not fail the apply -- the next sync corrects it.
+    def refresh_parent_certificate(parent_kong_id)
+      return if parent_kong_id.blank?
+
+      Kong::EntitySync.sync_one(connection: @connection, client: @client, entity_type: "certificate", kong_id: parent_kong_id)
+    rescue Kong::Client::Error, JSON::ParserError, KeyError, ActiveRecord::ActiveRecordError => e
+      Rails.logger.warn("kong: parent certificate refresh failed after a child write (#{e.class}: #{e.message})")
+      nil
+    end
+
+    # Kong deletes a certificate's SNIs and an upstream's targets with it;
+    # without this the read-model would keep listing them until the next sync.
+    def soft_delete_children
+      KongEntity.active
+        .where(kong_connection: @connection, parent_kong_id: @change_plan.target_kong_id)
+        .update_all(deleted_at: Time.current)
+    end
+
+    # The renderer mints a certificate create's id onto the plan in memory. If
+    # anything after that raises, nothing was pushed, so the id must not be
+    # written by whatever saves the plan next (the rescue that marks it failed).
+    def execute_pr_discarding_unsaved_id!
+      execute_pr!
+    rescue StandardError
+      @change_plan.restore_attributes(%w[target_kong_id])
+      raise
     end
 
     # docs/DESIGN.md section 6, "เส้นทางของ PR mode" steps 2-8: pull the
-    # config repo, mutate + serialize its YAML (rules ก-ค), validate + diff
-    # against Kong with the read-only credential already in hand, commit to
-    # a branch, and push. No PR-host API call -- see Kong::GitClient.
+    # config repo, refuse a file the tool could not reproduce, mutate + serialize
+    # its YAML (rules ก-ค), validate + diff against Kong with the read-only
+    # credential already in hand, commit to a branch, and push. No PR-host API
+    # call -- see Kong::GitClient. Everything that can refuse does so before the
+    # branch is touched: the repo is left clean and the plan stays pending.
     def execute_pr!
-      unless @change_plan.entity_type == "service"
-        raise NotImplementedError, "PR-mode apply only supports service changes today (#{@change_plan.entity_type} not yet rendered into decK YAML)"
-      end
+      Kong::DeckRenderer.assert_supported!(@change_plan.entity_type)
+      require_select_tags!
 
       git = Kong::GitClient.new(connection: @connection).pull!
 
-      doc = Kong::DeckRenderer.parse(read_yaml(git), select_tags: @connection.select_tags)
+      text = read_yaml(git)
+      Kong::DeckDocument.verify_input!(text)
+      doc = Kong::DeckDocument.parse(text, select_tags: @connection.select_tags)
       Kong::DeckRenderer.apply_change(doc, @change_plan)
-      rendered = Kong::DeckRenderer.serialize(doc)
-      verify_round_trip!(doc, rendered)
+      rendered = Kong::DeckDocument.serialize(doc)
+      verify_round_trip!(rendered)
 
       branch = "#{BRANCH_PREFIX}/#{@change_plan.id}"
       git.checkout_branch!(branch)
@@ -144,7 +228,23 @@ module Kong
       commit_sha = git.commit!(commit_message, author_name: @actor_username)
       git.push!(branch)
 
-      @change_plan.update!(commit_sha: commit_sha, deck_diff: deck_diff, pr_state: "branch_pushed")
+      # A certificate create's minted id (target_kong_id) was assigned in memory
+      # by Kong::DeckRenderer; it is written only here, once the branch is pushed.
+      @change_plan.update!(commit_sha: commit_sha, deck_diff: deck_diff, pr_state: "branch_pushed",
+        target_kong_id: @change_plan.target_kong_id)
+    end
+
+    # decK reads an empty `select_tags` as "no filter": `deck gateway sync` would
+    # then treat the whole workspace as managed and delete everything the file
+    # does not list. So a PR-mode connection must name its tags; refused before
+    # the repo is pulled. (Kong::DeckDocument writes `select_tags: []` faithfully;
+    # this is the enforcement point.)
+    def require_select_tags!
+      return if Array(@connection.select_tags).map(&:to_s).reject(&:blank?).any?
+
+      raise Kong::ChangeGuardrails::Violation,
+        "this connection has no select_tags -- decK would sync the whole workspace and delete everything absent from " \
+        "the config file; set select_tags on the connection first"
     end
 
     def read_yaml(git)
@@ -152,16 +252,17 @@ module Kong
       File.exist?(path) ? File.read(path) : nil
     end
 
-    def verify_round_trip!(doc, rendered)
-      reparsed = Kong::DeckRenderer.parse(rendered, select_tags: @connection.select_tags)
-      return if Kong::DeckRenderer.serialize(reparsed) == rendered
-
+    def verify_round_trip!(rendered)
+      Kong::DeckDocument.verify_input!(rendered)
+    rescue Kong::DeckDocument::Unparseable => e
+      # e.message names only a line number (never a value), so an operator can see
+      # where a serializer bug bites.
       raise Kong::ChangeGuardrails::Violation,
-        "rendered YAML did not round-trip byte-for-byte -- refusing to push a diff that would be noisy to review"
+        "rendered YAML did not round-trip byte-for-byte (#{e.message}) -- refusing to push a diff that would be noisy to review"
     end
 
     def commit_message
-      summary = "#{@change_plan.operation} #{@change_plan.entity_type} #{@change_plan.before['name'] || @change_plan.after['name']}"
+      summary = "#{@change_plan.operation} #{@change_plan.entity_type} #{@change_plan.entity_label}"
       lines = [ summary, "", "Plan: #{@change_plan.id}" ]
       lines << "Changed-by: #{@actor_operator}" if @actor_operator.present?
       lines.join("\n")
@@ -182,8 +283,9 @@ module Kong
         operation: @change_plan.operation,
         entity_type: @change_plan.entity_type,
         target_kong_id: @change_plan.target_kong_id,
-        entity_name: @change_plan.before["name"] || @change_plan.after["name"],
-        diff: @change_plan.diff
+        entity_name: @change_plan.entity_label,
+        diff: @change_plan.diff,
+        context: @env_vars.present? ? { "acknowledged_env_vars" => @env_vars } : {}
       )
     end
   end

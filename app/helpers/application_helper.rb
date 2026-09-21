@@ -36,7 +36,10 @@ module ApplicationHelper
     "not_found" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
     "rate_limited" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" },
     "unavailable" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "error" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" }
+    "error" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
+    "expired" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
+    "critical" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
+    "warning" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" }
   }.freeze
   STATUS_TONE_DEFAULT = { dot: "#6c6c67", bg: "#f0f0ee", text: "#3a3a36" }.freeze
 
@@ -50,7 +53,12 @@ module ApplicationHelper
     "consumer" => %w[Consumer Consumers],
     "keyauth_credential" => %w[Key-auth\ credential Key-auth\ credentials],
     "basicauth_credential" => %w[Basic-auth\ credential Basic-auth\ credentials],
-    "plugin" => %w[Plugin Plugins]
+    "plugin" => %w[Plugin Plugins],
+    "upstream" => %w[Upstream Upstreams],
+    "target" => %w[Target Targets],
+    "certificate" => %w[Certificate Certificates],
+    "ca_certificate" => [ "CA certificate", "CA certificates" ],
+    "sni" => %w[SNI SNIs]
   }.freeze
 
   def entity_type_label(entity_type, count: nil)
@@ -144,6 +152,23 @@ module ApplicationHelper
       key && changed_keys.include?(key) ? content_tag(:span, highlighted.html_safe, class: "json-diff-#{tone}") : highlighted
     end
     lines.join("\n").html_safe # rubocop:disable Rails/OutputSafety -- every matched token is escaped above; unmatched JSON punctuation needs no escaping
+  end
+
+  # M5b: the badge and the words for a certificate's expiry. A dash for
+  # anything with no not_after (every non-certificate entity, or a PEM that
+  # would not parse) -- never a guess.
+  def expiry_badge(entity)
+    status = entity.expiry_status
+    return content_tag(:span, "—", style: "color: var(--color-ink-faint)") unless status
+
+    status_badge(status)
+  end
+
+  def expiry_when(entity)
+    return nil unless entity.not_after
+
+    distance = time_ago_in_words(entity.not_after)
+    entity.not_after <= Time.current ? "#{distance} ago" : "in #{distance}"
   end
 
   private

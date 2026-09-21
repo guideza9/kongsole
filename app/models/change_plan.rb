@@ -21,6 +21,12 @@ class ChangePlan < ApplicationRecord
     Time.current > expires_at
   end
 
+  # What to call the entity this plan changes: before's name for an
+  # update/delete, after's for a create; a target's host:port.
+  def entity_label
+    Kong::EntityTypes.label(before, after)
+  end
+
   def delete?
     operation == "delete"
   end

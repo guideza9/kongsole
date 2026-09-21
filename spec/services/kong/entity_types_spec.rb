@@ -1,0 +1,183 @@
+require "rails_helper"
+
+RSpec.describe Kong::EntityTypes do
+  UP_ID = "aaaaaaaa-0000-0000-0000-000000000001"
+  TARGET_ID = "bbbbbbbb-0000-0000-0000-000000000002"
+
+  describe "a flat entity type (service)" do
+    let(:definition) { described_class.fetch("service") }
+
+    it "is not nested" do
+      expect(definition).not_to be_nested
+    end
+
+    it "resolves its collection and member paths without a parent" do
+      expect(definition.collection_path).to eq("/services")
+      expect(definition.member_path(TARGET_ID)).to eq("/services/#{TARGET_ID}")
+    end
+
+    it "ignores a parent id it doesn't need" do
+      expect(definition.member_path(TARGET_ID, parent_kong_id: UP_ID)).to eq("/services/#{TARGET_ID}")
+    end
+  end
+
+  describe "upstream" do
+    it "is a flat type with /upstreams as its collection" do
+      definition = described_class.fetch("upstream")
+
+      expect(definition).not_to be_nested
+      expect(definition.collection_path).to eq("/upstreams")
+      expect(definition.member_path(UP_ID)).to eq("/upstreams/#{UP_ID}")
+      expect(definition.parent_type).to be_nil
+    end
+  end
+
+  # Kong 3.7 has no global GET /targets (404 -- verified against the local
+  # stack), so a target's list, get, patch, and delete all live under its
+  # upstream, unlike credentials, which only nest their create path.
+  describe "target" do
+    let(:definition) { described_class.fetch("target") }
+
+    it "is nested under an upstream" do
+      expect(definition).to be_nested
+      expect(definition.parent_type).to eq("upstream")
+    end
+
+    it "resolves collection, member, and create paths under the parent upstream" do
+      expect(definition.collection_path(parent_kong_id: UP_ID)).to eq("/upstreams/#{UP_ID}/targets")
+      expect(definition.member_path(TARGET_ID, parent_kong_id: UP_ID)).to eq("/upstreams/#{UP_ID}/targets/#{TARGET_ID}")
+      expect(definition.create_path(parent_kong_id: UP_ID)).to eq("/upstreams/#{UP_ID}/targets")
+    end
+
+    it "refuses to build a path without its parent, rather than emitting /upstreams//targets" do
+      expect { definition.collection_path }.to raise_error(ArgumentError, /parent_kong_id/)
+      expect { definition.member_path(TARGET_ID) }.to raise_error(ArgumentError, /parent_kong_id/)
+    end
+  end
+
+  # Kong exposes POST /schemas/:name/validate, so a bad healthchecks block is
+  # caught at plan time with per-field errors instead of failing at apply.
+  describe "schema_name (Kong's /schemas/:name/validate)" do
+    it "is set for upstream and target only" do
+      expect(described_class.fetch("upstream").schema_name).to eq("upstreams")
+      expect(described_class.fetch("target").schema_name).to eq("targets")
+    end
+
+    it "is left nil for types M5a doesn't pre-validate, so their behaviour is unchanged" do
+      %w[service route consumer plugin keyauth_credential basicauth_credential].each do |type|
+        expect(described_class.fetch(type).schema_name).to be_nil
+      end
+    end
+  end
+
+  # A target has no `name` -- its identity is host:port -- so anything that
+  # shows an entity to a human (audit trail, commit message, typed-name
+  # delete confirmation) resolves it here instead of reading ["name"].
+  describe ".label" do
+    it "is the entity's name" do
+      expect(described_class.label({ "name" => "orders" })).to eq("orders")
+    end
+
+    it "is a target's host:port when it has no name" do
+      expect(described_class.label({ "target" => "10.0.0.1:8080", "weight" => 100 })).to eq("10.0.0.1:8080")
+    end
+
+    it "prefers name over target" do
+      expect(described_class.label({ "name" => "n", "target" => "t" })).to eq("n")
+    end
+
+    it "takes the first present label across several documents (before, then after)" do
+      expect(described_class.label({}, { "target" => "10.0.0.1:8080" })).to eq("10.0.0.1:8080")
+      expect(described_class.label(nil, { "name" => "x" })).to eq("x")
+    end
+
+    it "is nil when nothing identifies the entity" do
+      expect(described_class.label({}, nil)).to be_nil
+      expect(described_class.label({ "name" => "" })).to be_nil
+    end
+  end
+
+  describe "certificate types (M5b)" do
+    it "registers certificate, sni and ca_certificate as flat collections with schema names" do
+      { "certificate" => [ "/certificates", "certificates" ],
+        "sni" => [ "/snis", "snis" ],
+        "ca_certificate" => [ "/ca_certificates", "ca_certificates" ] }.each do |type, (path, schema)|
+        definition = described_class.fetch(type)
+        expect(definition).not_to be_nested
+        expect(definition.collection_path).to eq(path)
+        expect(definition.member_path("abc")).to eq("#{path}/abc")
+        expect(definition.schema_name).to eq(schema)
+      end
+    end
+
+    it "makes an sni a flat child whose create body carries its certificate" do
+      sni = described_class.fetch("sni")
+
+      expect(sni.parent_type).to eq("certificate")
+      expect(sni.parent_in_body).to be(true)
+      expect(sni.requires_parent?).to be(true)
+      expect(sni.create_path).to eq("/snis")
+    end
+
+    it "does not make other types require a parent by accident" do
+      expect(described_class.fetch("certificate").requires_parent?).to be(false)
+      expect(described_class.fetch("route").requires_parent?).to be(false)
+      expect(described_class.fetch("target").requires_parent?).to be(true) # nested
+    end
+
+    it "labels a certificate by its first SNI in sorted order, since Kong gives it no name" do
+      expect(described_class.label({ "snis" => %w[b.example a.example] })).to eq("a.example")
+      expect(described_class.label({ "snis" => [] })).to be_nil
+    end
+  end
+
+  describe "existing credential types" do
+    it "keep their flat list path for reads and only nest the create path" do
+      definition = described_class.fetch("keyauth_credential")
+
+      expect(definition).not_to be_nested
+      expect(definition.member_path(TARGET_ID)).to eq("/key-auths/#{TARGET_ID}")
+      expect(definition.create_path(parent_kong_id: UP_ID)).to eq("/consumers/#{UP_ID}/key-auth")
+    end
+  end
+
+  describe "decK facts (M5c)" do
+    it "describes every type that is rendered into decK YAML" do
+      expected = {
+        "service" => [ "services", "name", [] ],
+        "route" => [ "routes", "name", %w[service] ],
+        "consumer" => [ "consumers", "username", [] ],
+        "plugin" => [ "plugins", "name", %w[service route consumer] ],
+        "upstream" => [ "upstreams", "name", [] ],
+        "target" => [ "targets", "target", %w[upstream] ],
+        "certificate" => [ "certificates", "id", [] ],
+        "sni" => [ "snis", "name", %w[certificate] ],
+        "ca_certificate" => [ "ca_certificates", "id", [] ]
+      }
+
+      expected.each do |type, (collection, key, refs)|
+        definition = Kong::EntityTypes.fetch(type)
+
+        expect([ definition.deck_collection, definition.deck_key, definition.deck_refs ]).to eq([ collection, key, refs ]), "wrong decK facts for #{type}"
+        expect(definition).to be_deck_supported
+      end
+    end
+
+    it "never renders a credential (docs/DESIGN.md 1.7: decK would sync password hashes back and break logins)" do
+      %w[keyauth_credential basicauth_credential].each do |type|
+        definition = Kong::EntityTypes.fetch(type)
+
+        expect(definition).not_to be_deck_supported
+        expect(definition.deck_refs).to eq([])
+      end
+    end
+
+    it "leaves no registered type undecided, so a new type has to choose" do
+      undecided = Kong::EntityTypes::DEFINITIONS.reject do |type, definition|
+        definition.deck_supported? || %w[keyauth_credential basicauth_credential].include?(type)
+      end
+
+      expect(undecided.keys).to eq([])
+    end
+  end
+end

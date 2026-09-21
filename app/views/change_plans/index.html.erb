@@ -29,7 +29,7 @@
               <% end %>
             </td>
             <td class="px-3 py-2.5"><span class="tag"><%= plan.operation %></span></td>
-            <td class="px-3 py-2.5"><%= link_to (plan.before["name"] || plan.after["name"]), change_plan_path(plan) %></td>
+            <td class="px-3 py-2.5"><%= link_to plan.entity_label, change_plan_path(plan) %></td>
             <td class="px-3 py-2.5"><%= plan.status %></td>
             <td class="px-3 py-2.5"><%= plan.pr_state || "—" %></td>
             <td class="px-3 py-2.5 font-mono text-xs" style="color: var(--color-ink-soft)"><%= plan.commit_sha&.first(8) || "—" %></td>

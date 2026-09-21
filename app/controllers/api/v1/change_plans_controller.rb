@@ -11,7 +11,10 @@ module Api
     # no interactive re-auth channel the way the web UI's rank>=2 flow does.
     class ChangePlansController < BaseController
       REAUTH_RANK_THRESHOLD = 2
-      SUPPORTED_TYPES = %w[service route consumer keyauth_credential basicauth_credential plugin].freeze
+      # Every type the registry knows -- derived, not listed, so a new entity
+      # type can't be added to Kong::EntityTypes and silently stay unwritable
+      # over the agent path.
+      SUPPORTED_TYPES = Kong::EntityTypes::DEFINITIONS.keys.freeze
 
       before_action :require_connection!
 
@@ -29,12 +32,14 @@ module Api
         ).call
 
         render json: serialize_plan(plan), status: :created
+      rescue Kong::ChangePlanner::InvalidChange => e
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
       rescue Kong::ChangeGuardrails::Violation => e
-        render json: { error: e.message }, status: :forbidden
+        render json: { error: safe_message(e.message) }, status: :forbidden
       rescue Kong::Client::EntityNotFound
         render json: { error: "entity not found" }, status: :not_found
       rescue Kong::Client::Error => e
-        render json: { error: "Kong rejected this request: #{e.message}" }, status: :bad_gateway
+        render json: { error: safe_message("Kong rejected this request: #{e.message}") }, status: :bad_gateway
       end
 
       def apply
@@ -50,21 +55,42 @@ module Api
         result = Kong::ChangeApplier.new(
           change_plan: plan, client: client_for(plan.kong_connection),
           actor_username: current_pat.issued_by_username, actor_operator: current_pat.operator,
-          secret: plan.kong_connection.auth_secret
+          secret: plan.kong_connection.auth_secret,
+          env_acknowledged: env_acknowledged?
         ).call
 
         render json: { id: plan.id, status: plan.reload.status, audit_event_id: result.audit_event.id }
       rescue ActiveRecord::RecordNotFound
         render json: { error: "change plan not found" }, status: :not_found
       rescue Kong::ChangeGuardrails::Violation => e
-        render json: { error: e.message }, status: :forbidden
+        render json: { error: safe_message(e.message) }, status: :forbidden
       rescue Kong::Client::Error => e
-        render json: { error: "Kong rejected this request: #{e.message}" }, status: :bad_gateway
+        render json: { error: safe_message("Kong rejected this request: #{e.message}") }, status: :bad_gateway
+      rescue Kong::DeckCli::Error => e
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
+      rescue Kong::GitClient::Error => e
+        render json: { error: safe_message(e.message) }, status: :bad_gateway
       rescue NotImplementedError => e
-        render json: { error: e.message }, status: :unprocessable_entity
+        render json: { error: safe_message(e.message) }, status: :unprocessable_entity
       end
 
       private
+
+      # The applier only honours a literal `true`, so this must be a strict
+      # boolean: JSON true, or the form-encoded strings "true"/"1". Anything
+      # else -- absent, false, "0", "false", "yes", an Array or hash -- is a
+      # refusal. (ActiveModel's Boolean cast is deliberately not used: it
+      # casts an Array to true.)
+      def env_acknowledged?
+        value = params[:acknowledge_env_vars]
+        value == true || (value.is_a?(String) && %w[true 1].include?(value))
+      end
+
+      # Kong's and the planner's messages can quote the document they refused,
+      # which for a certificate may hold a private key: same scrub as the web.
+      def safe_message(message)
+        Kong::CertificateKeyPolicy.scrub(message)
+      end
 
       def raw_attributes
         value = params[:attributes]
@@ -78,7 +104,8 @@ module Api
       def serialize_plan(plan)
         {
           "id" => plan.id, "operation" => plan.operation, "entity_type" => plan.entity_type,
-          "target_kong_id" => plan.target_kong_id, "diff" => plan.diff, "status" => plan.status,
+          "target_kong_id" => plan.target_kong_id, "parent_kong_id" => plan.parent_kong_id,
+          "diff" => plan.diff, "status" => plan.status,
           "expires_at" => plan.expires_at.iso8601
         }
       end

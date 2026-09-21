@@ -30,7 +30,7 @@ module Kong
       return unless entity
       return unless protected_entity?(connection, entity)
 
-      entity_name = entity["name"]
+      entity_name = Kong::EntityTypes.label(entity)
 
       if actor_kind == "agent"
         raise Violation, "#{entity_name} is admin-path/protected -- it can never be deleted via the agent path, no override"
