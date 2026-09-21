@@ -10,6 +10,12 @@ module Kong
 
     DEFAULT_DELETE_THRESHOLD = 3
 
+    # decK's `--json-output` groups what will happen to each entity:
+    #   {"changes": {"creating": [..], "updating": [..], "deleting": [..]}}
+    # every entry {"name", "kind", "body": {"new", "old"}}. The gate reads them
+    # as one flat list tagged with the action.
+    BUCKETS = { "creating" => "create", "updating" => "update", "deleting" => "delete" }.freeze
+
     Result = Struct.new(:passed, :reasons, keyword_init: true) do
       def passed? = passed
     end
@@ -35,15 +41,20 @@ module Kong
     private
 
     def entity_changes
-      Array(@deck_diff["changes"] || @deck_diff["entity_changes"])
+      changes = @deck_diff["changes"] || @deck_diff["entity_changes"]
+      return Array(changes) unless changes.is_a?(Hash)
+
+      BUCKETS.flat_map { |bucket, action| Array(changes[bucket]).map { |entry| entry.merge("change" => action) } }
     end
 
     def touches_admin_path?
       entity_changes.any? { |change| @admin_path_names.include?(change["name"]) }
     end
 
+    # An entry that names its action says so; only the pre-M5c flat shape,
+    # which carried just {old, new}, is read by its missing `new`.
     def delete_count
-      entity_changes.count { |change| change["new"].nil? || change["change"] == "delete" }
+      entity_changes.count { |change| change["change"] ? change["change"] == "delete" : change["new"].nil? }
     end
 
     def admin_path_reason
