@@ -320,7 +320,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
 
       get change_plan_path(plan)
 
-      expect(response.body).to include("DECK_CERT_PAY_KEY", "CI environment")
+      expect(response.body).to include("DECK_CERT_PAY_KEY", "CI environment", "ONE line", 'literal \n escapes', "shows the certificate")
       expect(response.body).not_to include("acknowledge_env_vars")
     end
 

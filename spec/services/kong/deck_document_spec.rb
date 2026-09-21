@@ -72,7 +72,7 @@ RSpec.describe Kong::DeckDocument do
             -----BEGIN CERTIFICATE-----
             CCCC
             -----END CERTIFICATE-----
-          key: '${{ env "DECK_CERT_OTHER_KEY" }}'
+          key: "${{ env "DECK_CERT_OTHER_KEY" }}"
       consumers:
         - username: reporting-bot
           tags: []
@@ -127,18 +127,18 @@ RSpec.describe Kong::DeckDocument do
       expect(described_class.serialize(doc)).to eq("_format_version: '3.0'\n_info:\n  select_tags:\n    - managed-by-kongctl\n    - team-payments\n")
     end
 
-    it "writes the decK env placeholder single-quoted -- the one form decK and a YAML parser both accept" do
+    it "writes the decK env placeholder double-quoted with the inner quotes bare -- the form decK turns into a usable key" do
       out = described_class.serialize(full_document)
 
-      expect(out).to include(%q(key: '${{ env "DECK_CERT_OTHER_KEY" }}'))
-      expect(YAML.safe_load(out)["certificates"][1]["key"]).to eq(%q(${{ env "DECK_CERT_OTHER_KEY" }}))
+      expect(out).to include(%q(key: "${{ env "DECK_CERT_OTHER_KEY" }}"))
+      expect(described_class.parse(out, select_tags: tags)["certificates"][1]["key"]).to eq(%q(${{ env "DECK_CERT_OTHER_KEY" }}))
     end
 
     it "writes a PEM as a literal block that comes back identical" do
       out = described_class.serialize(full_document)
 
       expect(out).to include("cert: |\n      -----BEGIN CERTIFICATE-----")
-      expect(YAML.safe_load(out)["certificates"][0]["cert"]).to eq(pem)
+      expect(described_class.parse(out, select_tags: tags)["certificates"][0]["cert"]).to eq(pem)
     end
 
     it "writes an identity key first, then the rest alphabetically" do
@@ -277,6 +277,102 @@ RSpec.describe Kong::DeckDocument do
 
       expect { described_class.verify_input!(file) }.to raise_error(described_class::Unparseable, /key/)
       expect { described_class.serialize("_info" => {}, 123 => "x", "vaults" => []) }.to raise_error(Kong::ChangeGuardrails::Violation)
+    end
+  end
+
+  # decK reads `key: "${{ env "DECK_X" }}"` as text, substitutes the CI value (the
+  # PEM on one line with literal \n escapes) and only then parses YAML. Ruby can't
+  # parse that text, so parse swaps it for a sentinel first. Measured on Kong 3.7
+  # with decK 1.51.1 and 1.66.1: the single-quoted form never yields a usable key.
+  describe "the decK env placeholder" do
+    let(:ref) { %q(${{ env "DECK_CERT_A_KEY" }}) }
+    let(:cert_file) do
+      <<~YAML
+        _format_version: '3.0'
+        _info:
+          select_tags:
+            - x
+        certificates:
+          - id: 11111111-2222-3333-4444-555555555555
+            key: "${{ env "DECK_CERT_A_KEY" }}"
+            key_alt: "${{ env "DECK_CERT_A_ALT" }}"
+      YAML
+    end
+
+    it "parses the double-quoted reference into the plain reference string the rest of the tool recognises" do
+      cert = described_class.parse(cert_file, select_tags: [ "x" ])["certificates"][0]
+
+      expect(cert["key"]).to eq(ref)
+      expect(cert["key_alt"]).to eq(%q(${{ env "DECK_CERT_A_ALT" }}))
+      expect(Kong::CertificateKeyPolicy.deck_reference?(cert["key"])).to be(true)
+    end
+
+    it "round-trips: parse(serialize(doc)) == doc, and the text is a fixed point" do
+      doc = described_class.parse(nil, select_tags: [ "x" ])
+      doc["certificates"] = [ { "id" => "11111111-2222-3333-4444-555555555555", "key" => ref, "key_alt" => %q(${{ env "DECK_CERT_A_ALT" }}) } ]
+
+      text = described_class.serialize(doc)
+
+      expect(text).to eq(cert_file)
+      expect(described_class.parse(text, select_tags: [ "x" ])).to eq(doc)
+      expect(described_class.serialize(described_class.parse(text, select_tags: [ "x" ]))).to eq(text)
+    end
+
+    it "reads a reference in an array and the guard accepts the tool's double-quoted file" do
+      text = "_format_version: '3.0'\n_info:\n  select_tags:\n    - x\nvaults:\n  - name: env\n    config:\n      list:\n        - \"${{ env \"DECK_A\" }}\"\n"
+
+      expect(described_class.parse(text, select_tags: [ "x" ])["vaults"][0]["config"]["list"]).to eq([ %q(${{ env "DECK_A" }}) ])
+      expect(described_class.verify_input!(cert_file)).to be_nil
+      expect(described_class.verify_input!(text)).to be_nil
+    end
+
+    it "refuses the old single-quoted form: it re-renders double-quoted, so the bytes differ (that form never worked)" do
+      old = cert_file.gsub(%q("${{ env "DECK_CERT_A_KEY" }}"), %q('${{ env "DECK_CERT_A_KEY" }}'))
+
+      expect(described_class.parse(old, select_tags: [ "x" ])["certificates"][0]["key"]).to eq(ref)
+      expect { described_class.verify_input!(old) }
+        .to raise_error(described_class::Unparseable, /would not survive a re-render unchanged \(first difference at line 7\)/)
+    end
+
+    it "fails closed, without echoing content, when the text already holds the sentinel prefix" do
+      text = cert_file.sub("key_alt: ", "note: __KONGSOLE_DECK_ENV__SECRET__\n    key_alt: ")
+
+      expect { described_class.parse(text, select_tags: [ "x" ]) }
+        .to raise_error(described_class::Unparseable) { |error| expect(error.message).not_to include("SECRET") }
+      expect { described_class.verify_input!(text) }.to raise_error(described_class::Unparseable)
+    end
+
+    it "does not treat a reference embedded in a longer string as one: it round-trips faithfully as the string it is" do
+      doc = described_class.parse(nil, select_tags: [ "x" ])
+      doc["certificates"] = [ { "id" => "11111111-2222-3333-4444-555555555555", "key" => %q(prefix${{ env "DECK_A" }}), "key_alt" => %q(${{ env "DECK_A" }}suffix) } ]
+
+      text = described_class.serialize(doc)
+
+      expect(text).not_to include("__KONGSOLE")
+      expect(described_class.parse(text, select_tags: [ "x" ])).to eq(doc)
+      expect(described_class.verify_input!(text)).to be_nil
+    end
+
+    it "leaves a variable name outside DECK_[A-Z0-9_]+ alone" do
+      doc = described_class.parse(nil, select_tags: [ "x" ])
+      doc["certificates"] = [ { "id" => "11111111-2222-3333-4444-555555555555", "key" => %q(${{ env "SECRET_KEY" }}), "key_alt" => %q(${{ env "deck_a" }}) } ]
+
+      text = described_class.serialize(doc)
+
+      expect(text).not_to include(%q("${{ env "))
+      expect(described_class.parse(text, select_tags: [ "x" ])).to eq(doc)
+    end
+
+    it "fails closed on a file whose plain string merely contains the double-quoted form" do
+      text = "_format_version: '3.0'\n_info:\n  select_tags:\n    - x\nvaults:\n  - name: env\n    note: 'a \"${{ env \"DECK_A\" }}\" b'\n"
+
+      expect { described_class.verify_input!(text) }.to raise_error(described_class::Unparseable)
+    end
+
+    it "reads the placeholder in the file's own select_tags so the guard compares like with like" do
+      text = "_format_version: '3.0'\n_info:\n  select_tags:\n    - \"${{ env \"DECK_A\" }}\"\n"
+
+      expect(described_class.verify_input!(text)).to be_nil
     end
   end
 

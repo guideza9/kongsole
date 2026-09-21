@@ -142,6 +142,8 @@
   <p class="text-xs" style="color: var(--color-ink-faint)">
     decK reads <span class="font-mono"><%= @deck_env_vars.join(", ") %></span> from the CI environment when it syncs this change.
     This tool checked the file with a dummy value and never sees the key. If the variable is unset in CI, the sync fails before anything reaches Kong.
+    The CI variable must hold the PEM on ONE line with literal \n escapes, not real newlines.
+    Because the file was checked with a dummy value, the diff shows the certificate's key as changed.
   </p>
 <% end %>
       <% if @requires_confirmation_name %>

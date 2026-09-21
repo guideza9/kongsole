@@ -381,13 +381,13 @@ RSpec.describe Kong::ChangeApplier do
       expect(branches).not_to include("kongctl/#{plan.id}")
     end
 
-    it "renders a decK placeholder single-quoted and asks for no acknowledgement: CI resolves the variable, not this tool" do
+    it "renders a decK placeholder double-quoted for decK and asks for no acknowledgement: CI resolves the variable, not this tool" do
       pem = PemFixtures.self_signed(days: 60)[:cert_pem]
       plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
 
       apply_pr(plan)
 
-      expect(pushed_yaml(plan)).to include(%q(key: '${{ env "DECK_CERT_PAY_KEY" }}'))
+      expect(pushed_yaml(plan)).to include(%q(key: "${{ env "DECK_CERT_PAY_KEY" }}"))
       expect(Kong::DeckCli).to have_received(:validate)
     end
 

@@ -38,11 +38,17 @@ RSpec.describe Kong::DeckCli do
         expect(Open3).to have_received(:capture3).with({}, "/opt/deck/deck", "file", "validate", file.to_s)
       end
 
+      it "finds a placeholder in the double-quoted form the tool writes, and in the plain form" do
+        text = %(a: "${{ env "DECK_FORM_A" }}"\nb: ${{ env "DECK_FORM_B" }}\nc: 'x ${{ env "DECK_FORM_C" }} y'\n)
+
+        expect(text.scan(described_class::ENV_REFERENCE).flatten).to eq(%w[DECK_FORM_A DECK_FORM_B DECK_FORM_C])
+      end
+
       it "gives every DECK_ variable the file references a harmless dummy, whatever the real environment holds" do
         File.write(file, <<~YAML)
-          key: '${{ env "DECK_SPEC_ONE_KEY" }}'
-          other: '${{ env "DECK_SPEC_TWO_KEY" }}'
-          again: '${{ env "DECK_SPEC_ONE_KEY" }}'
+          key: "${{ env "DECK_SPEC_ONE_KEY" }}"
+          other: "${{ env "DECK_SPEC_TWO_KEY" }}"
+          again: "${{ env "DECK_SPEC_ONE_KEY" }}"
         YAML
         ENV["DECK_SPEC_ONE_KEY"] = "the-real-secret"
 
@@ -111,7 +117,7 @@ RSpec.describe Kong::DeckCli do
       end
 
       it "sets the same dummy variables for the diff, which substitutes the placeholder too" do
-        File.write(file, %(key: '${{ env "DECK_SPEC_DIFF_KEY" }}'\n))
+        File.write(file, %(key: "${{ env "DECK_SPEC_DIFF_KEY" }}"\n))
 
         described_class.diff(file, connection: connection, secret: "pw")
 
@@ -182,7 +188,7 @@ RSpec.describe Kong::DeckCli do
           - id: 11111111-2222-3333-4444-555555555555
             cert: |
         #{body}
-            key: '${{ env "DECK_REAL_SPEC_KEY" }}'
+            key: "${{ env "DECK_REAL_SPEC_KEY" }}"
       YAML
 
       expect(described_class.validate(path)).to be(true)

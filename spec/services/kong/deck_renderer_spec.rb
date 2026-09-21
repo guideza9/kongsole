@@ -321,13 +321,13 @@ RSpec.describe Kong::DeckRenderer do
                                               "snis" => [ { "name" => "a.example.internal" } ] } ])
       end
 
-      it "passes a decK env placeholder through untouched, for the serializer to single-quote" do
+      it "passes a decK env placeholder through untouched, for the serializer to double-quote for decK" do
         placeholder = %q(${{ env "DECK_CERT_PAY_KEY" }})
 
         render_change(entity_type: "certificate", operation: "create", after: create_after.merge("key" => placeholder))
 
         expect(doc["certificates"][0]["key"]).to eq(placeholder)
-        expect(Kong::DeckDocument.serialize(doc)).to include(%q(key: '${{ env "DECK_CERT_PAY_KEY" }}'))
+        expect(Kong::DeckDocument.serialize(doc)).to include(%q(key: "${{ env "DECK_CERT_PAY_KEY" }}"))
       end
 
       it "matches a certificate by id on update, keeps the id and the SNI entries it already has" do

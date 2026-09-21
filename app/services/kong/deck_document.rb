@@ -21,11 +21,17 @@ module Kong
     # Written first inside any mapping, so an entity reads by what names it.
     IDENTITY_KEYS = %w[name username target id].freeze
     DECK_ENV_REFERENCE = /\A\$\{\{ env "DECK_[A-Z0-9_]+" \}\}\z/
+    # How a placeholder reads in the FILE: `key: "${{ env "DECK_X" }}"`. That is
+    # not YAML Ruby can parse (the inner quotes end the scalar), so `load_yaml`
+    # swaps each one for a sentinel scalar first and maps it back afterwards.
+    DECK_ENV_FILE_FORM = /"\$\{\{ env "(DECK_[A-Z0-9_]+)" \}\}"/
+    SENTINEL_PREFIX = "__KONGSOLE_DECK_ENV__".freeze
+    SENTINEL = /\A#{SENTINEL_PREFIX}(DECK_[A-Z0-9_]+)__\z/
 
     # Builds the working document. `text` is nil/blank the first time a
     # connection's config repo has no file yet. Adds no collection keys.
     def self.parse(text, select_tags:)
-      doc = text.present? ? YAML.safe_load(text) : {}
+      doc = text.present? ? load_yaml(text) : {}
       doc = {} unless doc.is_a?(Hash)
       doc["_format_version"] ||= FORMAT_VERSION
       doc["_info"] = doc["_info"].is_a?(Hash) ? doc["_info"] : {}
@@ -34,6 +40,40 @@ module Kong
     rescue Psych::Exception => e
       raise Unparseable, "the config YAML can't be parsed (#{e.class})"
     end
+
+    # YAML.safe_load with decK's env placeholders understood: each one becomes a
+    # plain `${{ env "DECK_X" }}` String in the result, exactly what
+    # Kong::CertificateKeyPolicy.deck_reference? recognises. A file that already
+    # holds the sentinel text is refused outright (nothing of it is echoed): it
+    # could otherwise smuggle a value in as a "reference".
+    def self.load_yaml(text)
+      raise Unparseable, "the config YAML can't be parsed (it contains reserved text)" if text.include?(SENTINEL_PREFIX)
+
+      restore_references(YAML.safe_load(text.gsub(DECK_ENV_FILE_FORM) { %("#{SENTINEL_PREFIX}#{Regexp.last_match(1)}__") }))
+    end
+    private_class_method :load_yaml
+
+    # A sentinel that is not the WHOLE string (the file quoted the placeholder
+    # inside a longer value) can't be represented faithfully: refuse it.
+    def self.restore_references(value)
+      case value
+      when Hash then value.to_h { |key, item| [ restore_references(key), restore_references(item) ] }
+      when Array then value.map { |item| restore_references(item) }
+      when String then restore_string(value)
+      else value
+      end
+    end
+    private_class_method :restore_references
+
+    def self.restore_string(value)
+      return value unless value.include?(SENTINEL_PREFIX)
+
+      match = SENTINEL.match(value)
+      raise Unparseable, "the config YAML can't be parsed (a decK placeholder sits inside a longer string)" unless match
+
+      %(${{ env "#{match[1]}" }})
+    end
+    private_class_method :restore_string
 
     # Rule ค, applied to the INPUT. If a re-render would not reproduce the file,
     # it would silently rewrite or drop part of it -- and `deck gateway sync`
@@ -168,15 +208,20 @@ module Kong
     private_class_method :ordered_keys
 
     # decK substitutes its env placeholder as TEXT before it parses YAML, so the
-    # reference must reach the file exactly as decK expects it: in single quotes
-    # (the one form both decK and a YAML parser accept -- measured, M5c).
+    # reference is written for decK, not for a YAML parser: double-quoted with
+    # the inner quotes bare, `"${{ env "DECK_X" }}"`. CI supplies the PEM on ONE
+    # line with literal `\n` escapes; after substitution the file holds a normal
+    # double-quoted scalar and YAML decodes the escapes into the real key. The
+    # single-quoted form never delivers a usable key (Kong: "invalid key:
+    # pkey.new:load_key") -- measured on Kong 3.7 with decK 1.51.1 and 1.66.1
+    # (spec section 9). Ruby can't read this text back as-is, hence `load_yaml`.
     # `line_width: -1` stops Psych folding a long value across lines. A string
     # Psych would spread over several lines is double-quoted instead, so a
     # scalar is always one line. Only what a YAML file can hold as a plain
     # scalar is accepted; anything else is refused rather than written wrongly.
     def self.scalar(value)
       return "null" if value.nil?
-      return "'#{value}'" if value.is_a?(String) && DECK_ENV_REFERENCE.match?(value)
+      return %("#{value}") if value.is_a?(String) && DECK_ENV_REFERENCE.match?(value)
       raise Unparseable, "the value #{value.inspect} can't be written as decK YAML (#{value.class})" unless renderable?(value)
 
       return double_quoted(value) if value.is_a?(String) && !SAFE_TEXT.match?(value)
@@ -211,7 +256,7 @@ module Kong
     # The file's own tags, so the guard compares like with like: parse would
     # otherwise overwrite them and a stale tag list would read as data loss.
     def self.file_select_tags(text)
-      Array(YAML.safe_load(text).then { |doc| doc.is_a?(Hash) ? doc.dig("_info", "select_tags") : nil })
+      Array(load_yaml(text).then { |doc| doc.is_a?(Hash) ? doc.dig("_info", "select_tags") : nil })
     rescue Psych::Exception
       []
     end
