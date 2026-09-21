@@ -45,10 +45,21 @@ RSpec.describe Kong::CiGate do
       expect(result).not_to be_passed
     end
 
-    it "treats a blank deck_diff as no changes at all" do
-      result = described_class.check(deck_diff: nil, admin_path_names: [ "admin-api" ])
+    it "passes the real no-change diff decK always emits" do
+      no_change = JSON.parse('{"changes":{"creating":[],"updating":[],"deleting":[]},"summary":{"creating":0,"updating":0,"deleting":0,"total":0},"warnings":[],"errors":[]}')
+
+      result = described_class.check(deck_diff: no_change, admin_path_names: [ "admin-api" ], delete_threshold: 0)
 
       expect(result).to be_passed
+    end
+
+    it "blocks a blank diff rather than reading missing output as no changes" do
+      [ {}, nil, { "summary" => {} } ].each do |blank|
+        result = described_class.check(deck_diff: blank, admin_path_names: [ "admin-api" ])
+
+        expect(result).not_to be_passed
+        expect(result.reasons.join).to match(/the decK diff has no `changes` -- refusing to treat missing output as no changes/)
+      end
     end
   end
 

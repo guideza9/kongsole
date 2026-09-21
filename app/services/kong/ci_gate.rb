@@ -18,6 +18,10 @@ module Kong
 
     UNRECOGNISED_REASON = "the decK diff shape was not recognised -- refusing to pass what the gate cannot read".freeze
 
+    # decK always emits `changes`, even for nothing to do; DeckCli.diff returns
+    # {} for blank output, which is missing output, not "no changes".
+    MISSING_CHANGES_REASON = "the decK diff has no `changes` -- refusing to treat missing output as no changes".freeze
+
     Result = Struct.new(:passed, :reasons, keyword_init: true) do
       def passed? = passed
     end
@@ -46,6 +50,7 @@ module Kong
     # only the buckets it knows would turn a renamed bucket into "no changes".
     def shape_reasons
       reasons = []
+      reasons << MISSING_CHANGES_REASON if raw_changes.nil?
       reasons << UNRECOGNISED_REASON if unrecognised_shape?
       reasons << errors_reason if Array(@deck_diff["errors"]).any?
       reasons
