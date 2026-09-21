@@ -7,6 +7,13 @@ mode work for every entity type the tool manages, instead of services alone.
 YAML, preserves everything it does not manage, and refuses to write anything it
 cannot render faithfully.
 
+> **Correction (2026-09-21, while writing the plan).** The first version of
+> section 6 said a decK placeholder is "self-checking" because `file validate`
+> fails when the variable is unset. That is true but unusable: it would require
+> the real private key in Kongsole's environment. Sections 1.5 and 6 now say the
+> tool validates with a dummy value and CI resolves the real one. Nothing else
+> in the design changes.
+
 **Not in scope:** opening the pull request itself (host API tokens, webhooks, CI
 pipeline wiring). Branch-push behaviour is unchanged — `execute_pr!` still ends
 at `pr_state: "branch_pushed"`. That remains its own milestone.
@@ -139,6 +146,15 @@ A related measurement: substituting a value containing real newlines produces
 `error converting YAML to JSON: yaml: line 27: could not find expected ':'`.
 A single-line value substitutes cleanly. See section 9 for the risk this leaves
 open.
+
+**Consequence for who can validate.** `deck file validate` and `deck gateway
+diff` both run on *Kongsole's* host and both substitute the placeholder. With the
+variable unset each fails (`environment variable 'X' present in state file but
+not set`); with **any** single-line value set each passes (measured on both
+versions). Making them pass with the real key would put a private key in the
+tool's own environment -- exactly what M5b exists to prevent. So the tool sets a
+harmless dummy for every `DECK_*` variable the document references, and never
+sees the real value (section 6).
 
 ### 1.6 The current renderer silently drops what it does not know
 
@@ -274,8 +290,15 @@ why we know:**
 - A **vault reference** is checked by nobody. Kong accepts a typo and TLS fails
   later at handshake — the limitation M5b's acknowledgement exists for. PR mode
   keeps requiring it.
-- A **decK placeholder** fails `file validate` loudly when the variable is
-  unset. That path is self-checking, and the apply surfaces decK's own message.
+- A **decK placeholder** is resolved by CI, not by this tool. The tool runs
+  `file validate` and `gateway diff` with a fixed dummy value for each `DECK_*`
+  variable the document references (§1.5), so neither check can tell whether
+  the real variable exists. That is safe rather than silent: an unset variable
+  makes CI's `deck gateway sync` fail before anything reaches Kong, unlike a
+  vault reference, whose typo Kong accepts and TLS punishes later. No
+  acknowledgement is asked for it, and the review page says decK reads the
+  variable in CI. (The diff shows the certificate's `key` as changed, since the
+  dummy differs from what Kong holds; that noise is expected.)
 
 ---
 
@@ -286,7 +309,7 @@ why we know:**
 | input does not round-trip | `Kong::ChangeGuardrails::Violation`, repo untouched |
 | unrenderable entity (unnamed route, missing parent, cert without id) | `Kong::ChangeGuardrails::Violation`, named cause |
 | credential in PR mode | `NotImplementedError`, stating the exclusion is deliberate |
-| `deck file validate` rejects the document | `Kong::DeckCli::Error` carrying decK's own message |
+| `deck file validate` rejects the document | `Kong::DeckCli::Error` carrying decK's own message, shown scrubbed on the review page and in the API 422; the plan is marked `failed` |
 | `deck` binary missing | `Kong::DeckCli::Error` naming `DECK_BIN` |
 
 Existing mapping is unchanged: a `Violation` is an API 403, `NotImplementedError`
