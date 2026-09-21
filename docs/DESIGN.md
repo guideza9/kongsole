@@ -393,7 +393,7 @@ ChangePlan (direct | pr) · DeckRenderer + GitClient · AuditLog · Kong::Client
 
 **ก. สร้าง YAML จาก git เสมอ ห้ามจาก `deck dump`** — ไม่งั้นได้ diff ปลอมจากการเรียงลำดับ
 **ข. `_info.select_tags` เป็นข้อบังคับ** — `deck gateway sync` ลบทุกอย่างที่ไม่มีในไฟล์
-**ค. round-trip test byte-for-byte ตั้งแต่ M2**
+**ค. round-trip test byte-for-byte ตั้งแต่ M2** · กฎนี้บังคับที่ไฟล์ **input** (`Kong::DeckDocument.verify_input!`) ไม่ใช่แค่ output
 **ง. ห้าม render entity ที่ติด `kong-admin-path` และ credential ของ consumer ลง YAML** (ข้อ 1.2, 1.7)
 
 ---
@@ -471,6 +471,8 @@ audit_events   # append-only — actor = username + operator
 **ผลพลอยได้:** dashboard cert หมดอายุข้ามทุก connection + MCP tool `kong_certs_expiring`
 
 **ผลการ spike (M5b, Kong 3.7.1):** `{vault://env/cert-x-key}` อ่านตัวแปร `CERT_X_KEY` (ตัวพิมพ์ใหญ่, `-` → `_`) และ Kong เก็บ/คืนค่า reference ตามที่ส่งมา ไม่เคยคืน PEM · **Kong ไม่ตรวจ reference ตอนเขียน** — ตัวแปรที่ไม่มีอยู่หรือ key ที่ไม่ตรงกับ cert ก็ได้ 201 และ TLS ของ hostname นั้นจะล้ม (`tlsv1 alert internal error`) ตอนใช้งานจริง → tool จึงบังคับให้ยืนยันว่าตัวแปรมีอยู่ก่อน apply และบันทึกลง audit · tool ไม่รับ private key ในรูป PEM ทุกช่องทาง
+
+**M5c — decK render ทุก type (เสร็จ):** render service, route, plugin, upstream, target, certificate, sni, ca_certificate และ consumer ลง decK YAML แบบ nested เหมือน `deck gateway dump` · credential ไม่ render เด็ดขาด (ข้อ 1.7) · ตรวจกับ decK จริง **1.51.1 และ 1.66.1 — ผลตรงกันทุกข้อ** จึงปิดคำถามข้อ 6 ("decK เวอร์ชันไหน") สำหรับ format นี้ · สิ่งที่วัดได้: decK ไม่รับ `-s` (ไฟล์เป็น positional), `deck gateway validate` เป็น online (offline คือ `deck file validate`), schema ปิด (key/field ที่ไม่รู้จักถูกปฏิเสธ), ต้องมี `id` เฉพาะ certificate และ `name` เฉพาะ route, ไม่รับค่า `null`, target ต้อง nested ใต้ upstream · `Kong::DeckCli` และ `Kong::CiGate` ก่อนหน้านี้ผิดทั้งคู่กับ output จริงและไม่เคยถูกรันเพราะถูก stub (แก้แล้ว) · ผลวัด placeholder ของ decK บน Kong 3.7 จริง: ต้องเขียนแบบ double-quote `key: "${{ env "DECK_X" }}"` และตัวแปรใน CI ต้องเก็บ PEM ไว้บรรทัดเดียวโดยใช้ `\n` เป็นตัวอักษร (ไม่ใช่ขึ้นบรรทัดจริง) · แบบ single-quote `'${{ env "DECK_X" }}'` ไม่ส่ง key ที่ใช้ได้ถึง Kong (sync ล้มด้วย `invalid key: pkey.new:load_key`) · สมมติฐานของ M5b ที่เคยถูก stub ไว้ยืนยันกับ Kong 3.7 จริงแล้ว: `PATCH /certificates/:id` ที่เปลี่ยน `snis` แทนที่รายการทั้งชุด, `POST /ca_certificates` และ schema validate ทำงานตามที่สมมติ (response ไม่มี `name`), และ SNI ย้ายไปชี้ certificate อื่นได้
 
 ---
 
@@ -667,6 +669,7 @@ PR ที่แตะ admin path ถูก CI block
 - certificate + SNI + ca_certificate พร้อม parse `not_after`, subject, issuer, fingerprint
 - dashboard cert หมดอายุ + `kong_certs_expiring`
 - ตัดสินใจทาง ก หรือ ข ของข้อ 8
+- **M5c (เสร็จ):** decK render ทุก type ใน PR mode — ดูข้อ 8 และ `docs/superpowers/specs/2026-09-21-m5c-deck-rendering-design.md`
 
 ### M6 — Drift + hardening (~1 สัปดาห์)
 - **drift สี่ทาง** รวมการดูด Kong access log มาเทียบกับ change_plan
