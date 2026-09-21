@@ -283,4 +283,28 @@ RSpec.describe Kong::CertificateKeyPolicy do
       expect(described_class.scrub(nil)).to eq("")
     end
   end
+
+  describe ".deck_vars_for (M5c)" do
+    def plan(operation:, after:, diff: {}, entity_type: "certificate", apply_mode: "pr")
+      ChangePlan.new(entity_type: entity_type, operation: operation, after: after, diff: diff, apply_mode: apply_mode)
+    end
+
+    let(:placeholder) { %q(${{ env "DECK_CERT_PAY_KEY" }}) }
+
+    it "names the variable a PR-mode create sets" do
+      expect(described_class.deck_vars_for(plan(operation: "create", after: { "key" => placeholder }))).to eq([ "DECK_CERT_PAY_KEY" ])
+    end
+
+    it "names it for an update that changes the key, and not for one that leaves it alone" do
+      expect(described_class.deck_vars_for(plan(operation: "update", after: { "key" => placeholder }, diff: { "key" => {} }))).to eq([ "DECK_CERT_PAY_KEY" ])
+      expect(described_class.deck_vars_for(plan(operation: "update", after: { "key" => placeholder }, diff: { "tags" => {} }))).to eq([])
+    end
+
+    it "is empty for a vault reference (that is what env_vars_for is for), a delete, a direct-mode plan and other types" do
+      expect(described_class.deck_vars_for(plan(operation: "create", after: { "key" => "{vault://env/cert-pay-key}" }))).to eq([])
+      expect(described_class.deck_vars_for(plan(operation: "delete", after: {}))).to eq([])
+      expect(described_class.deck_vars_for(plan(operation: "create", after: { "key" => placeholder }, apply_mode: "direct"))).to eq([])
+      expect(described_class.deck_vars_for(plan(operation: "create", after: { "key" => placeholder }, entity_type: "service"))).to eq([])
+    end
+  end
 end

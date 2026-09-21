@@ -25,6 +25,7 @@ class ChangePlansController < ApplicationController
     @dependent_routes = dependent_routes
     @dependent_targets = dependent_targets
     @env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.env_vars_for(@change_plan) : []
+    @deck_env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.deck_vars_for(@change_plan) : []
     @dependent_snis = dependent_snis
   end
 

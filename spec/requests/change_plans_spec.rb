@@ -312,6 +312,26 @@ RSpec.describe "ChangePlans (web)", type: :request do
       expect(response.body).to include("Kong doesn").and include("check")
     end
 
+    it "tells the operator CI resolves a decK placeholder, and asks for no acknowledgement" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", entity_type: "certificate", operation: "create", target_kong_id: nil,
+        before: {}, after: { "cert" => fixture[:cert_pem], "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("DECK_CERT_PAY_KEY", "CI environment")
+      expect(response.body).not_to include("acknowledge_env_vars")
+    end
+
+    it "shows no decK note for a vault reference (that one asks for the acknowledgement instead), or for a direct-mode plan" do
+      sign_in
+
+      get change_plan_path(create_cert_plan)
+
+      expect(response.body).not_to include("CI environment")
+    end
+
     it "shows no such checkbox for an edit that leaves the key alone, or once applied" do
       sign_in
       tags_plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
