@@ -237,7 +237,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
       sh!("git", "init", "--bare", "--initial-branch=main", bare_repo.to_s, chdir: @tmp)
       scratch = @tmp.join("seed")
       sh!("git", "clone", bare_repo.to_s, scratch.to_s, chdir: @tmp)
-      File.write(scratch.join("kong.yaml"), Kong::DeckRenderer.serialize(Kong::DeckRenderer.parse(nil, select_tags: [ "managed-by-kongctl" ])))
+      File.write(scratch.join("kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ])))
       sh!("git", "add", "-A", chdir: scratch)
       sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", chdir: scratch)
       sh!("git", "push", "origin", "main", chdir: scratch)

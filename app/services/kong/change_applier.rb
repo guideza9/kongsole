@@ -101,7 +101,7 @@ module Kong
 
     def execute!
       if @change_plan.apply_mode == "pr"
-        execute_pr!
+        execute_pr_discarding_unsaved_id!
       else
         case @change_plan.operation
         when "create" then execute_create!
@@ -188,21 +188,33 @@ module Kong
         .update_all(deleted_at: Time.current)
     end
 
+    # The renderer mints a certificate create's id onto the plan in memory. If
+    # anything after that raises, nothing was pushed, so the id must not be
+    # written by whatever saves the plan next (the rescue that marks it failed).
+    def execute_pr_discarding_unsaved_id!
+      execute_pr!
+    rescue StandardError
+      @change_plan.restore_attributes(%w[target_kong_id])
+      raise
+    end
+
     # docs/DESIGN.md section 6, "เส้นทางของ PR mode" steps 2-8: pull the
-    # config repo, mutate + serialize its YAML (rules ก-ค), validate + diff
-    # against Kong with the read-only credential already in hand, commit to
-    # a branch, and push. No PR-host API call -- see Kong::GitClient.
+    # config repo, refuse a file the tool could not reproduce, mutate + serialize
+    # its YAML (rules ก-ค), validate + diff against Kong with the read-only
+    # credential already in hand, commit to a branch, and push. No PR-host API
+    # call -- see Kong::GitClient. Everything that can refuse does so before the
+    # branch is touched: the repo is left clean and the plan stays pending.
     def execute_pr!
-      unless @change_plan.entity_type == "service"
-        raise NotImplementedError, "PR-mode apply only supports service changes today (#{@change_plan.entity_type} not yet rendered into decK YAML)"
-      end
+      Kong::DeckRenderer.assert_supported!(@change_plan.entity_type)
 
       git = Kong::GitClient.new(connection: @connection).pull!
 
-      doc = Kong::DeckRenderer.parse(read_yaml(git), select_tags: @connection.select_tags)
+      text = read_yaml(git)
+      Kong::DeckDocument.verify_input!(text)
+      doc = Kong::DeckDocument.parse(text, select_tags: @connection.select_tags)
       Kong::DeckRenderer.apply_change(doc, @change_plan)
-      rendered = Kong::DeckRenderer.serialize(doc)
-      verify_round_trip!(doc, rendered)
+      rendered = Kong::DeckDocument.serialize(doc)
+      verify_round_trip!(rendered)
 
       branch = "#{BRANCH_PREFIX}/#{@change_plan.id}"
       git.checkout_branch!(branch)
@@ -215,7 +227,10 @@ module Kong
       commit_sha = git.commit!(commit_message, author_name: @actor_username)
       git.push!(branch)
 
-      @change_plan.update!(commit_sha: commit_sha, deck_diff: deck_diff, pr_state: "branch_pushed")
+      # A certificate create's minted id (target_kong_id) was assigned in memory
+      # by Kong::DeckRenderer; it is written only here, once the branch is pushed.
+      @change_plan.update!(commit_sha: commit_sha, deck_diff: deck_diff, pr_state: "branch_pushed",
+        target_kong_id: @change_plan.target_kong_id)
     end
 
     def read_yaml(git)
@@ -223,10 +238,9 @@ module Kong
       File.exist?(path) ? File.read(path) : nil
     end
 
-    def verify_round_trip!(doc, rendered)
-      reparsed = Kong::DeckRenderer.parse(rendered, select_tags: @connection.select_tags)
-      return if Kong::DeckRenderer.serialize(reparsed) == rendered
-
+    def verify_round_trip!(rendered)
+      Kong::DeckDocument.verify_input!(rendered)
+    rescue Kong::DeckDocument::Unparseable
       raise Kong::ChangeGuardrails::Violation,
         "rendered YAML did not round-trip byte-for-byte -- refusing to push a diff that would be noisy to review"
     end

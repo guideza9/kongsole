@@ -1,24 +1,6 @@
 require "rails_helper"
 
 RSpec.describe Kong::DeckRenderer do
-  describe ".parse" do
-    it "builds a fresh skeleton when there is no YAML yet" do
-      doc = described_class.parse(nil, select_tags: [ "managed-by-kongctl" ])
-
-      expect(doc).to eq(
-        "_format_version" => "3.0",
-        "_info" => { "select_tags" => [ "managed-by-kongctl" ] },
-        "services" => []
-      )
-    end
-
-    it "always overwrites select_tags from the connection, even if the file disagrees (rule ข -- mandatory)" do
-      doc = described_class.parse("_info:\n  select_tags: [stale-tag]\nservices: []\n", select_tags: [ "managed-by-kongctl" ])
-
-      expect(doc["_info"]["select_tags"]).to eq([ "managed-by-kongctl" ])
-    end
-  end
-
   describe ".apply_change" do
     let(:svc_id) { "aaaaaaaa-0000-0000-0000-000000000001" }
     let(:route_id) { "aaaaaaaa-0000-0000-0000-000000000002" }
@@ -468,34 +450,6 @@ RSpec.describe Kong::DeckRenderer do
       })
 
       expect(Kong::DeckDocument.serialize(doc)).not_to match(/: null|created_at|updated_at|service:\s*\n\s+id:/)
-    end
-  end
-
-  describe ".serialize" do
-    it "round-trips byte-for-byte: serialize(parse(serialize(doc))) == serialize(doc)" do
-      doc = described_class.parse(nil, select_tags: [ "managed-by-kongctl", "team-payments" ])
-      doc["services"] << { "name" => "payments-api", "url" => "http://payments:8080", "tags" => [ "payment" ], "enabled" => true }
-      doc["services"] << { "name" => "orders-api", "url" => "http://orders:8080", "tags" => [] }
-
-      first_pass = described_class.serialize(doc)
-      second_pass = described_class.serialize(described_class.parse(first_pass, select_tags: [ "managed-by-kongctl", "team-payments" ]))
-
-      expect(second_pass).to eq(first_pass)
-    end
-
-    it "orders each service's keys with name first, then the rest alphabetically" do
-      doc = described_class.parse(nil, select_tags: [])
-      doc["services"] << { "url" => "http://payments:8080", "name" => "payments-api", "enabled" => true }
-
-      expect(described_class.serialize(doc)).to eq(<<~YAML)
-        _format_version: '3.0'
-        _info:
-          select_tags:
-        services:
-          - name: payments-api
-            enabled: true
-            url: http://payments:8080
-      YAML
     end
   end
 end

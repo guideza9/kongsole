@@ -1,42 +1,20 @@
 module Kong
-  # Parses, mutates, and serializes a connection's decK config YAML --
-  # docs/DESIGN.md section 6 ("เส้นทางของ PR mode", steps 2-3) and its four
-  # "กฎเหล็ก" (iron rules):
-  #   ก. always build the YAML from git, never from `deck gateway dump`
-  #   ข. `_info.select_tags` is mandatory (deck gateway sync deletes anything
-  #      untagged)
-  #   ค. round-trip serialize(parse(x)) == x, byte for byte, from M2 on
-  #   ง. never render an admin-path entity or a consumer credential
+  # Places a change_plan's entity into a decK config document -- docs/DESIGN.md
+  # section 6 ("เส้นทางของ PR mode", step 3). The file format itself (parse,
+  # serialize, the input guard) is Kong::DeckDocument; this class only decides
+  # WHERE in it an entity lives and what it may contain. Rule ง (never render an
+  # admin-path entity or a consumer credential) is enforced one level up for the
+  # first, and here for credentials (see assert_supported!).
   #
-  # Rule ง's enforcement lives one level up, in Kong::ChangeApplier: a
-  # change_plan targeting an admin-path kong_id is refused before it ever
-  # reaches this renderer, so no admin-path entity is ever proposed into
-  # YAML in the first place (see ChangeApplier#execute_pr!).
-  #
-  # apply_change places every managed entity type (services, routes,
-  # upstreams, targets, consumers, plugins, certificates, SNIs, CA
-  # certificates) per the registry; credentials are never rendered.
+  # Where each type goes, and what identifies it, are registry facts
+  # (Kong::EntityTypes decK fields); the rules were measured against decK
+  # 1.51.1 and 1.66.1 -- docs/superpowers/specs/2026-09-21-m5c-deck-rendering-
+  # design.md sections 1 and 4.
   class DeckRenderer
     # A change that cannot be written into decK YAML faithfully. A guardrail
     # Violation, so it surfaces like any other refusal (API 403 / web redirect)
     # rather than a 500 -- and always an error, never a silent omission.
     class Unrenderable < Kong::ChangeGuardrails::Violation; end
-
-    FORMAT_VERSION = "3.0"
-
-    # Builds (or re-derives) the working document for a connection's YAML
-    # file. `yaml_text` is nil/blank the first time a connection's config
-    # repo doesn't have the file yet -- callers get a valid empty skeleton
-    # either way.
-    def self.parse(yaml_text, select_tags:)
-      doc = yaml_text.present? ? (YAML.safe_load(yaml_text) || {}) : {}
-      doc = {} unless doc.is_a?(Hash)
-      doc["_format_version"] ||= FORMAT_VERSION
-      doc["_info"] = (doc["_info"].is_a?(Hash) ? doc["_info"] : {})
-      doc["_info"]["select_tags"] = Array(select_tags)
-      doc["services"] = Array(doc["services"])
-      doc
-    end
 
     MANAGED = Kong::EntityTypes::KONG_MANAGED_FIELDS
 
@@ -286,63 +264,5 @@ module Kong
       end
     end
     private_class_method :compact
-
-    # Deterministic YAML writer -- not bare Psych.dump, whose key ordering
-    # isn't controllable -- so that a no-op parse+serialize round trip (rule
-    # ค) and repeated runs both produce byte-identical output, keeping PR
-    # diffs limited to the actual change instead of reformatting noise.
-    def self.serialize(doc)
-      lines = []
-      lines << "_format_version: #{scalar(doc.fetch('_format_version', FORMAT_VERSION))}"
-      lines << "_info:"
-      lines << "  select_tags:"
-      Array(doc.dig("_info", "select_tags")).each { |tag| lines << "    - #{scalar(tag)}" }
-      lines << "services:"
-      Array(doc["services"]).each do |service|
-        lines.concat(service_lines(service))
-      end
-      "#{lines.join("\n")}\n"
-    end
-
-    def self.service_lines(service)
-      ordered_keys = [ "name", *(service.keys - [ "name" ]).sort ]
-      first = true
-      lines = []
-      ordered_keys.each do |key|
-        value = service[key]
-        prefix = first ? "  - " : "    "
-        first = false
-        lines.concat(value_lines(key, value, prefix, "    "))
-      end
-      lines
-    end
-    private_class_method :service_lines
-
-    def self.value_lines(key, value, prefix, indent)
-      if value.is_a?(Array)
-        return [ "#{prefix}#{key}: []" ] if value.empty?
-
-        lines = [ "#{prefix}#{key}:" ]
-        value.each { |item| lines << "#{indent}  - #{scalar(item)}" }
-        lines
-      elsif value.is_a?(Hash)
-        lines = [ "#{prefix}#{key}:" ]
-        value.keys.sort.each { |k| lines.concat(value_lines(k, value[k], "#{indent}  ", "#{indent}  ")) }
-        lines
-      else
-        [ "#{prefix}#{key}: #{scalar(value)}" ]
-      end
-    end
-    private_class_method :value_lines
-
-    # Leans on Psych's own scalar-quoting logic (only quotes when a bare
-    # value would parse ambiguously) rather than reimplementing YAML's
-    # quoting rules, while this class keeps full control of structure/order.
-    def self.scalar(value)
-      return "null" if value.nil?
-
-      YAML.dump(value).delete_prefix("---").strip
-    end
-    private_class_method :scalar
   end
 end
