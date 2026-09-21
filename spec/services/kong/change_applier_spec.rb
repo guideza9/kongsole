@@ -1,6 +1,7 @@
 require "rails_helper"
 require "open3"
 require "tmpdir"
+require Rails.root.join("spec/support/pem_fixtures")
 
 RSpec.describe Kong::ChangeApplier do
   APPLIER_SVC_1 = "33333333-3333-3333-3333-333333333333"
@@ -217,7 +218,7 @@ RSpec.describe Kong::ChangeApplier do
       sh!("git", "init", "--bare", "--initial-branch=main", bare_repo.to_s, chdir: @tmp)
       scratch = @tmp.join("seed")
       sh!("git", "clone", bare_repo.to_s, scratch.to_s, chdir: @tmp)
-      File.write(scratch.join("kong.yaml"), Kong::DeckRenderer.serialize(Kong::DeckRenderer.parse(nil, select_tags: [ "managed-by-kongctl" ])))
+      File.write(scratch.join("kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ])))
       sh!("git", "add", "-A", chdir: scratch)
       sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", chdir: scratch)
       sh!("git", "push", "origin", "main", chdir: scratch)
@@ -285,14 +286,556 @@ RSpec.describe Kong::ChangeApplier do
       expect(Kong::GitClient).not_to have_received(:new)
     end
 
-    it "raises a clear NotImplementedError for a PR-mode plan on any entity_type but service" do
-      plan = create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: "route", operation: "create",
-        target_kong_id: nil, before: {}, after: { "name" => "charge" }, base_updated_at: nil)
+    def seed!(text)
+      dir = @tmp.join("reseed-#{SecureRandom.hex(4)}")
+      sh!("git", "clone", bare_repo.to_s, dir.to_s, chdir: @tmp)
+      File.write(dir.join("kong.yaml"), text)
+      sh!("git", "add", "-A", chdir: dir)
+      sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "reseed", chdir: dir)
+      sh!("git", "push", "origin", "main", chdir: dir)
+    end
 
-      expect {
-        described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw").call
-      }.to raise_error(NotImplementedError, /not yet rendered/)
+    def tool_yaml(text)
+      Kong::DeckDocument.serialize(Kong::DeckDocument.parse(text, select_tags: [ "managed-by-kongctl" ]))
+    end
+
+    def pushed_yaml(plan)
+      out, = Open3.capture3("git", "show", "kongctl/#{plan.id}:kong.yaml", chdir: bare_repo.to_s)
+      out
+    end
+
+    def branches
+      Open3.capture3("git", "branch", "-a", chdir: bare_repo.to_s).first
+    end
+
+    def apply_pr(plan, **extra)
+      described_class.new(change_plan: plan, client: pr_client, actor_username: "alice", secret: "pw", **extra).call
+    end
+
+    def pr_plan(entity_type:, operation: "create", after: {}, before: {}, target_kong_id: nil, parent_kong_id: nil)
+      create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", entity_type: entity_type, operation: operation,
+        target_kong_id: target_kong_id, parent_kong_id: parent_kong_id, before: before, after: after, base_updated_at: nil)
+    end
+
+    it "renders a route nested under its service, found through the read-model" do
+      service_id = "aaaaaaaa-0000-0000-0000-0000000000a1"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "service", kong_id: service_id, name: "orders")
+      seed!(tool_yaml("services:\n  - name: orders\n    url: http://orders:80\n"))
+      plan = pr_plan(entity_type: "route", after: { "name" => "orders-route", "paths" => [ "/o" ], "service" => { "id" => service_id } })
+
+      apply_pr(plan)
+
+      expect(YAML.safe_load(pushed_yaml(plan))["services"][0]["routes"]).to eq([ { "name" => "orders-route", "paths" => [ "/o" ] } ])
+      expect(plan.reload.status).to eq("applied")
+    end
+
+    it "renders an upstream, and a target nested under it" do
+      upstream_id = "aaaaaaaa-0000-0000-0000-0000000000a2"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "upstream", kong_id: upstream_id, name: "orders-up")
+      seed!(tool_yaml("upstreams:\n  - name: orders-up\n"))
+      plan = pr_plan(entity_type: "target", parent_kong_id: upstream_id, after: { "target" => "10.0.0.1:80", "weight" => 100 })
+
+      apply_pr(plan)
+
+      expect(YAML.safe_load(pushed_yaml(plan))["upstreams"][0]["targets"]).to eq([ { "target" => "10.0.0.1:80", "weight" => 100 } ])
+    end
+
+    it "mints the certificate id, persists it on the plan and records it in the audit event; a vault-referenced key still needs the acknowledgement" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => "{vault://env/cert-pay-key}", "snis" => [ "pay.example.internal" ] })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+      expect(plan.reload.status).to eq("pending")
+
+      result = apply_pr(plan, env_acknowledged: true)
+
+      minted = plan.reload.target_kong_id
+      expect(minted).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+      expect(result.audit_event.target_kong_id).to eq(minted)
+      expect(result.audit_event.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+      certificate = YAML.safe_load(pushed_yaml(plan))["certificates"][0]
+      expect(certificate).to include("id" => minted, "key" => "{vault://env/cert-pay-key}", "snis" => [ { "name" => "pay.example.internal" } ])
+    end
+
+    it "does not persist a freshly minted certificate id when a later step fails: the plan is failed with no target_kong_id" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      allow(Kong::DeckCli).to receive(:validate).and_raise(Kong::DeckCli::Error, "deck file validate failed: boom")
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckCli::Error)
+
+      expect(plan.target_kong_id).to be_nil
+      expect(plan.reload.status).to eq("failed")
+      expect(plan.target_kong_id).to be_nil
+    end
+
+    it "does not persist a minted certificate id when a refusal follows the render: the plan stays pending" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+      allow(Kong::DeckDocument).to receive(:serialize).and_raise(Kong::DeckDocument::Unparseable, "cannot reproduce")
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckDocument::Unparseable)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(plan.target_kong_id).to be_nil
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "renders a decK placeholder double-quoted for decK and asks for no acknowledgement: CI resolves the variable, not this tool" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      apply_pr(plan)
+
+      expect(pushed_yaml(plan)).to include(%q(key: "${{ env "DECK_CERT_PAY_KEY" }}"))
+      expect(Kong::DeckCli).to have_received(:validate)
+    end
+
+    it "keeps what it does not manage: vaults, consumer_groups and flat routes survive an edit" do
+      seed!(tool_yaml("vaults:\n  - name: env\n    prefix: env\nconsumer_groups:\n  - name: gold-tier\nroutes:\n  - name: flat-route\n"))
+      plan = pr_plan(entity_type: "service", after: { "name" => "orders", "url" => "http://orders:80" })
+
+      apply_pr(plan)
+
+      out = pushed_yaml(plan)
+      expect(out).to include("vaults:", "gold-tier", "flat-route", "name: orders")
+    end
+
+    it "refuses a config file it could not reproduce, before touching the repo: nothing pushed, plan still pending" do
+      seed!("_format_version: '3.0'\n_info:\n  select_tags: [managed-by-kongctl]\nservices:\n  - {name: orders, url: 'http://orders:80'}\n")
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckDocument::Unparseable, /would not survive a re-render/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+      expect(Kong::DeckCli).not_to have_received(:validate)
+    end
+
+    it "refuses a change it cannot render faithfully (an unnamed route), before touching the repo" do
+      service_id = "aaaaaaaa-0000-0000-0000-0000000000a1"
+      create(:kong_entity, kong_connection: pr_connection, entity_type: "service", kong_id: service_id, name: "orders")
+      seed!(tool_yaml("services:\n  - name: orders\n"))
+      plan = pr_plan(entity_type: "route", after: { "paths" => [ "/o" ], "service" => { "id" => service_id } })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckRenderer::Unrenderable, /a route needs a name/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "refuses a connection with no select_tags before pulling the repo: decK would treat an empty filter as the whole workspace" do
+      [ [], [ "" ], [ " ", "" ], nil ].each do |tags|
+        pr_connection.update_columns(select_tags: tags)
+        plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+        expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /no select_tags.*whole workspace.*set select_tags on the connection first/)
+
+        expect(plan.reload.status).to eq("pending")
+        expect(Kong::GitClient).not_to have_received(:new)
+        expect(branches).not_to include("kongctl/#{plan.id}")
+      end
+    end
+
+    it "still applies for a connection that has select_tags" do
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      apply_pr(plan)
+
+      expect(plan.reload.status).to eq("applied")
+      expect(pushed_yaml(plan)).to include("managed-by-kongctl")
+    end
+
+    it "says where a serializer bug bites: the round-trip refusal carries the first-difference line" do
+      calls = 0
+      allow(Kong::DeckDocument).to receive(:verify_input!).and_wrap_original do |original, text|
+        calls += 1
+        calls == 1 ? original.call(text) : raise(Kong::DeckDocument::Unparseable, "the config YAML would not survive a re-render unchanged (first difference at line 7) -- rewrite it")
+      end
+      plan = pr_plan(entity_type: "service", after: { "name" => "billing" })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::ChangeGuardrails::Violation, /did not round-trip byte-for-byte.*first difference at line 7/)
+
+      expect(plan.reload.status).to eq("pending")
+      expect(branches).not_to include("kongctl/#{plan.id}")
+    end
+
+    it "raises the deliberate NotImplementedError for a credential before it even pulls the repo" do
+      consumer_id = "aaaaaaaa-0000-0000-0000-0000000000a3"
+      plan = pr_plan(entity_type: "keyauth_credential", parent_kong_id: consumer_id, after: { "key" => "x" })
+
+      expect { apply_pr(plan) }.to raise_error(NotImplementedError, /keyauth_credential is deliberately never rendered/)
+
+      expect(plan.reload.status).to eq("pending")
       expect(Kong::GitClient).not_to have_received(:new)
+    end
+  end
+
+  describe "upstreams and targets (M5a)" do
+    let(:upstream_id) { "aaaaaaaa-0000-0000-0000-00000000000a" }
+    let(:target_id) { "cccccccc-0000-0000-0000-00000000000c" }
+    let(:target_path) { "https://kong-admin.internal/upstreams/#{upstream_id}/targets/#{target_id}" }
+
+    it "creates an upstream against /upstreams and writes it through to the read-model" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "upstream", operation: "create",
+        target_kong_id: nil, before: {}, after: { "name" => "orders", "algorithm" => "round-robin" }, base_updated_at: nil)
+      post = stub_request(:post, "https://kong-admin.internal/upstreams")
+        .with(body: { "name" => "orders", "algorithm" => "round-robin" })
+        .to_return(status: 201, body: { id: upstream_id, name: "orders", algorithm: "round-robin", updated_at: 1_700_000_000 }.to_json)
+
+      result = applier(plan).call
+
+      expect(post).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      expect(result.audit_event.entity_name).to eq("orders")
+      upstream = KongEntity.find_by(kong_id: upstream_id, entity_type: "upstream")
+      expect(upstream.logical_key).to eq("orders")
+    end
+
+    it "creates a target against the nested upstream path, using parent_kong_id" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create",
+        target_kong_id: nil, parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080", "weight" => 100 },
+        base_updated_at: nil)
+      post = stub_request(:post, "https://kong-admin.internal/upstreams/#{upstream_id}/targets")
+        .with(body: { "target" => "10.0.0.1:8080", "weight" => 100 })
+        .to_return(status: 201, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id },
+                                        updated_at: 1_700_000_000 }.to_json)
+
+      result = applier(plan).call
+
+      expect(post).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      target = KongEntity.find_by(kong_id: target_id, entity_type: "target")
+      expect(target.logical_key).to eq("orders/10.0.0.1:8080")
+      expect(target.parent_kong_id).to eq(upstream_id)
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    it "updates a target through its nested member path, PATCHing only the changed fields" do
+      create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => 1_700_000_000 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50, "updated_at" => 1_700_000_000 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_700_000_000))
+      get = stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: 1_700_000_000 }.to_json)
+      patch = stub_request(:patch, target_path).with(body: { "weight" => 50 })
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 50, upstream: { id: upstream_id }, updated_at: 1_700_000_500 }.to_json)
+
+      result = applier(plan).call
+
+      expect(get).to have_been_requested
+      expect(patch).to have_been_requested
+      expect(KongEntity.find_by(kong_id: target_id).data["weight"]).to eq(50)
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    # Kong reports a target's updated_at with millisecond fractions
+    # (1789914728.226); every other entity uses whole seconds. The plan stores
+    # it at database precision, so an exact == against a freshly parsed float
+    # never matched -- every target update or delete was refused as "changed
+    # by someone else". Found by running against a real Kong 3.7.
+    it "applies a target update whose Kong updated_at carries millisecond fractions" do
+      updated_at = 1_789_914_728.226
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => updated_at },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50, "updated_at" => updated_at },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(updated_at))
+      plan = ChangePlan.find(plan.id) # as the applier sees it: read back from the database
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 100, upstream: { id: upstream_id }, updated_at: updated_at }.to_json)
+      patch = stub_request(:patch, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 50, upstream: { id: upstream_id }, updated_at: updated_at + 1 }.to_json)
+
+      applier(plan).call
+
+      expect(patch).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+    end
+
+    it "applies a target delete whose Kong updated_at carries millisecond fractions" do
+      updated_at = 1_789_914_728.226
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+        parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id, before: { "id" => target_id, "target" => "10.0.0.1:8080", "updated_at" => updated_at },
+        base_updated_at: Time.zone.at(updated_at))
+      plan = ChangePlan.find(plan.id)
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: updated_at }.to_json)
+      delete = stub_request(:delete, target_path).to_return(status: 204)
+
+      applier(plan).call
+
+      expect(delete).to have_been_requested
+    end
+
+    it "still refuses when the millisecond timestamp really did move" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_789_914_728.226))
+      plan = ChangePlan.find(plan.id)
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: 1_789_914_728.227 }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /changed by someone else/)
+    end
+
+    it "refuses to update a target someone else changed since the plan, checking through the nested path" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "update",
+        target_kong_id: target_id, parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100 },
+        after: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 50 },
+        diff: { "weight" => { "from" => 100, "to" => 50 } }, base_updated_at: Time.zone.at(1_700_000_000))
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", weight: 75, updated_at: 1_700_000_999 }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /changed by someone else/)
+      expect(plan.reload.status).to eq("pending")
+      expect(WebMock).not_to have_requested(:patch, target_path)
+    end
+
+    it "deletes a target through its nested member path and soft-deletes its read-model row" do
+      create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id,
+        name: "10.0.0.1:8080", parent_type: "upstream", parent_kong_id: upstream_id)
+      plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "target", target_kong_id: target_id,
+        parent_kong_id: upstream_id,
+        before: { "id" => target_id, "target" => "10.0.0.1:8080", "weight" => 100, "updated_at" => 1_700_000_000 })
+      stub_request(:get, target_path)
+        .to_return(status: 200, body: { id: target_id, target: "10.0.0.1:8080", updated_at: 1_700_000_000 }.to_json)
+      delete = stub_request(:delete, target_path).to_return(status: 204)
+
+      result = applier(plan).call
+
+      expect(delete).to have_been_requested
+      expect(plan.reload.status).to eq("applied")
+      expect(KongEntity.active.find_by(kong_id: target_id)).to be_nil
+      expect(result.audit_event.entity_name).to eq("10.0.0.1:8080")
+    end
+
+    it "marks the plan failed when Kong rejects the target write (e.g. a duplicate target -> 409)" do
+      plan = create(:change_plan, kong_connection: connection, entity_type: "target", operation: "create",
+        target_kong_id: nil, parent_kong_id: upstream_id, before: {}, after: { "target" => "10.0.0.1:8080" }, base_updated_at: nil)
+      stub_request(:post, "https://kong-admin.internal/upstreams/#{upstream_id}/targets")
+        .to_return(status: 409, body: { name: "unique constraint violation" }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::Client::UnexpectedResponse)
+      expect(plan.reload.status).to eq("failed")
+    end
+  end
+
+  describe "certificates and SNIs (M5b)" do
+    let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }
+    let(:sni_id) { "eeeeeeee-0000-0000-0000-00000000000e" }
+    let(:fixture) { PemFixtures.self_signed(days: 60) }
+    let(:ref) { "{vault://env/cert-pay-key}" }
+    let(:created_cert) do
+      { id: cert_id, cert: fixture[:cert_pem], key: ref, snis: [ "pay.example.internal" ], tags: [], updated_at: 1_700_000_000 }
+    end
+
+    def cert_create_plan(after: nil)
+      create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "create", target_kong_id: nil, before: {},
+        after: after || { "cert" => fixture[:cert_pem], "key" => ref, "snis" => [ "pay.example.internal" ] },
+        diff: { "operation" => "create" }, base_updated_at: nil)
+    end
+
+    describe "the env-var acknowledgement" do
+      it "refuses a vault-referenced create until the variable is acknowledged, naming it, and touches nothing" do
+        plan = cert_create_plan
+
+        expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+        expect(plan.reload.status).to eq("pending")
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "does not treat a raw param string as an acknowledgement" do
+        expect { applier(cert_create_plan, env_acknowledged: "false").call }
+          .to raise_error(Kong::ChangeGuardrails::Violation, /CERT_PAY_KEY/)
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "applies once acknowledged, and records which variables were confirmed" do
+        plan = cert_create_plan
+        post = stub_request(:post, "https://kong-admin.internal/certificates")
+          .with(body: hash_including("key" => ref)).to_return(status: 201, body: created_cert.to_json)
+
+        result = applier(plan, env_acknowledged: true).call
+
+        expect(post).to have_been_requested
+        expect(plan.reload.status).to eq("applied")
+        expect(result.audit_event.context).to eq({ "acknowledged_env_vars" => [ "CERT_PAY_KEY" ] })
+        expect(result.audit_event.entity_name).to eq("pay.example.internal")
+      end
+
+      it "writes through metadata and the reference -- never the PEM -- to the read-model" do
+        stub_request(:post, "https://kong-admin.internal/certificates").to_return(status: 201, body: created_cert.to_json)
+
+        applier(cert_create_plan, env_acknowledged: true).call
+
+        row = KongEntity.find_by(kong_id: cert_id)
+        expect(row.data["key"]).to eq(ref)
+        expect(row.data).not_to have_key("cert")
+        expect(row.not_after).to be_within(5.seconds).of(60.days.from_now)
+      end
+
+      it "needs no acknowledgement for an edit that leaves the key alone" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+          before: { "id" => cert_id, "key" => ref, "tags" => [], "updated_at" => 1_700_000_000 },
+          after: { "id" => cert_id, "key" => ref, "tags" => [ "core" ], "updated_at" => 1_700_000_000 },
+          diff: { "tags" => { "from" => [], "to" => [ "core" ] } }, base_updated_at: Time.zone.at(1_700_000_000))
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        patch = stub_request(:patch, "https://kong-admin.internal/certificates/#{cert_id}").with(body: { "tags" => [ "core" ] })
+          .to_return(status: 200, body: created_cert.merge(tags: [ "core" ]).to_json)
+
+        result = applier(plan).call
+
+        expect(patch).to have_been_requested
+        expect(result.audit_event.context).to eq({})
+      end
+
+      it "needs it when an update changes the key reference" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "certificate", operation: "update", target_kong_id: cert_id,
+          before: { "id" => cert_id, "key" => "{vault://env/cert-old-key}", "updated_at" => 1_700_000_000 },
+          after: { "id" => cert_id, "key" => "{vault://env/cert-new-key}", "updated_at" => 1_700_000_000 },
+          diff: { "key" => { "from" => "{vault://env/cert-old-key}", "to" => "{vault://env/cert-new-key}" } },
+          base_updated_at: Time.zone.at(1_700_000_000))
+
+        expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /CERT_NEW_KEY/)
+      end
+
+      it "needs none for a delete, and records an empty audit context" do
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+          before: { "id" => cert_id, "snis" => [ "pay.example.internal" ], "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        stub_request(:delete, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 204)
+
+        expect(applier(plan).call.audit_event.context).to eq({})
+      end
+    end
+
+    describe "defense in depth on the key policy" do
+      it "re-rejects a plan whose stored body carries a PEM, even when acknowledged, before any request" do
+        plan = cert_create_plan(after: { "cert" => fixture[:cert_pem], "key" => fixture[:key_pem] })
+
+        expect { applier(plan, env_acknowledged: true).call }.to raise_error(Kong::CertificateKeyPolicy::Rejected)
+        expect(plan.reload.status).to eq("pending")
+        expect(WebMock).not_to have_requested(:any, /kong-admin/)
+      end
+
+      it "re-rejects a decK placeholder when the connection is (now) direct" do
+        plan = cert_create_plan(after: { "cert" => fixture[:cert_pem], "key" => '${{ env "DECK_CERT_A" }}' })
+
+        expect { applier(plan, env_acknowledged: true).call }.to raise_error(Kong::CertificateKeyPolicy::Rejected, /direct/)
+      end
+    end
+
+    describe "keeping the read-model honest" do
+      before { create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: cert_id, name: "old.example") }
+
+      it "refreshes the parent certificate after an SNI create, so its derived name follows" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis").with(body: hash_including("certificate" => { "id" => cert_id }))
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+
+        applier(plan).call
+
+        expect(refetch).to have_been_requested
+        expect(KongEntity.find_by(kong_id: sni_id).parent_kong_id).to eq(cert_id)
+        expect(KongEntity.find_by(kong_id: cert_id).name).to eq("pay.example.internal")
+      end
+
+      it "still applies and audits the SNI when the parent's refresh returns garbage -- the write already happened" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis")
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: "<html>not json")
+
+        result = applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(result.audit_event).to be_persisted
+      end
+
+      it "still applies the SNI when refreshing the parent fails -- the write already happened" do
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "create", target_kong_id: nil,
+          parent_kong_id: cert_id, before: {}, after: { "name" => "pay.example.internal", "certificate" => { "id" => cert_id } },
+          diff: { "operation" => "create" }, base_updated_at: nil)
+        stub_request(:post, "https://kong-admin.internal/snis")
+          .to_return(status: 201, body: { id: sni_id, name: "pay.example.internal", certificate: { id: cert_id }, updated_at: 1_700_000_000 }.to_json)
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 503, body: "")
+
+        applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(KongEntity.find_by(kong_id: sni_id)).to be_present
+      end
+
+      it "refreshes both the old and the new certificate when an SNI update re-points it" do
+        other_id = "ffffffff-0000-0000-0000-00000000000f"
+        create(:kong_entity, kong_connection: connection, entity_type: "certificate", kong_id: other_id, name: "new.example")
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
+          parent_type: "certificate", parent_kong_id: cert_id)
+        plan = create(:change_plan, kong_connection: connection, entity_type: "sni", operation: "update", target_kong_id: sni_id,
+          parent_kong_id: cert_id,
+          before: { "id" => sni_id, "name" => "pay.example.internal", "certificate" => { "id" => cert_id }, "updated_at" => 1_700_000_000 },
+          after: { "id" => sni_id, "name" => "pay.example.internal", "certificate" => { "id" => other_id }, "updated_at" => 1_700_000_000 },
+          diff: { "certificate" => { "from" => { "id" => cert_id }, "to" => { "id" => other_id } } },
+          base_updated_at: Time.zone.at(1_700_000_000))
+        moved = { id: sni_id, name: "pay.example.internal", certificate: { id: other_id }, updated_at: 1_700_000_001 }
+        stub_request(:get, "https://kong-admin.internal/snis/#{sni_id}")
+          .to_return(status: 200, body: moved.merge(certificate: { id: cert_id }, updated_at: 1_700_000_000).to_json)
+        stub_request(:patch, "https://kong-admin.internal/snis/#{sni_id}").to_return(status: 200, body: moved.to_json)
+        old_refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}")
+          .to_return(status: 200, body: created_cert.merge(snis: []).to_json)
+        new_refetch = stub_request(:get, "https://kong-admin.internal/certificates/#{other_id}")
+          .to_return(status: 200, body: created_cert.merge(id: other_id, snis: [ "pay.example.internal" ]).to_json)
+
+        applier(plan).call
+
+        expect(plan.reload.status).to eq("applied")
+        expect(new_refetch).to have_been_requested
+        expect(old_refetch).to have_been_requested
+      end
+
+      it "soft-deletes a deleted certificate's SNIs, which Kong removes with it" do
+        create(:kong_entity, kong_connection: connection, entity_type: "sni", kong_id: sni_id, name: "pay.example.internal",
+          parent_type: "certificate", parent_kong_id: cert_id)
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "certificate", target_kong_id: cert_id,
+          before: { "id" => cert_id, "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 200, body: created_cert.to_json)
+        stub_request(:delete, "https://kong-admin.internal/certificates/#{cert_id}").to_return(status: 204)
+
+        applier(plan).call
+
+        expect(KongEntity.active.where(kong_connection: connection, kong_id: [ cert_id, sni_id ])).to be_empty
+      end
+
+      it "does the same for an upstream's targets (closing an M5a gap: they stayed listed until the next sync)" do
+        upstream_id = "aaaaaaaa-0000-0000-0000-00000000000a"
+        target_id = "cccccccc-0000-0000-0000-00000000000c"
+        create(:kong_entity, kong_connection: connection, entity_type: "upstream", kong_id: upstream_id, name: "orders")
+        create(:kong_entity, kong_connection: connection, entity_type: "target", kong_id: target_id, name: "10.0.0.1:8080",
+          parent_type: "upstream", parent_kong_id: upstream_id)
+        plan = create(:change_plan, :delete, kong_connection: connection, entity_type: "upstream", target_kong_id: upstream_id,
+          before: { "id" => upstream_id, "name" => "orders", "updated_at" => 1_700_000_000 })
+        stub_request(:get, "https://kong-admin.internal/upstreams/#{upstream_id}")
+          .to_return(status: 200, body: { id: upstream_id, name: "orders", updated_at: 1_700_000_000 }.to_json)
+        stub_request(:delete, "https://kong-admin.internal/upstreams/#{upstream_id}").to_return(status: 204)
+
+        applier(plan).call
+
+        expect(KongEntity.active.where(kong_connection: connection, kong_id: [ upstream_id, target_id ])).to be_empty
+      end
     end
   end
 end

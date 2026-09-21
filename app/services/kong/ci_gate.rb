@@ -10,6 +10,18 @@ module Kong
 
     DEFAULT_DELETE_THRESHOLD = 3
 
+    # decK's `--json-output` groups what will happen to each entity:
+    #   {"changes": {"creating": [..], "updating": [..], "deleting": [..]}}
+    # every entry {"name", "kind", "body": {"new", "old"}}. The gate reads them
+    # as one flat list tagged with the action.
+    BUCKETS = { "creating" => "create", "updating" => "update", "deleting" => "delete" }.freeze
+
+    UNRECOGNISED_REASON = "the decK diff shape was not recognised -- refusing to pass what the gate cannot read".freeze
+
+    # decK always emits `changes`, even for nothing to do; DeckCli.diff returns
+    # {} for blank output, which is missing output, not "no changes".
+    MISSING_CHANGES_REASON = "the decK diff has no `changes` -- refusing to treat missing output as no changes".freeze
+
     Result = Struct.new(:passed, :reasons, keyword_init: true) do
       def passed? = passed
     end
@@ -25,7 +37,7 @@ module Kong
     end
 
     def check
-      reasons = []
+      reasons = shape_reasons
       reasons << admin_path_reason if touches_admin_path?
       reasons << delete_threshold_reason if delete_count > @delete_threshold
 
@@ -34,20 +46,56 @@ module Kong
 
     private
 
+    # Fail closed: a diff this gate cannot fully read must not pass. Reading
+    # only the buckets it knows would turn a renamed bucket into "no changes".
+    def shape_reasons
+      reasons = []
+      reasons << MISSING_CHANGES_REASON if raw_changes.nil?
+      reasons << UNRECOGNISED_REASON if unrecognised_shape?
+      reasons << errors_reason if Array(@deck_diff["errors"]).any?
+      reasons
+    end
+
+    def raw_changes
+      @deck_diff["changes"] || @deck_diff["entity_changes"]
+    end
+
+    def unrecognised_shape?
+      changes = raw_changes
+      return !Array(changes).all?(Hash) unless changes.is_a?(Hash)
+      return true if (changes.keys - BUCKETS.keys).any? || changes.values.any? { |bucket| !bucket.is_a?(Array) }
+
+      !changes.values.flatten(1).all?(Hash)
+    end
+
+    # Only what the gate can read; unrecognised parts are reported by shape_reasons.
     def entity_changes
-      Array(@deck_diff["changes"] || @deck_diff["entity_changes"])
+      changes = raw_changes
+      return Array(changes).grep(Hash) unless changes.is_a?(Hash)
+
+      BUCKETS.flat_map do |bucket, action|
+        entries = changes[bucket]
+        entries.is_a?(Array) ? entries.grep(Hash).map { |entry| entry.merge("change" => action) } : []
+      end
     end
 
     def touches_admin_path?
       entity_changes.any? { |change| @admin_path_names.include?(change["name"]) }
     end
 
+    # An entry that names its action says so; only the pre-M5c flat shape,
+    # which carried just {old, new}, is read by its missing `new`.
     def delete_count
-      entity_changes.count { |change| change["new"].nil? || change["change"] == "delete" }
+      entity_changes.count { |change| change["change"] ? change["change"] == "delete" : change["new"].nil? }
     end
 
     def admin_path_reason
       "touches an entity on the tool's own admin path -- never allowed, no override"
+    end
+
+    def errors_reason
+      messages = Kong::CertificateKeyPolicy.scrub(Array(@deck_diff["errors"]).join("; ")).truncate(300)
+      "decK reported errors in the diff: #{messages}"
     end
 
     def delete_threshold_reason

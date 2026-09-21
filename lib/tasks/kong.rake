@@ -23,7 +23,7 @@ namespace :kong do
 
     Dir.mktmpdir do |scratch|
       run!("git", "clone", bare_repo.to_s, scratch)
-      skeleton = Kong::DeckRenderer.serialize(Kong::DeckRenderer.parse(nil, select_tags: [ "managed-by-kongctl" ]))
+      skeleton = Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ]))
       FileUtils.mkdir_p(File.join(scratch, "uat"))
       File.write(File.join(scratch, "uat", "kong.yaml"), skeleton)
       run!("git", "add", "-A", chdir: scratch)

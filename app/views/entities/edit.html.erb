@@ -35,7 +35,9 @@
       <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
         Every field on this <%= @entity.entity_type.humanize.downcase %>, straight from Kong.
         Removing a key leaves that field <em>unchanged</em> — set it to <code class="font-mono">null</code> to clear it.
-        <% if Kong::Redactor::SENSITIVE_FIELDS_BY_ENTITY.key?(@entity.entity_type) %>
+        <% if @entity.entity_type == "certificate" %>
+          The private key is a <em>reference</em> (<code class="font-mono">{vault://env/…}</code>); a key itself can't be entered here.
+        <% elsif Kong::Redactor::SENSITIVE_FIELDS_BY_ENTITY.key?(@entity.entity_type) %>
           Secrets show as <code class="font-mono"><%= Kong::Redactor::MARK %></code> and can't be set here.
         <% end %>
       </p>
@@ -50,6 +52,11 @@
         <p class="notice-banner mb-3 text-xs" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
           <%= @payload_error %>
         </p>
+        <% if @payload_withheld %>
+          <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+            Your text wasn't kept because it may contain key material, so the editor shows the current document again.
+          </p>
+        <% end %>
       <% end %>
 
       <div class="json-editor" data-json-editor-target="wrapper">

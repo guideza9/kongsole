@@ -15,7 +15,7 @@ module Kong
     # everything called `key`" so an unrelated field named `key` on some other
     # entity is never silently dropped.
     SENSITIVE_FIELDS_BY_ENTITY = {
-      "certificate" => %w[key],
+      "certificate" => %w[key key_alt],
       "basicauth_credential" => %w[password],
       "keyauth_credential" => %w[key],
       "ca_certificate" => %w[key]
@@ -38,6 +38,18 @@ module Kong
       Array(SENSITIVE_FIELDS_BY_ENTITY[entity_type.to_s]).include?(key) || SCHEMA_MARKED_FIELDS.include?(key)
     end
 
+    # M5b: on a certificate a `key` that is a vault/decK reference is a
+    # pointer, not a secret, and operators need to see which variable it
+    # names. Deliberately narrow -- certificate only, key/key_alt only -- so
+    # a credential's `key` (or anything else) is never let through.
+    REFERENCE_PASSTHROUGH_FIELDS = %w[key key_alt].freeze
+
+    def self.reference_passthrough?(entity_type, key, value)
+      entity_type.to_s == "certificate" &&
+        REFERENCE_PASSTHROUGH_FIELDS.include?(key.to_s) &&
+        Kong::CertificateKeyPolicy.reference?(value)
+    end
+
     # Drops every key still holding the redaction MARK, at any depth.
     #
     # Value-based on purpose: it removes only a placeholder inherited from an
@@ -55,8 +67,17 @@ module Kong
     # policy that credential secrets can never be set from a form (a typed
     # replacement is dropped just like an untouched "[REDACTED]" is).
     def self.prune_sensitive(entity_type, data)
-      deep_prune(data) { |key, _value| sensitive_key?(entity_type, key) }
+      deep_prune(data) do |key, _value|
+        sensitive_key?(entity_type, key) && !policy_owned?(entity_type, key)
+      end
     end
+
+    # Certificate key/key_alt are judged by Kong::CertificateKeyPolicy, which
+    # raises on anything but a reference, so they must reach it unpruned.
+    def self.policy_owned?(entity_type, key)
+      entity_type.to_s == "certificate" && REFERENCE_PASSTHROUGH_FIELDS.include?(key.to_s)
+    end
+    private_class_method :policy_owned?
 
     def self.deep_prune(value, &drop)
       case value
@@ -90,7 +111,7 @@ module Kong
       case value
       when Hash
         value.each_with_object({}) do |(key, v), acc|
-          acc[key] = redact_key?(key) ? MARK : deep_redact(v)
+          acc[key] = redact?(key, v) ? MARK : deep_redact(v)
         end
       when Array
         value.map { |v| deep_redact(v) }
@@ -99,8 +120,8 @@ module Kong
       end
     end
 
-    def redact_key?(key)
-      self.class.sensitive_key?(@entity_type, key)
+    def redact?(key, value)
+      self.class.sensitive_key?(@entity_type, key) && !self.class.reference_passthrough?(@entity_type, key, value)
     end
 
     def digest(redacted)

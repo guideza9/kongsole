@@ -1,5 +1,5 @@
 # Browses kong_entities for the session's current connection and proposes
-# changes to them, across every entity_type M0-M3 sync into the read-model
+# changes to them, across every entity_type synced into the read-model
 # (docs/DESIGN.md section 15). Read path lives entirely against the local
 # read-model; only #sync, #update, and #destroy talk to Kong directly.
 # #update/#destroy never touch Kong themselves -- they propose a
@@ -10,8 +10,29 @@ class EntitiesController < ApplicationController
   before_action :require_session!
   before_action :set_type, only: :index
   before_action :set_entity, only: %i[show edit update destroy]
+  before_action :set_creatable_type, :set_parent, only: %i[new create]
 
   DEFAULT_TYPE = "service"
+
+  # The types this controller has a "New" flow for (docs/DESIGN.md section 15
+  # M5). Everything else is created through PluginsController or the API/MCP.
+  CREATABLE_TYPES = %w[upstream target certificate ca_certificate sni].freeze
+  TARGET_SEED = { "target" => "", "weight" => 100, "tags" => [] }.freeze
+  # The certificate seed's key is *deliberately* an invalid reference (upper
+  # case fails Kong::CertificateKeyPolicy): submitted unedited it is refused,
+  # rather than creating a certificate pointing at a variable nobody set.
+  CERTIFICATE_SEED = {
+    "cert" => "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+    "key" => "{vault://env/cert-NAME-key}",
+    "snis" => [],
+    "tags" => []
+  }.freeze
+  CA_CERTIFICATE_SEED = { "cert" => "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n", "tags" => [] }.freeze
+  SNI_SEED = { "name" => "", "tags" => [] }.freeze
+  # What a key reference looks like, ignoring case: the seeded NAME placeholder
+  # has this shape (so it may stay on screen) yet is not key material.
+  REFERENCE_SHAPE = %r{\A\{vault://env/[a-z0-9][a-z0-9_-]*\}\z}i
+  KEY_MATERIAL_REMOVED = "[private key removed]".freeze
 
   def index
     @filters = params.permit(:q, :tags, :sort).to_h.symbolize_keys
@@ -47,6 +68,29 @@ class EntitiesController < ApplicationController
     @child_groups = child_groups
   end
 
+  def new
+    @payload_json = JSON.pretty_generate(seed_payload)
+  end
+
+  # Same document editor and review pipeline as an edit: the parsed JSON goes
+  # to Kong::ChangePlanner, which validates it against Kong's own schema. A
+  # rejection re-renders the form rather than redirecting, so a long
+  # healthchecks block isn't lost to a typo.
+  def create
+    attributes = parse_json_payload!(params[:payload_json], entity_type: @creatable_type)
+
+    plan = Kong::ChangePlanner.new(
+      connection: current_connection, client: current_client, operation: "create",
+      entity_type: @creatable_type, parent_kong_id: @parent&.kong_id, attributes: attributes,
+      actor_username: current_connection.auth_username, actor_operator: current_operator
+    ).call
+    redirect_to change_plan_path(plan)
+  rescue JsonPayloadParsing::InvalidPayload, Kong::ChangeGuardrails::Violation => e
+    render_new_with_error(e.message)
+  rescue Kong::Client::Error => e
+    render_new_with_error("Kong rejected this request: #{e.message}")
+  end
+
   def edit
     @payload_json = JSON.pretty_generate(editable_payload)
   end
@@ -56,19 +100,27 @@ class EntitiesController < ApplicationController
 
     plan = Kong::ChangePlanner.new(
       connection: current_connection, client: current_client, operation: "update",
-      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, attributes: attributes,
-      actor_username: current_connection.auth_username, actor_operator: current_operator
+      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, parent_kong_id: @entity.parent_kong_id,
+      attributes: attributes, actor_username: current_connection.auth_username, actor_operator: current_operator
     ).call
     redirect_to change_plan_path(plan)
   rescue JsonPayloadParsing::InvalidPayload => e
     # Re-render rather than redirect so the operator's edit survives the
     # round trip -- a redirect would hand back the unedited document and
     # throw away however long they spent in the textarea.
-    @payload_json = params[:payload_json]
-    @payload_error = e.message
+    @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
+    @payload_error = safe_message(e.message)
+    render :edit, status: :unprocessable_entity
+  rescue Kong::ChangePlanner::SchemaViolation, Kong::CertificateKeyPolicy::Rejected => e
+    return redirect_to(edit_entity_path(@entity), alert: safe_message(e.message)) if params[:payload_json].blank?
+
+    # Kong refused the document itself: keep the operator's JSON on screen
+    # with Kong's per-field message, same as an unparseable payload.
+    @payload_json = echoed_payload(@entity.entity_type) { editable_payload }
+    @payload_error = safe_message(e.message)
     render :edit, status: :unprocessable_entity
   rescue Kong::ChangeGuardrails::Violation => e
-    redirect_to edit_entity_path(@entity), alert: e.message
+    redirect_to edit_entity_path(@entity), alert: safe_message(e.message)
   rescue Kong::Client::Error => e
     redirect_to edit_entity_path(@entity), alert: "Couldn't read the current state from Kong: #{e.message}"
   end
@@ -76,7 +128,7 @@ class EntitiesController < ApplicationController
   def destroy
     plan = Kong::ChangePlanner.new(
       connection: current_connection, client: current_client, operation: "delete",
-      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id,
+      entity_type: @entity.entity_type, target_kong_id: @entity.kong_id, parent_kong_id: @entity.parent_kong_id,
       actor_username: current_connection.auth_username, actor_operator: current_operator
     ).call
     redirect_to change_plan_path(plan)
@@ -115,6 +167,113 @@ class EntitiesController < ApplicationController
     @entity = KongEntity.active.where(kong_connection: current_connection).find(params[:id])
   end
 
+  def set_creatable_type
+    @creatable_type = params[:type].to_s
+    return if CREATABLE_TYPES.include?(@creatable_type)
+
+    redirect_to entities_path, alert: "There's no create form for #{@creatable_type.presence&.inspect || 'that type'} here."
+  end
+
+  # A nested type (target) is always created inside a parent the operator was
+  # already looking at -- no free-text picker, same as PluginsController's
+  # scope. An unknown parent bounces back to the list to pick one.
+  def set_parent
+    definition = Kong::EntityTypes.fetch(@creatable_type)
+    return unless definition.requires_parent?
+
+    @parent = KongEntity.active.find_by(
+      kong_connection: current_connection, entity_type: definition.parent_type, kong_id: params[:parent_kong_id]
+    )
+    return if @parent
+
+    redirect_to entities_path(type: definition.parent_type),
+      alert: "Pick the #{definition.parent_type} to add this #{@creatable_type} to first."
+  end
+
+  def seed_payload
+    case @creatable_type
+    when "upstream" then Kong::UpstreamPresets.seed(params[:preset])
+    when "target" then TARGET_SEED.deep_dup
+    when "certificate" then CERTIFICATE_SEED.deep_dup
+    when "ca_certificate" then CA_CERTIFICATE_SEED.deep_dup
+    when "sni" then SNI_SEED.deep_dup
+    end
+  end
+
+  # The text an error page puts back in the editor. A private key someone
+  # pasted must not round-trip through our HTML. A marker scrub alone misses a
+  # key pasted without its BEGIN line, so for the certificate types:
+  #   * JSON objects have every key / key_alt value that is not a key
+  #     *reference* blanked;
+  #   * anything else (unparseable text, or JSON that is not an object) is not
+  #     echoed at all -- a textual blanker cannot be made safe -- and the
+  #     fallback (the seed, or the live document) is shown instead.
+  # Other types keep the operator's text, scrubbed of PEM blocks.
+  def echoed_payload(entity_type)
+    text = params[:payload_json].to_s
+    return Kong::CertificateKeyPolicy.scrub(text) unless entity_type.to_s.in?(Kong::CertificateKeyPolicy::DEEP_SCAN_TYPES)
+
+    parsed = begin
+      JSON.parse(text)
+    rescue JSON::ParserError
+      nil
+    end
+    return JSON.pretty_generate(blank_key_material(parsed)) if parsed.is_a?(Hash) && !key_material_in_names?(parsed)
+
+    @payload_withheld = true
+    JSON.pretty_generate(yield)
+  end
+
+  # A field *name* can carry key material too (the policy's deep scan treats it
+  # so), and names are not rewritten here: such a document is withheld whole.
+  def key_material_in_names?(node)
+    case node
+    when Hash
+      node.any? { |name, value| Kong::CertificateKeyPolicy.scrub(name) != name.to_s || key_material_in_names?(value) }
+    when Array then node.any? { |value| key_material_in_names?(value) }
+    else false
+    end
+  end
+
+  # Kong's and the planner's messages can quote the document they refused.
+  def safe_message(message)
+    Kong::CertificateKeyPolicy.scrub(message)
+  end
+
+  def blank_key_material(node)
+    case node
+    when Hash
+      node.to_h do |field, value|
+        blank = Kong::CertificateKeyPolicy::KEY_FIELDS.include?(field) && !value.nil? && !key_reference_shaped?(value)
+        [ field, blank ? blank_key_value(value) : blank_key_material(value) ]
+      end
+    when Array then node.map { |value| blank_key_material(value) }
+    when String then Kong::CertificateKeyPolicy.scrub(node)
+    else node
+    end
+  end
+
+  # A whole-value PEM shows as the removal notice (so the operator sees why it
+  # went); anything else that is not a reference is simply emptied.
+  def blank_key_value(value)
+    value.is_a?(String) && Kong::CertificateKeyPolicy.scrub(value).strip == KEY_MATERIAL_REMOVED ? KEY_MATERIAL_REMOVED : ""
+  end
+
+  # Kong::Redactor::MARK is what a plaintext key Kong holds looks like in the
+  # editor; it is not key material and the policy accepts it back, so it must
+  # round-trip rather than be emptied.
+  def key_reference_shaped?(value)
+    return false unless value.is_a?(String)
+
+    value == Kong::Redactor::MARK || Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value)
+  end
+
+  def render_new_with_error(message)
+    @payload_json = echoed_payload(@creatable_type) { seed_payload }
+    @payload_error = safe_message(message)
+    render :new, status: :unprocessable_entity
+  end
+
   # "Load more" (see _pagination.html.erb) is the only request that wants
   # the append-a-page turbo_stream template, and it is the only one that
   # carries these params.
@@ -136,6 +295,10 @@ class EntitiesController < ApplicationController
       { "Plugins" => children_of("plugin") }
     when "consumer"
       { "Credentials" => children_of(%w[keyauth_credential basicauth_credential]), "Plugins" => children_of("plugin") }
+    when "upstream"
+      { "Targets" => children_of("target") }
+    when "certificate"
+      { "SNIs" => children_of("sni") }
     else
       {}
     end
@@ -155,11 +318,12 @@ class EntitiesController < ApplicationController
   # Falls back to the cached copy if Kong is unreachable, flagging it so the
   # page can say the JSON may be stale.
   def editable_payload
-    response = current_client.get("#{Kong::EntityTypes.fetch(@entity.entity_type).list_path}/#{@entity.kong_id}")
+    path = Kong::EntityTypes.fetch(@entity.entity_type).member_path(@entity.kong_id, parent_kong_id: @entity.parent_kong_id)
+    response = current_client.get(path)
     body = response.body
     raw = body.is_a?(String) ? JSON.parse(body) : body
     Kong::Redactor.call(@entity.entity_type, raw)[:data].except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
-  rescue Kong::Client::Error
+  rescue Kong::Client::Error, JSON::ParserError
     @payload_stale = true
     @entity.data.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
   end

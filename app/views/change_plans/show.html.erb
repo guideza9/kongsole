@@ -2,7 +2,7 @@
 
 <div class="flex flex-wrap items-center gap-2 mb-1">
   <h1 class="text-xl font-semibold" style="color: var(--color-ink)">
-    <%= @change_plan.operation.capitalize %> <%= @change_plan.before["name"] || @change_plan.after["name"] %>
+    <%= @change_plan.operation.capitalize %> <%= @change_plan.entity_label %>
   </h1>
   <span class="tag"><%= @change_plan.entity_type %></span>
 </div>
@@ -32,6 +32,18 @@
 <% if @dependent_routes.present? %>
   <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
     Kong will reject this delete until these <%= @dependent_routes.size %> route<%= "s" unless @dependent_routes.size == 1 %> are removed first: <%= @dependent_routes.map(&:name).join(", ") %>
+  </p>
+<% end %>
+
+<% if @dependent_targets.present? %>
+  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+    Deleting this upstream also removes its <%= @dependent_targets.size %> target<%= "s" unless @dependent_targets.size == 1 %>: <%= @dependent_targets.map(&:name).join(", ") %>
+  </p>
+<% end %>
+
+<% if @dependent_snis.present? %>
+  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+    Deleting this certificate also removes its <%= @dependent_snis.size %> SNI<%= "s" unless @dependent_snis.size == 1 %>: <%= @dependent_snis.map(&:name).join(", ") %>
   </p>
 <% end %>
 
@@ -112,10 +124,32 @@
 
   <% if @change_plan.status == "pending" && !@change_plan.expired? %>
     <%= form_with url: apply_change_plan_path(@change_plan), method: :post, class: "panel p-4 grid gap-4" do %>
+<% if @env_vars.present? %>
+  <div class="grid gap-2">
+    <label class="flex items-start gap-2 text-sm" style="color: var(--color-ink)">
+      <input type="checkbox" name="acknowledge_env_vars" value="1" required class="mt-0.5" style="accent-color: var(--color-accent)" />
+      <span>
+        I confirm <span class="font-mono"><%= @env_vars.join(", ") %></span>
+        <%= @env_vars.size == 1 ? "is" : "are" %> set in the environment of every Kong node on <%= current_connection.name %>.
+      </span>
+    </label>
+    <p class="text-xs" style="color: var(--color-ink-faint)">
+      Kong doesn't check this. If a variable is missing, TLS for this certificate's hostnames fails until it is set.
+    </p>
+  </div>
+<% end %>
+      <% if @deck_env_vars.present? %>
+        <p class="text-xs" style="color: var(--color-ink-faint)">
+          decK reads <span class="font-mono"><%= @deck_env_vars.join(", ") %></span> from the CI environment when it syncs this change.
+          This tool checked the file with a dummy value and never sees the key. If the variable is unset in CI, the sync fails before anything reaches Kong.
+          The CI variable must hold the PEM on ONE line with literal \n escapes, not real newlines.
+          Because the file was checked with a dummy value, the diff shows the certificate's key as changed.
+        </p>
+      <% end %>
       <% if @requires_confirmation_name %>
         <div>
           <label class="block text-sm font-medium mb-1" style="color: var(--color-danger)">
-            This is protected. Type <span class="font-mono"><%= @change_plan.before["name"] %></span> to confirm deletion.
+            This is protected. Type <span class="font-mono"><%= @change_plan.entity_label %></span> to confirm deletion.
           </label>
           <input type="text" name="confirmation_name" class="field-input font-mono text-sm" autocomplete="off" />
         </div>

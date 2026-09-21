@@ -19,11 +19,14 @@ Rails.application.routes.draw do
   end
   delete "logout" => "sessions#destroy", as: :logout
 
-  resources :entities, only: %i[index show edit update destroy] do
+  resources :entities, only: %i[index show new create edit update destroy] do
     collection { post :sync }
   end
 
   resources :plugins, only: %i[new create]
+  resources :certificates, only: [] do
+    collection { get :expiring }
+  end
 
   resources :change_plans, only: %i[index show] do
     member { post :apply }
@@ -39,6 +42,9 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :entities, only: %i[index]
       resources :connections, only: %i[index]
+      resources :certificates, only: [] do
+        collection { get :expiring }
+      end
       resources :change_plans, only: %i[create] do
         member { post :apply }
       end

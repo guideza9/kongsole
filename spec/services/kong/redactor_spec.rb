@@ -83,4 +83,54 @@ RSpec.describe Kong::Redactor do
       expect(pruned).to eq({ "name" => "payments", "port" => 8080 })
     end
   end
+
+  describe "certificate key references (M5b)" do
+    it "lets a vault reference through, since it is a pointer and not a secret" do
+      result = described_class.call("certificate", { "key" => "{vault://env/cert-a-key}", "cert" => "PEM" })
+
+      expect(result[:data]["key"]).to eq("{vault://env/cert-a-key}")
+    end
+
+    it "lets a decK placeholder through too" do
+      result = described_class.call("certificate", { "key" => '${{ env "DECK_A" }}' })
+
+      expect(result[:data]["key"]).to eq('${{ env "DECK_A" }}')
+    end
+
+    it "still redacts a plaintext key, in key and in key_alt" do
+      pem = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"
+      result = described_class.call("certificate", { "key" => pem, "key_alt" => pem })
+
+      expect(result[:data]).to eq({ "key" => "[REDACTED]", "key_alt" => "[REDACTED]" })
+    end
+
+    it "passes a reference in key_alt through as well" do
+      result = described_class.call("certificate", { "key_alt" => "{vault://env/cert-b-key}" })
+
+      expect(result[:data]["key_alt"]).to eq("{vault://env/cert-b-key}")
+    end
+
+    it "does not extend the passthrough to any other entity type" do
+      result = described_class.call("keyauth_credential", { "key" => "{vault://env/looks-like-a-ref}" })
+
+      expect(result[:data]["key"]).to eq("[REDACTED]")
+    end
+
+    it "keeps certificate keys out of prune_sensitive so the planner's policy can reject a PEM loudly" do
+      data = { "key" => "-----BEGIN PRIVATE KEY-----\nA\n-----END PRIVATE KEY-----", "key_alt" => "{vault://env/x}", "tags" => [ "t" ] }
+
+      expect(described_class.prune_sensitive("certificate", data)).to eq(data)
+    end
+
+    it "still prunes a credential secret from a form exactly as before" do
+      expect(described_class.prune_sensitive("keyauth_credential", { "key" => "s", "tags" => [] })).to eq({ "tags" => [] })
+    end
+
+    it "digests the redacted form, so a reference change changes the digest" do
+      a = described_class.call("certificate", { "key" => "{vault://env/a}" })
+      b = described_class.call("certificate", { "key" => "{vault://env/b}" })
+
+      expect(a[:digest]).not_to eq(b[:digest])
+    end
+  end
 end

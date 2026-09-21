@@ -1,0 +1,17 @@
+{
+	"changes": {
+		"creating": [],
+		"updating": [
+			{ "name": "orders", "kind": "service", "body": { "new": { "name": "orders" }, "old": { "name": "orders" } } }
+		],
+		"deleting": [
+			{ "name": "svc-a", "kind": "service", "body": { "new": null, "old": { "name": "svc-a" } } },
+			{ "name": "svc-b", "kind": "service", "body": { "new": null, "old": { "name": "svc-b" } } },
+			{ "name": "svc-c", "kind": "service", "body": { "new": null, "old": { "name": "svc-c" } } },
+			{ "name": "admin-api", "kind": "service", "body": { "new": null, "old": { "name": "admin-api" } } }
+		]
+	},
+	"summary": { "creating": 0, "updating": 1, "deleting": 4, "total": 5 },
+	"warnings": [],
+	"errors": []
+}

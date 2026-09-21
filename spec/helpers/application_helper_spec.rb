@@ -32,4 +32,28 @@ RSpec.describe ApplicationHelper, type: :helper do
       expect(html).to include(",\n")
     end
   end
+
+  describe "certificate helpers (M5b)" do
+    it "labels the three types" do
+      expect(helper.entity_type_label("certificate")).to eq("Certificates")
+      expect(helper.entity_type_label("certificate", count: 1)).to eq("Certificate")
+      expect(helper.entity_type_label("ca_certificate")).to eq("CA certificates")
+      expect(helper.entity_type_label("sni", count: 1)).to eq("SNI")
+    end
+
+    it "renders an expiry badge per tier, and a dash when there is nothing to expire" do
+      %w[expired critical warning ok].each do |status|
+        entity = build(:kong_entity, not_after: 1.day.from_now)
+        allow(entity).to receive(:expiry_status).and_return(status)
+        expect(helper.expiry_badge(entity)).to include(status.capitalize)
+      end
+      expect(helper.expiry_badge(build(:kong_entity, not_after: nil))).to include("—")
+    end
+
+    it "describes expiry in words, past and future" do
+      expect(helper.expiry_when(build(:kong_entity, not_after: 12.days.from_now))).to eq("in 12 days")
+      expect(helper.expiry_when(build(:kong_entity, not_after: 3.days.ago))).to eq("3 days ago")
+      expect(helper.expiry_when(build(:kong_entity, not_after: nil))).to be_nil
+    end
+  end
 end

@@ -33,6 +33,35 @@ module EntitiesHelper
       [ "Tags", "minmax(120px, 0.9fr)" ],
       [ "Status", "minmax(96px, auto)" ],
       [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "upstream" => [
+      [ "Name", "minmax(160px, 1.3fr)" ],
+      [ "Algorithm", "minmax(120px, 0.8fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "target" => [
+      [ "Target", "minmax(160px, 1.3fr)" ],
+      [ "Weight", "minmax(80px, 0.5fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "certificate" => [
+      [ "Name", "minmax(160px, 1.2fr)" ],
+      [ "SNIs", "minmax(64px, 0.4fr)" ],
+      [ "Expires", "minmax(200px, 1.3fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
+    ],
+    "ca_certificate" => [
+      [ "Name", "minmax(160px, 1.2fr)" ],
+      [ "Expires", "minmax(200px, 1.3fr)" ],
+      [ "Tags", "minmax(120px, 0.9fr)" ],
+      [ "Status", "minmax(96px, auto)" ],
+      [ "Updated", "minmax(92px, auto)" ]
     ]
   }.freeze
 
@@ -48,7 +77,7 @@ module EntitiesHelper
   # the table scrolls horizontally below this, the same pattern already
   # used by audit_events/change_plans' tables.
   def entity_table_min_width(type)
-    type.in?(%w[route plugin]) ? "820px" : "620px"
+    type.in?(%w[route plugin upstream target certificate ca_certificate]) ? "820px" : "620px"
   end
 
   def entity_table_columns(type)
@@ -81,6 +110,29 @@ module EntitiesHelper
     "#{entity.parent_type}: #{parent&.name || entity.parent_kong_id[0..7]}"
   end
 
+  # What the certificate page says about a certificate's private key: the
+  # reference and the env var it reads, "plaintext" when Kong still holds one
+  # (the redactor blanked it -- this tool never sets one), or nil.
+  def certificate_key_summary(entity)
+    key = entity.data["key"]
+    if Kong::CertificateKeyPolicy.vault_reference?(key)
+      { kind: :reference, value: key, env_var: Kong::CertificateKeyPolicy.env_var_name(key) }
+    elsif key == Kong::Redactor::MARK
+      { kind: :plaintext }
+    end
+  end
+
+  # The cached certificate metadata is data we parsed once and stored, not
+  # something to trust: an unreadable timestamp shows a dash rather than
+  # failing the whole detail page.
+  def certificate_time(value)
+    return "—" if value.blank?
+
+    Time.iso8601(value).to_fs(:long)
+  rescue ArgumentError, TypeError
+    "—"
+  end
+
   # Caps a row to one line of tags so every row holds the same height --
   # a long tag list wrapping to two or three lines breaks the table's
   # rhythm far worse than a "+N" overflow marker does.
@@ -88,6 +140,12 @@ module EntitiesHelper
 
   def visible_tags(entity)
     entity.tags.first(MAX_INLINE_TAGS)
+  end
+
+  # "ca_certificate" reads badly in a heading; every other creatable type's
+  # raw name is already fine.
+  def creatable_type_name(type)
+    { "ca_certificate" => "CA certificate" }.fetch(type.to_s, type.to_s)
   end
 
   def hidden_tag_count(entity)

@@ -20,6 +20,9 @@ module JsonPayloadParsing
 
     Kong::Redactor.prune_sensitive(entity_type, parsed.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS))
   rescue JSON::ParserError => e
-    raise InvalidPayload, "That isn't valid JSON: #{e.message.lines.first&.strip}"
+    # Deliberately not the parser's own message: it quotes a snippet of the
+    # source text, which for a certificate form can be key material.
+    position = e.message[/line (\d+) column (\d+)/]
+    raise InvalidPayload, position ? "That isn't valid JSON (#{position})." : "That isn't valid JSON."
   end
 end

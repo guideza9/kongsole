@@ -9,7 +9,10 @@
       protected
     </span>
   <% end %>
-  <% unless entity.enabled %>
+  <%# Only an explicit `false` from Kong means disabled. The read-model stores
+      NULL for a type with no `enabled` field at all (route, credential,
+      target), which must not read as "disabled". %>
+  <% if entity.enabled == false %>
     <span class="tag shrink-0">disabled</span>
   <% end %>
   <div class="flex flex-wrap gap-1.5 flex-1 min-w-0">
