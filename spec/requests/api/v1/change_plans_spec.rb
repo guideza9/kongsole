@@ -250,6 +250,32 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(response.body).to include("PR mode")
       expect(plan.reload.status).to eq("pending")
     end
+
+    it "answers 422 with decK's scrubbed message when deck rejects the rendered YAML" do
+      connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword")
+      token = token_for(connection)
+      plan = create(:change_plan, kong_connection: connection, actor_kind: "agent")
+      allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+        .and_raise(Kong::DeckCli::Error, "deck file validate failed: routes.0: name is required\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+      post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(JSON.parse(response.body)["error"]).to include("name is required")
+      expect(response.body).not_to include("AAAA")
+    end
+
+    it "answers 502 when the config repo cannot be written" do
+      connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword")
+      token = token_for(connection)
+      plan = create(:change_plan, kong_connection: connection, actor_kind: "agent")
+      allow_any_instance_of(Kong::ChangeApplier).to receive(:call).and_raise(Kong::GitClient::Error, "git push failed: remote rejected")
+
+      post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+      expect(response).to have_http_status(:bad_gateway)
+      expect(JSON.parse(response.body)["error"]).to include("git push failed")
+    end
   end
 
   describe "a non-String connection param" do

@@ -49,6 +49,9 @@ class ChangePlansController < ApplicationController
     redirect_to change_plan_path(@change_plan), alert: e.message
   rescue Kong::Client::Error => e
     redirect_to change_plan_path(@change_plan), alert: "Kong rejected this change: #{e.message}"
+  rescue Kong::DeckCli::Error, Kong::GitClient::Error => e
+    # decK's own message is what an operator needs; the applier has already marked the plan failed.
+    redirect_to change_plan_path(@change_plan), alert: Kong::CertificateKeyPolicy.scrub(e.message)
   rescue NotImplementedError => e
     redirect_to change_plan_path(@change_plan), alert: e.message
   end

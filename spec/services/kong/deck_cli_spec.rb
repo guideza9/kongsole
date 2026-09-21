@@ -103,6 +103,13 @@ RSpec.describe Kong::DeckCli do
           .to raise_error(described_class::Error, /deck gateway diff failed: Error: cannot reach Kong/)
       end
 
+      it "raises a fixed decK error, echoing none of the output, when the diff prints something that is not JSON" do
+        allow(Open3).to receive(:capture3).and_return([ "not json -----BEGIN PRIVATE KEY-----\nAAAA", "", success ])
+
+        expect { described_class.diff(file, connection: connection, secret: "pw") }
+          .to raise_error(described_class::Error, "deck gateway diff did not return JSON") { |e| expect(e.message).not_to include("AAAA") }
+      end
+
       it "sets the same dummy variables for the diff, which substitutes the placeholder too" do
         File.write(file, %(key: '${{ env "DECK_SPEC_DIFF_KEY" }}'\n))
 

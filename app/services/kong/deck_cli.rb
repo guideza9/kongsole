@@ -49,10 +49,17 @@ module Kong
       stdout, stderr, status = run(args, file_path)
       raise Error, "deck gateway diff failed: #{clean(stderr)}" unless status.success?
 
-      stdout.blank? ? {} : JSON.parse(stdout)
+      parse_diff(stdout)
     end
 
     private
+
+    # A fixed message: unparseable output can hold file content, so none of it is echoed.
+    def parse_diff(stdout)
+      stdout.blank? ? {} : JSON.parse(stdout)
+    rescue JSON::ParserError
+      raise Error, "deck gateway diff did not return JSON"
+    end
 
     def bin
       ENV["DECK_BIN"].presence || "deck"

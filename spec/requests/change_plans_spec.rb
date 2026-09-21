@@ -145,6 +145,30 @@ RSpec.describe "ChangePlans (web)", type: :request do
     end
   end
 
+  it "shows decK's own message instead of a 500 when deck rejects the rendered YAML, scrubbed of any key" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
+      .and_raise(Kong::DeckCli::Error, "deck file validate failed: routes.0: name is required\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("name is required")
+    expect(flash[:alert]).not_to include("AAAA")
+  end
+
+  it "shows a git failure the same way" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+    allow_any_instance_of(Kong::ChangeApplier).to receive(:call).and_raise(Kong::GitClient::Error, "git push failed: remote rejected")
+
+    post apply_change_plan_path(plan)
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("git push failed")
+  end
+
   it "rejects deleting an admin-path entity without the typed confirmation" do
     sign_in
     kong_id = "77777777-7777-7777-7777-777777777777"
