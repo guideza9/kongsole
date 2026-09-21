@@ -140,4 +140,44 @@ RSpec.describe Kong::EntityTypes do
       expect(definition.create_path(parent_kong_id: UP_ID)).to eq("/consumers/#{UP_ID}/key-auth")
     end
   end
+
+  describe "decK facts (M5c)" do
+    it "describes every type that is rendered into decK YAML" do
+      expected = {
+        "service" => [ "services", "name", [] ],
+        "route" => [ "routes", "name", %w[service] ],
+        "consumer" => [ "consumers", "username", [] ],
+        "plugin" => [ "plugins", "name", %w[service route consumer] ],
+        "upstream" => [ "upstreams", "name", [] ],
+        "target" => [ "targets", "target", %w[upstream] ],
+        "certificate" => [ "certificates", "id", [] ],
+        "sni" => [ "snis", "name", %w[certificate] ],
+        "ca_certificate" => [ "ca_certificates", "id", [] ]
+      }
+
+      expected.each do |type, (collection, key, refs)|
+        definition = Kong::EntityTypes.fetch(type)
+
+        expect([ definition.deck_collection, definition.deck_key, definition.deck_refs ]).to eq([ collection, key, refs ]), "wrong decK facts for #{type}"
+        expect(definition).to be_deck_supported
+      end
+    end
+
+    it "never renders a credential (docs/DESIGN.md 1.7: decK would sync password hashes back and break logins)" do
+      %w[keyauth_credential basicauth_credential].each do |type|
+        definition = Kong::EntityTypes.fetch(type)
+
+        expect(definition).not_to be_deck_supported
+        expect(definition.deck_refs).to eq([])
+      end
+    end
+
+    it "leaves no registered type undecided, so a new type has to choose" do
+      undecided = Kong::EntityTypes::DEFINITIONS.reject do |type, definition|
+        definition.deck_supported? || %w[keyauth_credential basicauth_credential].include?(type)
+      end
+
+      expect(undecided.keys).to eq([])
+    end
+  end
 end
