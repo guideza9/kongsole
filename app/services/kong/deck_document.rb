@@ -49,24 +49,36 @@ module Kong
     end
 
     def self.serialize(doc)
-      lines = [ "_format_version: #{scalar(doc.fetch('_format_version', FORMAT_VERSION))}", "_info:", "  select_tags:" ]
-      Array(doc.dig("_info", "select_tags")).each { |tag| lines << "    - #{scalar(tag)}" }
+      lines = [ "_format_version: #{scalar(doc.fetch('_format_version', FORMAT_VERSION))}" ]
+      lines.concat(info_lines(doc["_info"]))
       top_level_keys(doc).each { |key| lines.concat(entry_lines(key, doc[key], 0)) }
       "#{lines.join("\n")}\n"
     end
+
+    # `select_tags` first, then whatever else `_info` holds (decK's `defaults`),
+    # sorted and kept. An empty `select_tags` is written `[]`: decK rejects the
+    # bare null a naive writer would produce (measured, 1.51.1 and 1.66.1).
+    def self.info_lines(info)
+      info = info.is_a?(Hash) ? info : {}
+      info = info.merge("select_tags" => Array(info["select_tags"]))
+      keys = [ "select_tags" ] + (info.keys - [ "select_tags" ]).sort_by(&:to_s)
+      [ "_info:" ] + keys.flat_map { |key| entry_lines(key, info[key], 2) }
+    end
+    private_class_method :info_lines
 
     # An empty managed collection is left out: decK rejects a bare `services:`
     # (null), and Kong has nothing to sync for it anyway.
     def self.top_level_keys(doc)
       rest = (doc.keys - %w[_format_version _info]).reject { |key| COLLECTION_ORDER.include?(key) && doc[key].blank? }
       known = COLLECTION_ORDER & rest
-      known + (rest - known).sort
+      known + (rest - known).sort_by(&:to_s)
     end
     private_class_method :top_level_keys
 
     # One `key: value` entry at `indent` columns, whatever the value is.
     def self.entry_lines(key, value, indent)
       pad = " " * indent
+      key = key_text(key)
       case value
       when Array then array_lines(key, value, indent)
       when Hash
@@ -90,27 +102,58 @@ module Kong
       pad = " " * indent
       return [ "#{pad}#{key}: []" ] if items.empty?
 
-      lines = [ "#{pad}#{key}:" ]
-      items.each do |item|
-        if item.is_a?(Hash) && item.any?
-          body = mapping_lines(item, indent + 4)
-          lines << "#{pad}  - #{body.first.lstrip}"
-          lines.concat(body.drop(1))
-        else
-          lines << "#{pad}  - #{item.is_a?(Hash) ? '{}' : scalar(item)}"
-        end
-      end
-      lines
+      [ "#{pad}#{key}:" ] + sequence_lines(items, indent + 2)
     end
     private_class_method :array_lines
 
+    # The `- item` lines of a sequence whose dashes sit at `dash_indent`. An
+    # item that is itself a mapping or a sequence is written nested, with its
+    # first line sharing the dash, so it re-parses to the same value.
+    def self.sequence_lines(items, dash_indent)
+      pad = " " * dash_indent
+      items.flat_map do |item|
+        body =
+          if item.is_a?(Hash) && item.any? then mapping_lines(item, dash_indent + 2)
+          elsif item.is_a?(Array) && item.any? then sequence_lines(item, dash_indent + 2)
+          else [ "#{pad}  #{empty_or_scalar(item)}" ]
+          end
+        [ "#{pad}- #{body.first.lstrip}" ] + body.drop(1)
+      end
+    end
+    private_class_method :sequence_lines
+
+    def self.empty_or_scalar(item)
+      return "{}" if item.is_a?(Hash)
+      return "[]" if item.is_a?(Array)
+
+      scalar(item)
+    end
+    private_class_method :empty_or_scalar
+
+    # Every key is a string: a bare `123:` or `true:` reads back as another
+    # type, so the file would not survive a re-render (and decK's schema has no
+    # such keys). Quoted when a bare key would read as something else.
+    def self.key_text(key)
+      raise Unparseable, "the config YAML has a key that is not a string (#{key.inspect}); decK files only use string keys" unless key.is_a?(String)
+
+      scalar(key)
+    end
+    private_class_method :key_text
+
+    # What a literal block keeps exactly. YAML normalises every line break it
+    # knows (\r, \r\n, NEL, LS, PS) to \n inside a block scalar and refuses
+    # control characters, so a string holding any of those cannot use one.
+    SAFE_TEXT = /\A[\n\t\u0020-\u007E\u00A0-\u2027\u202A-\uD7FF\uE000-\uFEFE\uFF00-\uFFFD\u{10000}-\u{10FFFF}]*\z/
+
     # A multi-line string (a PEM) as a literal block, so it stays readable and
-    # round-trips exactly. Falls back to a quoted scalar when a block cannot
-    # hold it faithfully (leading whitespace, several trailing newlines).
+    # round-trips exactly. Falls back to a double-quoted scalar when a block
+    # cannot hold it faithfully (carriage returns, other line-break characters,
+    # leading whitespace, several trailing newlines, nothing but newlines).
     def self.block_lines(key, value, indent)
       pad = " " * indent
       body = value.delete_suffix("\n")
-      faithful = !body.end_with?("\n") && body.lines.none? { |line| line.start_with?(" ") || line.start_with?("\t") }
+      faithful = body.present? && !body.end_with?("\n") && SAFE_TEXT.match?(value) &&
+                 body.lines.none? { |line| line.start_with?(" ") || line.start_with?("\t") }
       return [ "#{pad}#{key}: #{scalar(value)}" ] unless faithful
 
       chomp = value.end_with?("\n") ? "|" : "|-"
@@ -127,14 +170,34 @@ module Kong
     # decK substitutes its env placeholder as TEXT before it parses YAML, so the
     # reference must reach the file exactly as decK expects it: in single quotes
     # (the one form both decK and a YAML parser accept -- measured, M5c).
-    # `line_width: -1` stops Psych folding a long value across lines.
+    # `line_width: -1` stops Psych folding a long value across lines. A string
+    # Psych would spread over several lines is double-quoted instead, so a
+    # scalar is always one line. Only what a YAML file can hold as a plain
+    # scalar is accepted; anything else is refused rather than written wrongly.
     def self.scalar(value)
       return "null" if value.nil?
       return "'#{value}'" if value.is_a?(String) && DECK_ENV_REFERENCE.match?(value)
+      raise Unparseable, "the value #{value.inspect} can't be written as decK YAML (#{value.class})" unless renderable?(value)
 
-      YAML.dump(value, line_width: -1).delete_prefix("---").strip
+      return double_quoted(value) if value.is_a?(String) && !SAFE_TEXT.match?(value)
+
+      dumped = YAML.dump(value, line_width: -1).delete_prefix("---").strip
+      dumped.include?("\n") ? double_quoted(value) : dumped
     end
     private_class_method :scalar
+
+    def self.renderable?(value)
+      [ String, Integer, Float, TrueClass, FalseClass ].any? { |type| value.is_a?(type) }
+    end
+    private_class_method :renderable?
+
+    # libyaml does the escaping (\n, \r, \u2028, control characters ...).
+    def self.double_quoted(value)
+      node = Psych::Nodes::Scalar.new(value, nil, nil, false, true, Psych::Nodes::Scalar::DOUBLE_QUOTED)
+      document = Psych::Nodes::Document.new.tap { |doc| doc.children << node }
+      Psych::Nodes::Stream.new.tap { |stream| stream.children << document }.to_yaml(nil, line_width: -1).delete_prefix("--- ").chomp
+    end
+    private_class_method :double_quoted
 
     # Before M5c the tool wrote a bare `services:` for an empty file -- a line
     # decK itself rejects (it was never validated: DeckCli was stubbed). The

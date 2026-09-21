@@ -169,6 +169,117 @@ RSpec.describe Kong::DeckDocument do
     end
   end
 
+  # Fix round 1: the serializer must write valid YAML for every value it is
+  # handed, and must never write a file its own guard would then refuse.
+  describe ".serialize (any value a plugin config can hold)" do
+    def round_trip(value_hash)
+      doc = described_class.parse(nil, select_tags: tags)
+      doc["services"] = [ { "name" => "s", "plugins" => [ { "name" => "p", "config" => value_hash } ] } ]
+      text = described_class.serialize(doc)
+      [ text, YAML.safe_load(text)["services"][0]["plugins"][0]["config"] ]
+    end
+
+    it "writes an array inside an array as a nested sequence that re-parses to the same value" do
+      config = { "matrix" => [ [ 1, 2 ], [ 3 ], [] ], "deep" => [ [ [ "a" ], "b" ] ] }
+
+      text, back = round_trip(config)
+
+      expect(back).to eq(config)
+      expect(text).to include("matrix:\n")
+    end
+
+    it "writes arrays of hashes that contain arrays, and hashes inside nested arrays" do
+      config = { "rules" => [ { "name" => "r", "ports" => [ 80, 443 ], "nested" => [ [ { "k" => [ "v" ] } ] ] }, {}, [] ] }
+
+      _, back = round_trip(config)
+
+      expect(back).to eq(config)
+    end
+
+    it "is a fixed point with nested arrays, and passes its own guard" do
+      doc = described_class.parse(nil, select_tags: tags)
+      doc["services"] = [ { "name" => "s", "config" => { "matrix" => [ [ 1, 2 ], [ 3 ] ], "words" => [ "a\nb" ] } } ]
+      text = described_class.serialize(doc)
+
+      expect(described_class.verify_input!(text)).to be_nil
+      expect(described_class.serialize(described_class.parse(text, select_tags: tags))).to eq(text)
+    end
+
+    it "raises a clear error for a value it cannot render instead of writing something else" do
+      doc = described_class.parse(nil, select_tags: tags)
+      doc["services"] = [ { "name" => "s", "created" => Time.at(0), "tags" => [ :sym ] } ]
+
+      expect { described_class.serialize(doc) }
+        .to raise_error(described_class::Unparseable, /can't be written as decK YAML \(Time\)/) { |error| expect(error).to be_a(Kong::ChangeGuardrails::Violation) }
+    end
+
+    it "round-trips a CRLF PEM exactly, and the file passes verify_input!" do
+      crlf = "-----BEGIN CERTIFICATE-----\r\nAAAA\r\n-----END CERTIFICATE-----\r\n"
+      doc = described_class.parse(nil, select_tags: tags)
+      doc["certificates"] = [ { "id" => "11111111-2222-3333-4444-555555555555", "cert" => crlf } ]
+      text = described_class.serialize(doc)
+
+      expect(text).not_to include("\r")
+      expect(YAML.safe_load(text)["certificates"][0]["cert"]).to eq(crlf)
+      expect(described_class.verify_input!(text)).to be_nil
+    end
+
+    it "round-trips strings a literal block cannot hold faithfully, each in its own file that passes verify_input!" do
+      [ "\n", "\n\n", "a\n\n", "\nabc\n", " lead\nx\n", "a\n\tb\n", "a\u0085b\n", "a\u2028b", "\u00E9\u2028", "\u2028\"%", "a\n\u0001b", "line one\nline two" ].each do |value|
+        doc = described_class.parse(nil, select_tags: tags)
+        doc["services"] = [ { "name" => "s", "note" => value, "list" => [ value ], "cfg" => { value => 1 } } ]
+        text = described_class.serialize(doc)
+        back = YAML.safe_load(text)["services"][0]
+
+        expect(back["note"]).to eq(value), "note #{value.inspect} came back #{back['note'].inspect}"
+        expect(back["list"]).to eq([ value ]), "list item #{value.inspect} came back #{back['list'].inspect}"
+        expect(back["cfg"]).to eq(value => 1), "key #{value.inspect} came back #{back['cfg'].inspect}"
+        expect(described_class.verify_input!(text)).to be_nil
+      end
+    end
+
+    it "keeps _info keys the tool does not manage (decK's _info.defaults), byte for byte" do
+      text = <<~YAML
+        _format_version: '3.0'
+        _info:
+          select_tags:
+            - x
+          defaults:
+            route:
+              strip_path: true
+            service:
+              retries: 3
+        services:
+          - name: a
+            url: http://a:80
+      YAML
+
+      expect(described_class.serialize(described_class.parse(text, select_tags: [ "x" ]))).to eq(text)
+      expect(described_class.verify_input!(text)).to be_nil
+    end
+
+    it "writes an empty select_tags as `[]` -- decK rejects the bare null (measured, decK 1.51.1 and 1.66.1)" do
+      out = described_class.serialize(described_class.parse(nil, select_tags: []))
+
+      expect(out).to eq("_format_version: '3.0'\n_info:\n  select_tags: []\n")
+      expect(described_class.verify_input!(out)).to be_nil
+    end
+
+    it "quotes a key that would otherwise read back as another type" do
+      doc = described_class.parse(nil, select_tags: [])
+      doc["services"] = [ { "name" => "s", "config" => { "yes" => 1, "a: b" => 2 } } ]
+
+      expect(YAML.safe_load(described_class.serialize(doc))["services"][0]["config"]).to eq("yes" => 1, "a: b" => 2)
+    end
+
+    it "refuses a non-string key as a Violation, not an ArgumentError from sorting" do
+      file = "_format_version: '3.0'\n_info:\n  select_tags: []\n123: x\nvaults:\n  - name: env\n"
+
+      expect { described_class.verify_input!(file) }.to raise_error(described_class::Unparseable, /key/)
+      expect { described_class.serialize("_info" => {}, 123 => "x", "vaults" => []) }.to raise_error(Kong::ChangeGuardrails::Violation)
+    end
+  end
+
   describe ".verify_input!" do
     it "passes when there is no file yet" do
       expect(described_class.verify_input!(nil)).to be_nil
