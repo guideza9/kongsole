@@ -43,4 +43,31 @@ RSpec.describe "AuditEvents (web)", type: :request do
     expect(response.body).to include("kong-admin")
     expect(response.body).to include("bob")
   end
+
+  it "tags an agent's change as via agent and leaves a human's untagged" do
+    sign_in
+    create(:audit_event, kong_connection: connection, actor_kind: "agent", entity_name: "agent-svc")
+    create(:audit_event, kong_connection: connection, actor_kind: "human", entity_name: "human-svc")
+
+    get audit_events_path
+
+    rows = Nokogiri::HTML(response.body).css("tbody tr")
+    agent, human = %w[agent-svc human-svc].map { |name| rows.find { |row| row.text.include?(name) } }
+    expect(agent.css(".tag").map { |t| t.text.strip }).to include("via agent")
+    expect(human.text).not_to include("via agent")
+  end
+
+  it "links an event to the plan that holds its diff, and leaves one recorded without a plan as text" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection, status: "applied")
+    create(:audit_event, kong_connection: connection, change_plan: plan, entity_name: "planned-svc")
+    create(:audit_event, kong_connection: connection, entity_name: "orphan-svc")
+
+    get audit_events_path
+
+    doc = Nokogiri::HTML(response.body)
+    link = doc.at_css("tbody a[href='#{change_plan_path(plan)}']")
+    expect(link.text).to include("planned-svc").and include("open this change and its diff")
+    expect(doc.css("tbody a").map { |a| a.text }.join).not_to include("orphan-svc")
+  end
 end

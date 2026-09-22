@@ -33,7 +33,6 @@ module Kong
       connection = KongConnection.find_or_initialize_by(name: attrs.fetch(:name))
       connection.assign_attributes(
         env: attrs[:env],
-        rank: attrs[:rank] || KongConnection::RANKS[attrs[:env].to_s] || 0,
         admin_url: attrs[:admin_url],
         auth_type: attrs[:auth_type] || "basic",
         apply_mode: attrs[:apply_mode] || "direct",
@@ -45,6 +44,7 @@ module Kong
         git_repo: attrs[:git_repo],
         git_branch: attrs[:git_branch],
         git_path: attrs[:git_path],
+        git_web_url: attrs[:git_web_url],
         select_tags: Array(attrs[:select_tags]),
         shared_usernames: Array(attrs[:shared_usernames])
       )

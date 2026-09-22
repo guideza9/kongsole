@@ -26,6 +26,35 @@ RSpec.describe Kong::ChangeGuardrails do
     end
   end
 
+  describe ".check_delete_confirmation! at uat/prod (rank >= 2)" do
+    let(:prod) { create(:kong_connection, :prod) }
+    let(:service) { { "id" => "dddddddd-0000-0000-0000-00000000000d", "name" => "checkout-api", "tags" => [] } }
+
+    it "asks a human to retype the entity, even one that is not protected" do
+      expect {
+        described_class.check_delete_confirmation!(connection: prod, entity: service, confirmation_name: nil)
+      }.to raise_error(Kong::ChangeGuardrails::Violation, /checkout-api.*typing/)
+    end
+
+    it "accepts the exact entity name" do
+      expect {
+        described_class.check_delete_confirmation!(connection: prod, entity: service, confirmation_name: "checkout-api")
+      }.not_to raise_error
+    end
+
+    it "does not ask at dev, where the entity is not protected" do
+      expect {
+        described_class.check_delete_confirmation!(connection: create(:kong_connection), entity: service, confirmation_name: nil)
+      }.not_to raise_error
+    end
+
+    it "leaves an agent's delete of an unprotected entity alone: it has no typed channel" do
+      expect {
+        described_class.check_delete_confirmation!(connection: prod, entity: service, confirmation_name: nil, actor_kind: "agent")
+      }.not_to raise_error
+    end
+  end
+
   describe ".check_plugin_immutable!" do
     ADMIN_ROUTE_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     PLUGIN_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"

@@ -1,0 +1,25 @@
+<%# The route page's first panel: what this route matches, and where it goes. %>
+<% match = route_match(entity) %>
+<% service = route_service(entity) %>
+<section class="panel p-4" aria-labelledby="route-match-heading">
+  <h2 id="route-match-heading" class="section-label mb-3">Matches</h2>
+  <div class="route-panel__line"><%= render "entities/route_match", match: match %></div>
+  <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm mt-3">
+    <dt class="text-ink-soft">Forwards to</dt>
+    <dd>
+      <% if service %>
+        <%= link_to service.name, entity_path(service), class: "font-semibold underline underline-offset-2" %>
+      <% elsif entity.data["service"].present? %>
+        <span class="text-ink-soft">a service that has not been synced yet</span>
+      <% else %>
+        <span class="text-ink-soft">no service</span>
+      <% end %>
+    </dd>
+    <dt class="text-ink-soft">Behaviour</dt>
+    <dd class="flex flex-wrap gap-1.5">
+      <% Array(entity.data["protocols"]).each do |protocol| %><span class="tag"><%= protocol %></span><% end %>
+      <span class="tag"><%= entity.data["strip_path"] == false ? "keeps the matched path" : "strips the matched path" %></span>
+      <% if entity.data["preserve_host"] %><span class="tag">keeps the Host header</span><% end %>
+    </dd>
+  </dl>
+</section>

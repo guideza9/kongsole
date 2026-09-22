@@ -1,29 +1,42 @@
 <% content_for :title, @entity.name %>
 
 <div class="flex flex-wrap items-center gap-2 mb-1">
-  <h1 class="text-xl font-semibold" style="color: var(--color-ink)"><%= @entity.name %></h1>
+  <h1 class="page-title"><%= @entity.name %></h1>
   <% if @entity.is_admin_path? %>
-    <span class="chip" style="background-color: var(--color-warning-tint); color: var(--color-warning)">
-      <svg class="chip-dot" width="10" height="10" viewBox="0 0 10 10" fill="none" style="border-radius:0">
-        <rect x="2" y="4.2" width="6" height="4.3" rx="0.8" stroke="currentColor" stroke-width="1"/>
-        <path d="M3.2 4.2V3a1.8 1.8 0 0 1 3.6 0v1.2" stroke="currentColor" stroke-width="1" fill="none"/>
-      </svg>
-      protected — part of this connection's own admin path
-    </span>
+    <%= render "shared/admin_path_chip" %>
   <% end %>
 </div>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)"><%= entity_type_label(@entity.entity_type, count: 1).downcase %> · <%= current_connection.name %></p>
+<p class="text-sm mb-6 text-ink-soft"><%= entity_type_label(@entity.entity_type, count: 1).downcase %> · <%= current_connection.name %></p>
 
 <div class="max-w-2xl grid gap-4">
+  <%# The one entity Kongsole cannot afford to lose says so before anything
+      else on the page, and says what that means for delete and for decK. %>
+  <% if @entity.is_admin_path? %>
+    <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", class: "admin-path-notice" } do %>
+      <p class="admin-path-notice__title"><%= render "shared/lock_icon" %> This is Kongsole's own way into Kong.</p>
+      <% if @entity.entity_type == "plugin" %>
+        <p class="text-sm font-normal mt-1">It guards the admin route, so it is read-only here: it can't be edited or deleted, by a person or an agent.</p>
+      <% else %>
+        <p class="text-sm font-normal mt-1">Deleting it would lock the team out of the Admin API. An agent can never delete it; deleting it here needs its name typed; and it is left out of every decK YAML file.</p>
+      <% end %>
+    <% end %>
+  <% end %>
+
+  <% if @entity.entity_type == "route" %>
+    <%= render "entities/route_panel", entity: @entity %>
+  <% elsif @entity.entity_type == "plugin" %>
+    <%= render "entities/plugin_panel", entity: @entity %>
+  <% end %>
+
   <section class="panel p-4">
     <h2 class="section-label mb-3">Overview</h2>
     <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-      <dt style="color: var(--color-ink-soft)">Kong ID</dt><dd class="font-mono"><%= @entity.kong_id %></dd>
-      <dt style="color: var(--color-ink-soft)">Logical key</dt><dd><%= @entity.logical_key %></dd>
+      <dt class="text-ink-soft">Kong ID</dt><dd class="font-mono"><%= @entity.kong_id %></dd>
+      <dt class="text-ink-soft">Logical key</dt><dd><%= @entity.logical_key %></dd>
       <% if @entity.entity_type.in?(%w[service plugin]) %>
-        <dt style="color: var(--color-ink-soft)">Enabled</dt><dd><%= @entity.enabled ? "yes" : "no" %></dd>
+        <dt class="text-ink-soft">Enabled</dt><dd><%= @entity.enabled ? "yes" : "no" %></dd>
       <% end %>
-      <dt style="color: var(--color-ink-soft)">Tags</dt>
+      <dt class="text-ink-soft">Tags</dt>
       <dd>
         <% if @entity.tags.any? %>
           <div class="flex flex-wrap gap-1.5">
@@ -31,9 +44,9 @@
           </div>
         <% else %>—<% end %>
       </dd>
-      <dt style="color: var(--color-ink-soft)">Created in Kong</dt><dd><%= @entity.kong_created_at&.to_fs(:long) || "—" %></dd>
-      <dt style="color: var(--color-ink-soft)">Updated in Kong</dt><dd><%= @entity.kong_updated_at&.to_fs(:long) || "—" %></dd>
-      <dt style="color: var(--color-ink-soft)">Last synced</dt><dd><%= @entity.synced_at&.to_fs(:long) || "—" %></dd>
+      <dt class="text-ink-soft">Created in Kong</dt><dd><%= plan_timestamp(@entity.kong_created_at) || "—" %></dd>
+      <dt class="text-ink-soft">Updated in Kong</dt><dd><%= plan_timestamp(@entity.kong_updated_at) || "—" %></dd>
+      <dt class="text-ink-soft">Last synced</dt><dd><%= plan_timestamp(@entity.synced_at) || "—" %></dd>
     </dl>
   </section>
 
@@ -42,8 +55,8 @@
   <% end %>
 
   <section class="panel p-4">
-    <h2 class="section-label mb-3">Raw JSON <span class="font-normal normal-case" style="letter-spacing: normal; color: var(--color-ink-faint)">(redacted at sync time)</span></h2>
-    <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@entity.data) %></pre>
+    <h2 class="section-label mb-3">Raw JSON <span class="font-normal normal-case tracking-normal text-ink-faint">(redacted at sync time)</span></h2>
+    <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded bg-surface-subtle border border-border"><%= highlight_json(@entity.data) %></pre>
   </section>
 
   <% @child_groups.each do |label, children| %>
@@ -61,9 +74,9 @@
         <% end %>
       </div>
       <% if children.empty? %>
-        <p class="text-sm" style="color: var(--color-ink-soft)">None synced yet.</p>
+        <p class="text-sm text-ink-soft">None synced yet.</p>
       <% else %>
-        <div class="grid gap-px" style="background: var(--color-border)">
+        <div class="grid gap-px bg-border">
           <%= render partial: "entity", collection: children %>
         </div>
       <% end %>
@@ -73,12 +86,12 @@
 
 <div class="mt-6 flex gap-2">
   <% if @entity.entity_type == "plugin" && @entity.is_admin_path? %>
-    <p class="text-sm" style="color: var(--color-ink-soft)">
+    <p class="text-sm text-ink-soft">
       Read-only — this plugin fronts the connection's own admin path and can't be edited or deleted here.
     </p>
   <% else %>
-    <%= link_to "Edit", edit_entity_path(@entity), class: "btn-secondary px-3 py-1.5 text-sm" %>
-    <%= button_to "Delete", entity_path(@entity), method: :delete, class: "btn-text-danger px-3 py-1.5 text-sm bg-transparent cursor-pointer" %>
+    <%= link_to "Edit", edit_entity_path(@entity), class: "btn-sm btn-secondary" %>
+    <%= button_to "Delete", entity_path(@entity), method: :delete, class: "btn-sm btn-text-danger bg-transparent" %>
   <% end %>
-  <%= link_to "Back to #{entity_type_label(@entity.entity_type).downcase}", entities_path(type: @entity.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
+  <%= link_to "Back to #{entity_type_label(@entity.entity_type).downcase}", entities_path(type: @entity.entity_type), class: "btn-sm btn-text" %>
 </div>

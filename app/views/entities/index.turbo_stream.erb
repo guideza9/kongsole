@@ -10,6 +10,8 @@
   <%= render "pagination" %>
 <% end %>
 
-<%= turbo_stream.replace "entities-count" do %>
+<%# update, not replace: #entities-count is a persistent live region (role="status"),
+    and a replaced node is a new element that screen readers do not announce. %>
+<%= turbo_stream.update "entities-count" do %>
   <%= render "count" %>
 <% end %>

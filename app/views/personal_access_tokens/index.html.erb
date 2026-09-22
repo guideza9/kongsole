@@ -2,36 +2,37 @@
 
 <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
   <div>
-    <h1 class="text-xl font-semibold" style="color: var(--color-ink)">Personal access tokens</h1>
-    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">For the MCP agent path. Only reaches connections with a stored credential.</p>
+    <h1 class="page-title">Personal access tokens</h1>
+    <p class="text-sm mt-0.5 text-ink-soft">For the MCP agent path. Only reaches connections with a stored credential.</p>
   </div>
-  <%= link_to "Issue a token", new_personal_access_token_path, class: "btn-primary px-3.5 py-2 text-sm" %>
+  <%= link_to "Issue a token", new_personal_access_token_path, class: "btn-primary btn" %>
 </div>
 
 <% if flash[:new_token] %>
-  <div class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning)">
-    <p class="font-semibold" style="color: var(--color-warning)">Copy this token now — it won't be shown again.</p>
-    <p class="text-sm font-mono mt-1 break-all" style="color: var(--color-ink)"><%= flash[:new_token] %></p>
-  </div>
+  <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", class: "mb-6" } do %>
+    <p class="font-semibold text-warning">Copy this token now — it won't be shown again.</p>
+    <p class="text-sm font-mono mt-1 break-all text-ink"><%= flash[:new_token] %></p>
+  <% end %>
 <% end %>
 
 <% if @tokens.empty? %>
-  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">No tokens issued yet.</div>
+  <div class="panel p-6 text-sm text-center text-ink-soft">No tokens issued yet.</div>
 <% else %>
   <div class="panel">
     <% @tokens.each do |token| %>
-      <div class="flex items-start gap-3 px-4 py-3" style="border-bottom: 1px solid var(--color-border)">
+      <div class="flex items-start gap-3 px-4 py-3 border-b border-border">
         <div class="flex-1 min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-mono text-sm font-semibold" style="color: var(--color-ink)"><%= token.token_prefix %>···</span>
+            <span class="font-mono text-sm font-semibold text-ink"><%= token.token_prefix %>···</span>
             <% if token.name.present? %><span class="tag"><%= token.name %></span><% end %>
             <% if token.revoked? %>
-              <span class="tag" style="color: var(--color-danger); border-color: var(--color-danger)">revoked <%= token.revoked_at.to_fs(:short) %></span>
+              <%= status_badge("revoked") %>
+              <span class="text-xs text-ink-soft"><%= plan_timestamp(token.revoked_at) %></span>
             <% end %>
           </div>
-          <p class="text-xs mt-1" style="color: var(--color-ink-soft)">
-            operator <%= token.operator %> · issued by <%= token.issued_by_username %> · <%= token.created_at.to_fs(:short) %>
-            · last used <%= token.last_used_at&.to_fs(:short) || "never" %>
+          <p class="text-xs mt-1 text-ink-soft">
+            operator <%= token.operator %> · issued by <%= token.issued_by_username %> · <%= plan_timestamp(token.created_at) %>
+            · last used <%= plan_timestamp(token.last_used_at) || "never" %>
           </p>
           <div class="mt-1.5 flex flex-wrap gap-1.5">
             <% token.kong_connections.each do |connection| %>
@@ -40,7 +41,7 @@
           </div>
         </div>
         <% unless token.revoked? %>
-          <%= button_to "Revoke", revoke_personal_access_token_path(token), method: :post, class: "btn-text-danger px-3 py-1.5 text-sm shrink-0 bg-transparent cursor-pointer",
+          <%= button_to "Revoke", revoke_personal_access_token_path(token), method: :post, class: "btn-text-danger btn-sm shrink-0 bg-transparent",
                 form: { data: { turbo_confirm: "Revoke this token? Anything using it stops working immediately." } } %>
         <% end %>
       </div>

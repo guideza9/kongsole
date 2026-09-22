@@ -1,7 +1,7 @@
 <% content_for :title, "Add plugin" %>
 
-<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">Add plugin</h1>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)">
+<h1 class="page-title mb-1">Add plugin</h1>
+<p class="text-sm mb-6 text-ink-soft">
   Scope: <span class="font-mono"><%= @scope_label %></span> · this proposes a change, nothing reaches Kong until you review and apply it.
 </p>
 
@@ -10,20 +10,20 @@
       will actually accept -- not the full available_on_server list, most of
       which isn't loaded on this node and would 400 on create. %>
   <% if @catalog.empty? %>
-    <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+    <div class="panel p-6 text-sm text-center text-ink-soft">
       No plugins are enabled on this Kong node yet.
     </div>
   <% else %>
     <div class="panel max-w-md">
       <% @catalog.each do |plugin_name| %>
         <%= link_to new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id, plugin_name: plugin_name), class: "entity-row-compact" do %>
-          <span class="font-semibold text-sm font-mono" style="color: var(--color-ink)"><%= plugin_name %></span>
+          <span class="font-semibold text-sm font-mono text-ink"><%= plugin_name %></span>
         <% end %>
       <% end %>
     </div>
   <% end %>
   <div class="mt-4">
-    <%= link_to "Cancel", entities_path(type: @scope_type || "plugin"), class: "btn-text px-3 py-1.5 text-sm" %>
+    <%= link_to "Cancel", entities_path(type: @scope_type || "plugin"), class: "btn-sm btn-text" %>
   </div>
 <% else %>
   <%# Step 2: config editor, seeded from the live schema, with a read-only
@@ -35,28 +35,29 @@
       <input type="hidden" name="plugin_name" value="<%= @plugin_name %>" />
 
       <section class="panel p-4">
-        <h2 class="section-label mb-3"><%= @plugin_name %> config</h2>
+        <h2 id="json-editor-heading" class="section-label mb-3"><%= @plugin_name %> config</h2>
 
         <% if @payload_error.present? %>
-          <p class="notice-banner mb-3 text-xs" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+          <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-3 text-xs" } do %>
             <%= @payload_error %>
-          </p>
+          <% end %>
         <% end %>
 
         <div class="json-editor" data-json-editor-target="wrapper">
           <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
           <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
+                    aria-labelledby="json-editor-heading"
                     class="json-editor__textarea"
                     data-json-editor-target="input"
                     data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>
         </div>
 
-        <p class="text-xs mt-2 font-mono" data-json-editor-target="status" style="color: var(--color-ink-faint)"></p>
+        <p role="status" class="text-xs mt-2 font-mono text-ink-faint" data-json-editor-target="status"></p>
 
         <div class="flex gap-2 mt-4">
-          <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer" data-json-editor-target="submit">Review change</button>
-          <button type="button" class="btn-secondary px-3 py-1.5 text-sm cursor-pointer" data-action="json-editor#format">Format</button>
-          <%= link_to "Back", new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id), class: "btn-text px-3 py-1.5 text-sm" %>
+          <button type="submit" class="btn-primary btn" data-json-editor-target="submit">Review change</button>
+          <button type="button" class="btn-sm btn-secondary" data-action="json-editor#format">Format</button>
+          <%= link_to "Back", new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id), class: "btn-sm btn-text" %>
         </div>
       </section>
     <% end %>
@@ -66,7 +67,7 @@
       <% if @schema %>
         <%= render "schema_reference", fields: plugin_config_fields(@schema) %>
       <% else %>
-        <p class="text-sm" style="color: var(--color-ink-soft)">Couldn't load the schema from Kong.</p>
+        <p class="text-sm text-ink-soft">Couldn't load the schema from Kong.</p>
       <% end %>
     </section>
   </div>

@@ -1,0 +1,12 @@
+<%# The plugin page's first panel: how far it reaches, and to what. %>
+<% scope = plugin_scope(entity) %>
+<section class="panel p-4" aria-labelledby="plugin-scope-heading">
+  <h2 id="plugin-scope-heading" class="section-label mb-3">Scope</h2>
+  <div class="flex flex-wrap items-center gap-3">
+    <%= render "entities/scope", scope: scope %>
+    <% if scope[:entity] %>
+      <%= link_to "Open #{scope[:kind]}", entity_path(scope[:entity]), class: "btn-sm btn-text" %>
+    <% end %>
+  </div>
+  <p class="text-sm mt-2 text-ink-soft"><%= plugin_scope_sentence(scope) %></p>
+</section>

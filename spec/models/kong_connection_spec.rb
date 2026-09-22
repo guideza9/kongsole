@@ -11,6 +11,29 @@ RSpec.describe KongConnection, type: :model do
     expect(connection.errors[:env]).to be_present
   end
 
+  describe "rank" do
+    it "is derived from env, so a prod connection can never be saved with a quiet rank" do
+      connection = create(:kong_connection, env: "prod", rank: 0)
+
+      expect(connection.rank).to eq(3)
+      expect(connection).to be_protected_env
+    end
+
+    it "is re-derived when env changes on an existing connection" do
+      connection = create(:kong_connection, env: "dev")
+
+      connection.update!(env: "prod")
+
+      expect(connection.reload.rank).to eq(3)
+    end
+
+    it "follows KongConnection::RANKS for every env" do
+      KongConnection::RANKS.each do |env, rank|
+        expect(create(:kong_connection, env: env).rank).to eq(rank)
+      end
+    end
+  end
+
   it "requires a unique name" do
     create(:kong_connection, name: "dev")
     expect(build(:kong_connection, name: "dev")).not_to be_valid
@@ -38,7 +61,7 @@ RSpec.describe KongConnection, type: :model do
   end
 
   it "defaults the color tag from env when none is given" do
-    connection = create(:kong_connection, env: "prod", rank: 3, color_tag: nil)
+    connection = create(:kong_connection, env: "prod", color_tag: nil)
     expect(connection.color_tag).to eq("red")
   end
 
@@ -72,6 +95,55 @@ RSpec.describe KongConnection, type: :model do
       connection.select_tags_raw = "a, b ,c"
       expect(connection.select_tags).to eq(%w[a b c])
       expect(connection.select_tags_raw).to eq("a,b,c")
+    end
+  end
+
+  describe "#branch_url" do
+    it "substitutes the branch into the host's own URL shape" do
+      connection = build(:kong_connection, git_web_url: "https://github.com/acme/kong-config/tree/{branch}")
+
+      expect(connection.branch_url("kongctl/42")).to eq("https://github.com/acme/kong-config/tree/kongctl/42")
+    end
+
+    it "works just as well for a host that carries the branch in a query string" do
+      connection = build(:kong_connection, git_web_url: "https://dev.azure.com/acme/kong/_git/config?version=GB{branch}")
+
+      expect(connection.branch_url("kongctl/42")).to eq("https://dev.azure.com/acme/kong/_git/config?version=GBkongctl/42")
+    end
+
+    it "escapes a branch segment without eating the separator the URL needs" do
+      connection = build(:kong_connection, git_web_url: "https://example.test/tree/{branch}")
+
+      expect(connection.branch_url("kongctl/a b")).to eq("https://example.test/tree/kongctl/a%20b")
+    end
+
+    it "is nil with no web host configured -- a local bare repo has nothing to link to" do
+      expect(build(:kong_connection, git_web_url: nil).branch_url("kongctl/42")).to be_nil
+    end
+
+    it "is nil for a template missing the placeholder, rather than linking at the repo root" do
+      connection = build(:kong_connection, git_web_url: "https://github.com/acme/kong-config")
+
+      expect(connection.branch_url("kongctl/42")).to be_nil
+    end
+
+    it "is nil for a scheme-less template, which would navigate inside Kongsole instead" do
+      connection = build(:kong_connection, git_web_url: "github.com/acme/kong-config/tree/{branch}")
+
+      expect(connection.branch_url("kongctl/42")).to be_nil
+    end
+
+    it "is nil for a scheme that has no business in a link this page draws" do
+      connection = build(:kong_connection, git_web_url: "javascript:alert(1)/{branch}")
+
+      expect(connection.branch_url("kongctl/42")).to be_nil
+    end
+
+    it "refuses to save a template that is not an http(s) URL naming the branch" do
+      expect(build(:kong_connection, git_web_url: "javascript:alert(1)/{branch}")).not_to be_valid
+      expect(build(:kong_connection, git_web_url: "https://github.com/acme/kong-config")).not_to be_valid
+      expect(build(:kong_connection, git_web_url: "https://github.com/acme/c/tree/{branch}")).to be_valid
+      expect(build(:kong_connection, git_web_url: nil)).to be_valid
     end
   end
 end

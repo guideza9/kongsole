@@ -1,18 +1,18 @@
 <% content_for :title, "Issue a token" %>
 
-<h1 class="text-xl font-semibold mb-6" style="color: var(--color-ink)">Issue a token</h1>
+<h1 class="page-title mb-6">Issue a token</h1>
 
 <%= form_with url: personal_access_tokens_path, method: :post, class: "max-w-xl grid gap-4" do %>
   <section class="panel p-4">
     <h2 class="section-label mb-3">Identity</h2>
     <div class="grid gap-4">
       <div>
-        <%= label_tag :operator, "Operator", class: "block text-sm font-medium", style: "color: var(--color-ink)" %>
+        <%= label_tag :operator, "Operator", class: "block text-sm font-medium text-ink" %>
         <input type="text" name="operator" id="operator" required class="field-input mt-1" placeholder="your name" />
-        <p class="text-xs mt-1.5" style="color: var(--color-ink-soft)">Who every change this token makes traces back to in the audit log.</p>
+        <p class="text-xs mt-1.5 text-ink-soft">Who every change this token makes traces back to in the audit log.</p>
       </div>
       <div>
-        <%= label_tag :name, "Label ", class: "block text-sm font-medium", style: "color: var(--color-ink)" %><span class="font-normal text-sm" style="color: var(--color-ink-soft)">(optional)</span>
+        <%= label_tag :name, "Label ", class: "block text-sm font-medium text-ink" %><span class="font-normal text-sm text-ink-soft">(optional)</span>
         <input type="text" name="name" id="name" class="field-input mt-1" placeholder="e.g. claude code" />
       </div>
     </div>
@@ -21,7 +21,7 @@
   <section class="panel p-4">
     <h2 class="section-label mb-3">Connections</h2>
     <% if @eligible_connections.empty? %>
-      <p class="text-sm" style="color: var(--color-ink-soft)">
+      <p class="text-sm text-ink-soft">
         No eligible connections. A token can only reach connections with <code class="font-mono">credential_mode: stored</code> —
         <%= link_to "edit a connection", connections_path %> to switch it to stored first.
       </p>
@@ -29,9 +29,9 @@
       <div class="grid gap-2">
         <% @eligible_connections.each do |connection| %>
           <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="connection_ids[]" value="<%= connection.id %>" style="accent-color: var(--color-accent)" />
+            <input type="checkbox" name="connection_ids[]" value="<%= connection.id %>" class="accent-accent" />
             <%= env_badge(connection) %>
-            <span style="color: var(--color-ink-soft)"><%= connection.apply_mode %></span>
+            <span class="text-ink-soft"><%= connection.apply_mode %></span>
           </label>
         <% end %>
       </div>
@@ -39,7 +39,7 @@
   </section>
 
   <div class="flex gap-2">
-    <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer">Issue token</button>
-    <%= link_to "Cancel", personal_access_tokens_path, class: "btn-text px-3 py-1.5 text-sm" %>
+    <button type="submit" class="btn-primary btn">Issue token</button>
+    <%= link_to "Cancel", personal_access_tokens_path, class: "btn-text btn-sm" %>
   </div>
 <% end %>

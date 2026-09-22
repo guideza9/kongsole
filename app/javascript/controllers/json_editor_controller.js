@@ -90,7 +90,9 @@ export default class extends Controller {
   }
 
   report(message, valid) {
-    this.statusTarget.textContent = message
+    // The status line is a live region: only touch it when the message
+    // actually changes, so re-validating unchanged text does not re-announce it.
+    if (this.statusTarget.textContent !== message) this.statusTarget.textContent = message
     this.statusTarget.style.color = valid ? "var(--color-ink-faint)" : "var(--color-danger)"
     this.submitTarget.disabled = !valid
     this.submitTarget.style.opacity = valid ? "" : "0.5"

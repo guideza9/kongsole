@@ -9,8 +9,8 @@ RSpec.describe "API::V1::Certificates", type: :request do
   end
 
   let(:dev) { create(:kong_connection, name: "dev", credential_mode: "stored", auth_secret: "s3cr3t") }
-  let(:sit) { create(:kong_connection, name: "sit", rank: 1, credential_mode: "stored", auth_secret: "s3cr3t") }
-  let(:prod) { create(:kong_connection, name: "prod", rank: 3, credential_mode: "stored", auth_secret: "s3cr3t") }
+  let(:sit) { create(:kong_connection, name: "sit", env: "sit", credential_mode: "stored", auth_secret: "s3cr3t") }
+  let(:prod) { create(:kong_connection, name: "prod", env: "prod", credential_mode: "stored", auth_secret: "s3cr3t") }
 
   def cert(connection, name, not_after, type: "certificate", **attrs)
     create(:kong_entity, kong_connection: connection, entity_type: type, name: name, not_after: not_after,

@@ -1,0 +1,11 @@
+<%# A plugin's reach, as one label. Global is the only solid ink mark on the
+    page: it touches every request, so it is the loudest scope. A scoped plugin
+    reads as what it is attached to -- the kind, then the name. %>
+<% if scope[:kind] == "global" %>
+  <span class="scope scope--global"><span class="scope__kind">Global</span></span>
+<% else %>
+  <span class="scope" title="<%= scope[:kind] %>: <%= scope[:name] %>">
+    <span class="scope__kind"><%= scope[:kind] %></span>
+    <span class="scope__name"><%= scope[:name] %></span>
+  </span>
+<% end %>

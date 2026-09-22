@@ -5,43 +5,111 @@ module ApplicationHelper
   # render as a legible badge everywhere a connection's identity appears,
   # never as a small decorative dot easy to miss under pressure. Rendered as
   # a flat dot + label chip (docs/UI-DESIGN.md) rather than a lit lamp.
-  COLOR = {
-    "red" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "orange" => { dot: "#a3611c", bg: "#f6ede0", text: "#6b3c0f" },
-    "yellow" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" },
-    "green" => { dot: "#2f6b45", bg: "#ecf3ec", text: "#1e3a21" },
-    "gray" => { dot: "#6c6c67", bg: "#f0f0ee", text: "#3a3a36" }
+  #
+  # The colours themselves are CSS (`.chip-<tone>` in application.css); Ruby
+  # only decides which tone a tag or status gets.
+  COLOR_TAG_TONES = {
+    "red" => "danger",
+    "orange" => "caution",
+    "yellow" => "warning",
+    "green" => "ok",
+    "gray" => "neutral"
   }.freeze
 
-  def connection_color_hex(color_tag)
-    COLOR.fetch(color_tag.to_s, COLOR["gray"])[:bg]
+  # `env` is stored as the short token the config file and decK use. In a
+  # sentence an operator reads under pressure -- "this writes to prod now" --
+  # the token is the tool's shorthand, not the environment's name, so the
+  # consequence copy on the review page spells it out. The tokens stay
+  # verbatim wherever they are the identifier being configured (the
+  # connections form, the registry), so only the prose is translated.
+  ENV_DISPLAY_NAMES = {
+    "dev" => "Development",
+    "sit" => "SIT",
+    "uat" => "UAT",
+    "prod" => "Production"
+  }.freeze
+
+  # The registry stores policy as config tokens (`apply_mode: pr`,
+  # `access_level: rw`). On a card an operator scans, the tokens read as
+  # settings to decode; these are the words the review page already uses.
+  APPLY_MODE_LABELS = { "direct" => "Direct apply", "pr" => "PR mode" }.freeze
+  ACCESS_LEVEL_LABELS = { "rw" => "Read-write", "ro" => "Read-only" }.freeze
+  CREDENTIAL_KIND_LABELS = { "personal" => "Personal credential", "shared" => "Shared credential" }.freeze
+
+  def apply_mode_label(apply_mode)
+    APPLY_MODE_LABELS.fetch(apply_mode.to_s) { apply_mode.to_s }
+  end
+
+  def access_level_label(access_level)
+    ACCESS_LEVEL_LABELS[access_level.to_s]
+  end
+
+  def credential_kind_label(credential_kind)
+    CREDENTIAL_KIND_LABELS[credential_kind.to_s]
+  end
+
+  # One tag per policy the connection has settled. Access level and
+  # credential kind are only known after a login probe, so an unprobed
+  # connection shows fewer tags rather than "unknown" ones.
+  def connection_policy_labels(connection)
+    [
+      apply_mode_label(connection.apply_mode),
+      access_level_label(connection.access_level),
+      credential_kind_label(connection.credential_kind)
+    ].compact
+  end
+
+  def env_display_name(connection)
+    env = connection.env.to_s
+    ENV_DISPLAY_NAMES.fetch(env) { env.presence || "this environment" }
   end
 
   # A solid, bordered env badge -- the primary "which environment am I
   # looking at" signal, sized to be read at a glance, not squinted at.
+  #
+  # At uat/prod it spells the environment out ("PROD · kong-prod-admin"), so
+  # the word is on every page and not only on the review strip; the name is
+  # dropped when it is only the environment again. Below rank 2 the chip stays
+  # the quiet dot + name: dev and sit are not where a wrong click is costly.
   def env_badge(connection, size: :md)
-    colors = COLOR.fetch(connection.color_tag.to_s, COLOR["gray"])
     classes = size == :lg ? "chip chip-lg" : "chip"
-    dot = content_tag :span, "", class: "chip-dot", style: "color:#{colors[:dot]}"
-    content_tag :span, dot + connection.name,
-      class: classes,
-      style: "background-color:#{colors[:bg]}; color:#{colors[:text]}"
+
+    # uat/prod: a solid chip chosen by rank, never by color_tag (and never
+    # red -- red is reserved for errors). See KongConnection#env_tone.
+    if connection.protected_env?
+      parts = [ content_tag(:span, "", class: "chip-dot"), content_tag(:span, connection.env.upcase, class: "chip-env__label") ]
+      unless connection.name.to_s.casecmp?(connection.env)
+        parts << content_tag(:span, "\u00b7", "aria-hidden": "true")
+        parts << content_tag(:span, connection.name, class: "chip-env__name")
+      end
+      return content_tag :span, safe_join(parts), class: "#{classes} chip-env #{connection.env_tone}", title: connection.name
+    end
+
+    tone = COLOR_TAG_TONES.fetch(connection.color_tag.to_s, "neutral")
+    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), connection.name ]), class: "#{classes} chip-#{tone}"
   end
 
-  STATUS_TONE = {
-    "ok" => { dot: "#2f6b45", bg: "#ecf3ec", text: "#1e3a21" },
-    "unauthorized" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "forbidden" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "route_not_matched" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" },
-    "not_found" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "rate_limited" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" },
-    "unavailable" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "error" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "expired" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "critical" => { dot: "#a3312a", bg: "#f8ecea", text: "#6e2015" },
-    "warning" => { dot: "#93600f", bg: "#f7efe0", text: "#5c4a14" }
+  STATUS_TONES = {
+    "ok" => "ok",
+    "unauthorized" => "danger",
+    "forbidden" => "danger",
+    "route_not_matched" => "warning",
+    "not_found" => "danger",
+    "rate_limited" => "warning",
+    "unavailable" => "danger",
+    "error" => "danger",
+    "expired" => "danger",
+    "critical" => "danger",
+    "warning" => "warning",
+    # A change plan's own life, and a token's, read through the same badge.
+    "applied" => "ok",
+    "failed" => "danger",
+    "pending" => "neutral",
+    "revoked" => "danger",
+    # Whether the admin path has been found on a connection.
+    "guarded" => "ok",
+    "unknown" => "neutral"
   }.freeze
-  STATUS_TONE_DEFAULT = { dot: "#6c6c67", bg: "#f0f0ee", text: "#3a3a36" }.freeze
 
   def status_label(status)
     (status || "never connected").to_s.humanize
@@ -67,11 +135,8 @@ module ApplicationHelper
   end
 
   def status_badge(status)
-    tone = STATUS_TONE.fetch(status.to_s, STATUS_TONE_DEFAULT)
-    dot = content_tag :span, "", class: "chip-dot", style: "color:#{tone[:dot]}"
-    content_tag :span, dot + status_label(status),
-      class: "chip",
-      style: "background-color:#{tone[:bg]}; color:#{tone[:text]}"
+    tone = STATUS_TONES.fetch(status.to_s, "neutral")
+    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), status_label(status) ]), class: "chip chip-#{tone}"
   end
 
   # Syntax-highlights a Ruby value as pretty-printed JSON for the Raw JSON
@@ -169,6 +234,40 @@ module ApplicationHelper
 
     distance = time_ago_in_words(entity.not_after)
     entity.not_after <= Time.current ? "#{distance} ago" : "in #{distance}"
+  end
+
+  # Which controllers belong to which primary-nav link. The nav names the
+  # section, not the exact page, so a page inside a section keeps its link
+  # marked: the login form is part of Connections; a change plan's review page,
+  # the plugin catalog and the expiry dashboard are all reached from and return
+  # to the Entities browser. Audit, Tokens and Health each own one controller.
+  PRIMARY_NAV_CONTROLLERS = {
+    connections: %w[connections sessions],
+    entities: %w[entities plugins certificates change_plans],
+    audit: %w[audit_events],
+    tokens: %w[personal_access_tokens],
+    health: %w[health]
+  }.freeze
+
+  #
+  # Pending PRs is the one section that shares a controller with another: a
+  # plan's review page belongs to Entities, the list of PR-mode plans to itself.
+  def primary_nav_current?(section)
+    on_pending_prs = controller_name == "change_plans" && action_name == "index"
+    return on_pending_prs if section == :pending
+    return false if section == :entities && on_pending_prs
+
+    PRIMARY_NAV_CONTROLLERS.fetch(section).include?(controller_name)
+  end
+
+  # A nav link that says where the reader is: aria-current="page" when
+  # `current` is true, and no aria-current attribute at all otherwise (never
+  # aria-current="false"). The visual state hangs off that attribute
+  # (`.topbar nav [aria-current]` in application.css), so sighted and
+  # assistive-tech users read the same fact.
+  def nav_link_to(name, path, current:, **options)
+    options[:"aria-current"] = "page" if current
+    link_to name, path, **options
   end
 
   private

@@ -1,7 +1,7 @@
 <% content_for :title, "Edit #{@entity.name}" %>
 
-<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">Edit <%= @entity.name %></h1>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)">
+<h1 class="page-title mb-1">Edit <%= @entity.name %></h1>
+<p class="text-sm mb-6 text-ink-soft">
   This proposes a change -- nothing reaches Kong until you review and apply it on the next page.
 </p>
 
@@ -11,28 +11,28 @@
       <h2 class="section-label mb-3">Fields</h2>
       <div class="grid gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Tags <span class="font-normal" style="color: var(--color-ink-soft)">(comma separated)</span></label>
-          <input type="text" name="tags" value="<%= @entity.tags.join(', ') %>" class="field-input font-mono text-sm" />
+          <label for="entity-tags" class="block text-sm font-medium mb-1 text-ink">Tags <span class="font-normal text-ink-soft">(comma separated)</span></label>
+          <input type="text" id="entity-tags" name="tags" value="<%= @entity.tags.join(', ') %>" class="field-input font-mono text-sm" />
         </div>
         <% if @entity.entity_type == "service" %>
           <div class="flex items-center gap-2">
             <input type="hidden" name="enabled" value="0" />
-            <input type="checkbox" id="enabled" name="enabled" value="1" <%= "checked" if @entity.enabled %> style="accent-color: var(--color-accent)" />
-            <label for="enabled" class="text-sm" style="color: var(--color-ink)">Enabled</label>
+            <input class="accent-accent" type="checkbox" id="enabled" name="enabled" value="1" <%= "checked" if @entity.enabled %> />
+            <label for="enabled" class="text-sm text-ink">Enabled</label>
           </div>
         <% end %>
       </div>
       <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer">Review change</button>
-        <%= link_to "Cancel", entity_path(@entity), class: "btn-text px-3 py-1.5 text-sm" %>
+        <button type="submit" class="btn-primary btn">Review change</button>
+        <%= link_to "Cancel", entity_path(@entity), class: "btn-sm btn-text" %>
       </div>
     </section>
   <% end %>
 
   <%= form_with url: entity_path(@entity), method: :patch, data: { controller: "json-editor" } do %>
     <section class="panel p-4">
-      <h2 class="section-label mb-3">Full JSON</h2>
-      <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+      <h2 id="json-editor-heading" class="section-label mb-3">Full JSON</h2>
+      <p class="text-xs mb-3 text-ink-soft">
         Every field on this <%= @entity.entity_type.humanize.downcase %>, straight from Kong.
         Removing a key leaves that field <em>unchanged</em> — set it to <code class="font-mono">null</code> to clear it.
         <% if @entity.entity_type == "certificate" %>
@@ -43,17 +43,17 @@
       </p>
 
       <% if @payload_stale %>
-        <p class="notice-banner mb-3 text-xs" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+        <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", tag: :p, class: "mb-3 text-xs" } do %>
           Kong is unreachable, so this is the copy from the last sync — it may be out of date.
-        </p>
+        <% end %>
       <% end %>
 
       <% if @payload_error.present? %>
-        <p class="notice-banner mb-3 text-xs" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+        <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-3 text-xs" } do %>
           <%= @payload_error %>
-        </p>
+        <% end %>
         <% if @payload_withheld %>
-          <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+          <p class="text-xs mb-3 text-ink-soft">
             Your text wasn't kept because it may contain key material, so the editor shows the current document again.
           </p>
         <% end %>
@@ -62,17 +62,18 @@
       <div class="json-editor" data-json-editor-target="wrapper">
         <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
         <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
+                  aria-labelledby="json-editor-heading"
                   class="json-editor__textarea"
                   data-json-editor-target="input"
                   data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>
       </div>
 
-      <p class="text-xs mt-2 font-mono" data-json-editor-target="status" style="color: var(--color-ink-faint)"></p>
+      <p role="status" class="text-xs mt-2 font-mono text-ink-faint" data-json-editor-target="status"></p>
 
       <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer" data-json-editor-target="submit">Review change</button>
-        <button type="button" class="btn-secondary px-3 py-1.5 text-sm cursor-pointer" data-action="json-editor#format">Format</button>
-        <%= link_to "Cancel", entity_path(@entity), class: "btn-text px-3 py-1.5 text-sm" %>
+        <button type="submit" class="btn-primary btn" data-json-editor-target="submit">Review change</button>
+        <button type="button" class="btn-sm btn-secondary" data-action="json-editor#format">Format</button>
+        <%= link_to "Cancel", entity_path(@entity), class: "btn-sm btn-text" %>
       </div>
     </section>
   <% end %>

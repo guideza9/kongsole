@@ -141,7 +141,29 @@ RSpec.describe Kong::ChangeApplier do
 
       expect { applier(plan).call }.to raise_error(Kong::Client::RouteNotMatched)
       expect(plan.reload.status).to eq("failed")
+      # Kong's bare 404 is translated by Kong::Client before it gets here, so what
+      # the plan stores is the reading an operator can act on, not the raw body.
+      expect(plan.failure_reason).to include("this credential likely can't write")
     end
+
+    it "keeps Kong's own field message, not just the client's classification of the status" do
+      plan = create(:change_plan, kong_connection: connection, target_kong_id: APPLIER_SVC_1,
+        before: { "id" => APPLIER_SVC_1, "name" => "payments-api", "updated_at" => 1_700_000_000 },
+        base_updated_at: Time.zone.at(1_700_000_000))
+      stub_request(:get, "https://kong-admin.internal/services/#{APPLIER_SVC_1}")
+        .to_return(status: 200, body: { id: APPLIER_SVC_1, name: "payments-api", updated_at: 1_700_000_000 }.to_json)
+      stub_request(:patch, "https://kong-admin.internal/services/#{APPLIER_SVC_1}")
+        .to_return(status: 400, body: { message: "schema violation", fields: { "retries" => "expected an integer" } }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::Client::UnexpectedResponse)
+
+      reason = plan.reload.failure_reason
+      # "unexpected Kong Admin API status 400" alone cannot tell an operator
+      # which field to fix, which is the point of showing a reason at all.
+      expect(reason).to include("schema violation")
+      expect(reason).to include("retries")
+    end
+
 
     it "rejects applying an agent-authored delete of an admin-path entity even with a matching confirmation name (defense in depth -- this plan should never have been created)" do
       plan = create(:change_plan, :delete, kong_connection: connection, actor_kind: "agent", target_kong_id: APPLIER_ADMIN_SVC,
@@ -367,6 +389,48 @@ RSpec.describe Kong::ChangeApplier do
       expect(plan.target_kong_id).to be_nil
       expect(plan.reload.status).to eq("failed")
       expect(plan.target_kong_id).to be_nil
+      expect(plan.failure_reason).to include("deck file validate failed: boom")
+    end
+
+    it "scrubs a PEM block out of the stored reason -- decK and git stderr can echo the file they choked on" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      allow(Kong::DeckCli).to receive(:validate).and_raise(
+        Kong::DeckCli::Error,
+        "deck file validate failed\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----"
+      )
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::DeckCli::Error)
+
+      reason = plan.reload.failure_reason
+      expect(reason).to include("deck file validate failed")
+      expect(reason).not_to include("AAAA")
+    end
+
+    it "strips a token out of a repo URL git echoed back, since the reason is persisted for everyone" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      allow(Kong::DeckCli).to receive(:validate).and_raise(
+        Kong::GitClient::Error,
+        "git push origin failed: fatal: Authentication failed for 'https://kongctl:ghp_s3cr3t@github.com/acme/kong-config.git'"
+      )
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::GitClient::Error)
+
+      reason = plan.reload.failure_reason
+      expect(reason).to include("Authentication failed")
+      expect(reason).to include("https://github.com/acme/kong-config.git")
+      expect(reason).not_to include("ghp_s3cr3t")
+    end
+
+    it "caps the stored reason so a verbose git stderr cannot push the plan below the fold" do
+      pem = PemFixtures.self_signed(days: 60)[:cert_pem]
+      allow(Kong::DeckCli).to receive(:validate).and_raise(Kong::GitClient::Error, "boom " * 2000)
+      plan = pr_plan(entity_type: "certificate", after: { "cert" => pem, "key" => %q(${{ env "DECK_CERT_PAY_KEY" }}) })
+
+      expect { apply_pr(plan) }.to raise_error(Kong::GitClient::Error)
+
+      expect(plan.reload.failure_reason.length).to be <= Kong::ChangeApplier::FAILURE_REASON_LIMIT
     end
 
     it "does not persist a minted certificate id when a refusal follows the render: the plan stays pending" do

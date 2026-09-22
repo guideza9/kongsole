@@ -47,6 +47,10 @@ class EntitiesController < ApplicationController
     # appends -- it's a display accumulator, not a query filter, so
     # Kong::EntityQuery never sees it.
     @shown_count = params[:shown].to_i + @entities.size
+    # The oldest row, not the newest: a full sync touches every active row, while
+    # the write-through after an apply touches one, so the minimum is the last
+    # full sync and the maximum would hide how stale the rest is.
+    @synced_at = KongEntity.active.where(kong_connection: current_connection).minimum(:synced_at)
 
     respond_to do |format|
       format.html

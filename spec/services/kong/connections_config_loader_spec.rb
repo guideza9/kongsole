@@ -36,6 +36,20 @@ RSpec.describe Kong::ConnectionsConfigLoader do
     end
   end
 
+  it "ignores a rank in the file: env alone decides it" do
+    Tempfile.create([ "connections", ".yml" ]) do |file|
+      file.write(<<~YAML)
+        - name: prod
+          env: prod
+          rank: 0
+          admin_url: https://kong-prod-admin-ro.internal
+      YAML
+      file.flush
+
+      expect(described_class.call(path: file.path).first.rank).to eq(3)
+    end
+  end
+
   it "only sets allow_insecure_http from the file's own insecure_http key" do
     Tempfile.create([ "connections", ".yml" ]) do |file|
       file.write(<<~YAML)

@@ -1,0 +1,4 @@
+<%# shared/_notice.html.erb — one banner. tone: :danger|:warning|:success. role: optional live-region role. tag: element, default :div (:p for a plain-text flash). %>
+<%= content_tag local_assigns.fetch(:tag, :div), class: ["notice-banner", "notice-banner--#{tone}", local_assigns[:class]], role: local_assigns[:role] do %>
+  <%= yield %>
+<% end %>

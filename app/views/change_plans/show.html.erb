@@ -1,175 +1,390 @@
 <% content_for :title, "Review change" %>
+<%
+  plan = @change_plan
+  branch = "kongctl/#{plan.id}"
+  branch_url = current_connection.branch_url(branch)
+  env_name = env_display_name(current_connection)
+  changed_keys = plan_changed_keys(plan)
+  fields = plan_field_summary(plan)
+  expiry = plan_expiry_summary(plan)
+  checks = guardrail_summary(@guardrails) if @guardrails.any?
+%>
 
 <div class="flex flex-wrap items-center gap-2 mb-1">
-  <h1 class="text-xl font-semibold" style="color: var(--color-ink)">
-    <%= @change_plan.operation.capitalize %> <%= @change_plan.entity_label %>
+  <h1 class="page-title">
+    <%= plan.operation.capitalize %> <%= plan.entity_label %>
   </h1>
-  <span class="tag"><%= @change_plan.entity_type %></span>
+  <span class="tag"><%= plan.entity_type %></span>
 </div>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)">
-  Proposed by <%= @change_plan.actor_username %><%= " (as #{@change_plan.actor_operator})" if @change_plan.actor_operator.present? %>
-  · expires <%= @change_plan.expires_at.to_fs(:short) %>
+<p class="text-sm mb-5 text-ink-soft">
+  Proposed by <%= actor_summary(plan) %>
+  · <%= plan_timestamp(plan.created_at) %>
 </p>
 
-<% if @change_plan.status == "pending" && @change_plan.expired? %>
-  <p class="notice-banner mb-6" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+<% if plan.status == "pending" && plan.expired? %>
+  <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-5" } do %>
     This plan expired. Nothing was applied. Go back and propose the change again.
-  </p>
-<% elsif @change_plan.status == "applied" && @change_plan.apply_mode == "pr" %>
-  <p class="notice-banner mb-6" style="background: var(--color-success-tint); border-color: var(--color-success); color: var(--color-success)">
-    Pushed to branch <code class="font-mono"><%= "kongctl/#{@change_plan.id}" %></code> (commit <code class="font-mono"><%= @change_plan.commit_sha&.first(8) %></code>) — nothing in Kong changes until this is reviewed and merged.
-  </p>
-<% elsif @change_plan.status == "applied" %>
-  <p class="notice-banner mb-6" style="background: var(--color-success-tint); border-color: var(--color-success); color: var(--color-success)">
-    Applied. This plan is done — propose a new change to make another edit.
-  </p>
-<% elsif @change_plan.status == "failed" %>
-  <p class="notice-banner mb-6" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
-    Kong rejected this change, so nothing was applied. Go back and propose the change again.
-  </p>
+  <% end %>
+<% elsif plan.status == "applied" && plan.apply_mode == "pr" %>
+  <%= render layout: "shared/notice", locals: { tone: :success, role: "status", class: "mb-5" } do %>
+    <p>
+      Pushed <%= plan_timestamp(plan.updated_at) %> to branch
+      <%# No whitespace inside the anchor: it would be underlined too, hanging a
+          stray rule off each end of the branch name. %>
+      <% if branch_url %><a href="<%= branch_url %>" class="font-mono underline underline-offset-2" target="_blank" rel="noopener"><%= branch %><span class="sr-only"> (opens this branch in the config repo, in a new tab)</span></a><% else %>
+        <code class="font-mono"><%= branch %></code>
+      <% end %>
+<% if plan.commit_sha.present? %>(commit <code class="font-mono"><%= plan.commit_sha.first(8) %></code>) <% end %>— nothing in Kong changes until this is reviewed and merged.
+    </p>
+    <%# The next step is the same whether or not the branch is a link: a branch
+        view is not a pull request, so the linked variant needs telling too. %>
+    <p class="text-sm font-normal mt-0.5">Open a pull request from this branch in the config repo to start the review.</p>
+  <% end %>
+<% elsif plan.status == "applied" %>
+  <%= render layout: "shared/notice", locals: { tone: :success, role: "status", tag: :p, class: "mb-5" } do %>
+    Applied <%= plan_timestamp(plan.updated_at) %>. This plan is done — propose a new change to make another edit.
+  <% end %>
+<% elsif plan.status == "failed" %>
+  <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-5" } do %>
+    <%# PR mode can promise Kong is untouched -- it never writes. A direct apply
+        cannot: Kong may have committed the change and then failed to answer, so
+        the copy states what is known and sends the operator to check. %>
+    <% if plan.apply_mode == "pr" %>
+      <p>Failed <%= plan_timestamp(plan.updated_at) %> &mdash; no branch was pushed, and Kong is unchanged.</p>
+    <% else %>
+      <p>Failed <%= plan_timestamp(plan.updated_at) %> &mdash; the change did not complete.</p>
+    <% end %>
+    <% if plan.failure_reason.present? %>
+      <p class="text-xs failure-reason"><%= plan.failure_reason %></p>
+    <% end %>
+    <p class="text-sm font-normal mt-1">
+      <% if plan.apply_mode == "pr" %>
+        Fix the cause, then propose the change again.
+      <% else %>
+        Check the <%= plan.entity_type.humanize.downcase %> in Kong before proposing this again &mdash; if Kong applied the change before failing, re-proposing could repeat it.
+      <% end %>
+    </p>
+  <% end %>
 <% end %>
 
 <% if @dependent_routes.present? %>
-  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+  <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", tag: :p, class: "mb-5" } do %>
     Kong will reject this delete until these <%= @dependent_routes.size %> route<%= "s" unless @dependent_routes.size == 1 %> are removed first: <%= @dependent_routes.map(&:name).join(", ") %>
-  </p>
+  <% end %>
 <% end %>
 
 <% if @dependent_targets.present? %>
-  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+  <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", tag: :p, class: "mb-5" } do %>
     Deleting this upstream also removes its <%= @dependent_targets.size %> target<%= "s" unless @dependent_targets.size == 1 %>: <%= @dependent_targets.map(&:name).join(", ") %>
-  </p>
+  <% end %>
 <% end %>
 
 <% if @dependent_snis.present? %>
-  <p class="notice-banner mb-6" style="background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning)">
+  <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", tag: :p, class: "mb-5" } do %>
     Deleting this certificate also removes its <%= @dependent_snis.size %> SNI<%= "s" unless @dependent_snis.size == 1 %>: <%= @dependent_snis.map(&:name).join(", ") %>
-  </p>
+  <% end %>
 <% end %>
 
-<div class="max-w-2xl grid gap-4">
-  <%
-    # What "changed from original" means per operation -- shared by the
-    # Changes table below and the Raw JSON panels' line highlighting, so
-    # both sections agree on exactly which fields are colored and why.
-    changed_keys = case @change_plan.operation
-    when "create" then @change_plan.after.keys
-    when "delete" then @change_plan.before.keys
-    else @change_plan.diff.keys
-    end
-  %>
-
-  <section class="panel p-4">
-    <h2 class="section-label mb-3">Changes</h2>
-    <% if @change_plan.operation == "delete" %>
-      <p class="text-sm mb-3" style="color: var(--color-danger)">This permanently removes the <%= @change_plan.entity_type.humanize.downcase %> and every field below from Kong.</p>
-      <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt class="section-label">Field</dt><dt class="section-label">Removed value</dt>
-        <% @change_plan.before.each do |field, value| %>
-          <dt class="font-mono"><%= field %></dt>
-          <dd><%= diff_chip(value, tone: :removed) %></dd>
-        <% end %>
-      </dl>
-    <% elsif @change_plan.operation == "create" %>
-      <p class="text-sm mb-3" style="color: var(--color-success)">This creates a new <%= @change_plan.entity_type.humanize.downcase %> in Kong with every field below.</p>
-      <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt class="section-label">Field</dt><dt class="section-label">New value</dt>
-        <% @change_plan.after.each do |field, value| %>
-          <dt class="font-mono"><%= field %></dt>
-          <dd><%= diff_chip(value, tone: :added) %></dd>
-        <% end %>
-      </dl>
-    <% elsif @change_plan.diff.empty? %>
-      <p class="text-sm" style="color: var(--color-ink-soft)">No fields changed.</p>
+<div class="grid grid-cols-[minmax(0,1fr)] gap-5">
+  <%# Summary strip: the four facts a reviewer needs before reading a single
+      field -- where this lands, how big it is, what still needs them, and how
+      long the plan lives. At uat/prod the first cell is the solid env color. %>
+  <dl class="plan-summary" aria-label="Plan summary">
+    <% if current_connection.protected_env? %>
+      <div class="plan-summary__cell env-strip <%= current_connection.env_tone %>">
+        <dt>Target</dt>
+        <dd class="plan-summary__value env-strip__env"><%= current_connection.env %></dd>
+        <dd class="plan-summary__note">
+          <% if plan.apply_mode == "pr" %>
+            PR mode <span aria-hidden="true">→</span> branch <code class="font-mono"><%= branch %></code>
+          <% else %>
+            Direct apply <span aria-hidden="true">→</span> live write to Kong
+          <% end %>
+        </dd>
+      </div>
     <% else %>
-      <dl class="grid grid-cols-[max-content_1fr_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt class="section-label">Field</dt><dt class="section-label">From</dt><dt class="section-label">To</dt>
-        <% @change_plan.diff.each do |field, change| %>
-          <dt class="font-mono"><%= field %></dt>
-          <dd><%= diff_chip(change["from"], tone: :removed) %></dd>
-          <dd><%= diff_chip(change["to"], tone: :added) %></dd>
+      <div class="plan-summary__cell">
+        <dt>Target</dt>
+        <dd class="plan-summary__value"><%= env_badge(current_connection) %></dd>
+        <dd class="plan-summary__note">
+          <% if plan.apply_mode == "pr" %>
+            PR mode <span aria-hidden="true">→</span> branch <code class="font-mono"><%= branch %></code>
+          <% else %>
+            Direct apply <span aria-hidden="true">→</span> live write to Kong
+          <% end %>
+        </dd>
+      </div>
+    <% end %>
+
+    <div class="plan-summary__cell">
+      <dt>Changes</dt>
+      <dd class="plan-summary__value"><span class="plan-summary__num"><%= fields[:count] %></span> <%= fields[:label] %></dd>
+      <dd class="plan-summary__note"><%= fields[:note] %></dd>
+    </div>
+
+    <% if checks %>
+      <div class="plan-summary__cell">
+        <dt>Guardrails</dt>
+        <dd class="plan-summary__value <%= "is-#{checks[:tone]}" if checks[:tone] %>"><%= checks[:value] %></dd>
+        <dd class="plan-summary__note"><%= checks[:note] %></dd>
+      </div>
+    <% end %>
+
+    <div class="plan-summary__cell">
+      <dt>Expiry</dt>
+      <dd class="plan-summary__value <%= "is-#{expiry[:tone]}" if expiry[:tone] %>">
+        <% if expiry[:iso] %>
+          <time datetime="<%= expiry[:iso] %>"><%= expiry[:value] %></time>
+        <% else %>
+          <%= expiry[:value] %>
         <% end %>
-      </dl>
+      </dd>
+      <dd class="plan-summary__note"><%= expiry[:note] %></dd>
+    </div>
+  </dl>
+
+  <section class="panel" aria-labelledby="changes-heading">
+    <div class="p-4 pb-3">
+      <h2 id="changes-heading" class="section-label mb-2">Changes</h2>
+      <% if plan.operation == "delete" %>
+        <p class="text-sm text-danger">This permanently removes the <%= plan.entity_type.humanize.downcase %> and every field below from Kong.</p>
+      <% elsif plan.operation == "create" %>
+        <p class="text-sm text-success">This creates a new <%= plan.entity_type.humanize.downcase %> in Kong with every field below.</p>
+      <% elsif plan.diff.empty? %>
+        <p class="text-sm text-ink-soft">No fields changed.</p>
+      <% end %>
+    </div>
+
+    <% unless plan.operation == "update" && plan.diff.empty? %>
+      <div class="diff-table-wrap" tabindex="0" role="region" aria-label="Changes table">
+        <table class="diff-table<%= " diff-table--compare" if plan.operation == "update" %>">
+          <% if plan.operation == "delete" %>
+            <caption class="sr-only">Fields removed from Kong</caption>
+            <thead><tr><th scope="col">Field</th><th scope="col">Removed value</th></tr></thead>
+            <tbody>
+              <% plan.before.each do |field, value| %>
+                <tr><th scope="row" class="font-mono"><%= field %></th><td><%= diff_chip(value, tone: :removed) %></td></tr>
+              <% end %>
+            </tbody>
+          <% elsif plan.operation == "create" %>
+            <caption class="sr-only">Fields the new <%= plan.entity_type.humanize.downcase %> is created with</caption>
+            <thead><tr><th scope="col">Field</th><th scope="col">New value</th></tr></thead>
+            <tbody>
+              <% plan.after.each do |field, value| %>
+                <tr><th scope="row" class="font-mono"><%= field %></th><td><%= diff_chip(value, tone: :added) %></td></tr>
+              <% end %>
+            </tbody>
+          <% else %>
+            <caption class="sr-only">Fields this update changes, before and after</caption>
+            <thead><tr><th scope="col">Field</th><th scope="col">From</th><th scope="col">To</th></tr></thead>
+            <tbody>
+              <% plan.diff.each do |field, change| %>
+                <tr>
+                  <th scope="row" class="font-mono"><%= field %></th>
+                  <td><%= diff_chip(change["from"], tone: :removed) %></td>
+                  <td><%= diff_chip(change["to"], tone: :added) %></td>
+                </tr>
+              <% end %>
+            </tbody>
+          <% end %>
+        </table>
+      </div>
     <% end %>
   </section>
 
-  <section class="panel p-4">
-    <h2 class="section-label mb-3">Raw JSON</h2>
-    <p class="text-xs mb-3" style="color: var(--color-ink-faint)">
-      <% if changed_keys.present? && @change_plan.operation != "create" %>
-        <span class="diff-chip" style="background: var(--color-danger-tint); color: var(--color-danger)">old value</span>
-      <% end %>
-      <% if changed_keys.present? && @change_plan.operation != "delete" %>
-        <span class="diff-chip ml-1" style="background: var(--color-success-tint); color: var(--color-success)">new value</span>
-      <% end %>
-    </p>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <p class="text-xs mb-1" style="color: var(--color-ink-faint)">Before</p>
-        <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@change_plan.before, changed_keys: changed_keys, tone: :removed) %></pre>
-      </div>
-      <div>
-        <p class="text-xs mb-1" style="color: var(--color-ink-faint)">After</p>
-        <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= @change_plan.operation == "delete" ? "(deleted)" : highlight_json(@change_plan.after, changed_keys: changed_keys, tone: :added) %></pre>
-      </div>
-    </div>
-  </section>
+  <% if @actionable %>
+    <section class="panel p-4 grid gap-4" aria-labelledby="guardrails-heading">
+      <h2 id="guardrails-heading" class="section-label">Guardrails</h2>
 
-  <% if @change_plan.deck_diff.present? %>
-    <section class="panel p-4">
-      <h2 class="section-label mb-3">deck gateway diff</h2>
-      <pre class="json-viewer text-xs font-mono overflow-x-auto p-3 rounded" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border)"><%= highlight_json(@change_plan.deck_diff) %></pre>
-    </section>
-  <% end %>
+      <ul class="guardrail-list">
+        <% @guardrails.each do |guardrail| %>
+          <li class="guardrail is-<%= guardrail.state %>">
+            <span class="guardrail__state"><span class="chip-dot" aria-hidden="true"></span><%= { pass: "Clear", confirm: "Confirm", warn: "Review" }.fetch(guardrail.state) %></span>
+            <span class="guardrail__body">
+              <span class="guardrail__label"><%= guardrail.label %></span>
+              <span class="guardrail__detail"><%= guardrail.detail %></span>
+            </span>
+          </li>
+        <% end %>
+      </ul>
 
-  <% if @change_plan.status == "pending" && !@change_plan.expired? %>
-    <%= form_with url: apply_change_plan_path(@change_plan), method: :post, class: "panel p-4 grid gap-4" do %>
-<% if @env_vars.present? %>
-  <div class="grid gap-2">
-    <label class="flex items-start gap-2 text-sm" style="color: var(--color-ink)">
-      <input type="checkbox" name="acknowledge_env_vars" value="1" required class="mt-0.5" style="accent-color: var(--color-accent)" />
-      <span>
-        I confirm <span class="font-mono"><%= @env_vars.join(", ") %></span>
-        <%= @env_vars.size == 1 ? "is" : "are" %> set in the environment of every Kong node on <%= current_connection.name %>.
-      </span>
-    </label>
-    <p class="text-xs" style="color: var(--color-ink-faint)">
-      Kong doesn't check this. If a variable is missing, TLS for this certificate's hostnames fails until it is set.
-    </p>
-  </div>
-<% end %>
+      <% if @requires_env_name %>
+        <% if plan.apply_mode == "pr" %>
+          <div class="env-notice <%= current_connection.env_tone %>">
+            <p class="env-notice__title">Pushes a branch &mdash; nothing in <%= env_name %> changes yet.</p>
+            <p class="text-sm mt-0.5">
+              <span class="font-mono"><%= branch %></span> goes to the config repo. Kong only changes after it is reviewed and merged, when CI runs <span class="font-mono">deck gateway sync</span>.
+            </p>
+          </div>
+        <% else %>
+          <%= render layout: "shared/notice", locals: { tone: :danger } do %>
+            <p class="font-semibold">This writes to <%= env_name %> now.</p>
+            <p class="text-sm mt-0.5">The change goes straight into Kong as <%= current_operator.presence || current_connection.auth_username %>, and can't be undone from here.</p>
+          <% end %>
+        <% end %>
+      <% end %>
+
+      <%# These two belong to the form in the action bar below (form="apply-plan-form"),
+          but read better here, next to the guardrail that asks for them. %>
+      <% if @env_vars.present? %>
+        <div class="grid gap-2">
+          <label class="flex items-start gap-2 text-sm text-ink">
+            <input type="checkbox" name="acknowledge_env_vars" value="1" form="apply-plan-form" required class="mt-0.5 accent-accent" />
+            <span>
+              I confirm <span class="font-mono"><%= @env_vars.join(", ") %></span>
+              <%= @env_vars.size == 1 ? "is" : "are" %> set in the environment of every Kong node on <%= current_connection.name %>.
+            </span>
+          </label>
+          <p class="text-xs text-ink-soft">
+            Kong doesn't check this. If a variable is missing, TLS for this certificate's hostnames fails until it is set.
+          </p>
+        </div>
+      <% end %>
       <% if @deck_env_vars.present? %>
-        <p class="text-xs" style="color: var(--color-ink-faint)">
+        <p class="text-xs text-ink-soft">
           decK reads <span class="font-mono"><%= @deck_env_vars.join(", ") %></span> from the CI environment when it syncs this change.
           This tool checked the file with a dummy value and never sees the key. If the variable is unset in CI, the sync fails before anything reaches Kong.
           The CI variable must hold the PEM on ONE line with literal \n escapes, not real newlines.
           Because the file was checked with a dummy value, the diff shows the certificate's key as changed.
         </p>
       <% end %>
-      <% if @requires_confirmation_name %>
-        <div>
-          <label class="block text-sm font-medium mb-1" style="color: var(--color-danger)">
-            This is protected. Type <span class="font-mono"><%= @change_plan.entity_label %></span> to confirm deletion.
-          </label>
-          <input type="text" name="confirmation_name" class="field-input font-mono text-sm" autocomplete="off" />
+    </section>
+  <% end %>
+
+  <%# Raw JSON is the same change the table already states, in full -- kept one
+      click away rather than stacked under it. %>
+  <section class="panel disclosure-group" aria-label="Raw data">
+    <details class="disclosure">
+      <summary>Raw JSON <span>before and after</span></summary>
+      <div class="disclosure__body">
+        <% if changed_keys.present? %>
+          <p class="text-xs mb-3 text-ink-soft">
+            <% if plan.operation != "create" %>
+              <span class="diff-chip bg-danger-tint text-danger">old value</span>
+            <% end %>
+            <% if plan.operation != "delete" %>
+              <span class="diff-chip ml-1 bg-success-tint text-success">new value</span>
+            <% end %>
+          </p>
+        <% end %>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="min-w-0">
+            <p class="text-xs mb-1 text-ink-soft" id="raw-before-label">Before</p>
+            <pre class="json-viewer json-block text-xs font-mono" tabindex="0" aria-labelledby="raw-before-label"><%= highlight_json(plan.before, changed_keys: changed_keys, tone: :removed) %></pre>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs mb-1 text-ink-soft" id="raw-after-label">After</p>
+            <pre class="json-viewer json-block text-xs font-mono" tabindex="0" aria-labelledby="raw-after-label"><%= plan.operation == "delete" ? "(deleted)" : highlight_json(plan.after, changed_keys: changed_keys, tone: :added) %></pre>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <% if plan.deck_diff.present? %>
+      <details class="disclosure">
+        <summary>deck gateway diff <span>what CI will sync</span></summary>
+        <div class="disclosure__body">
+          <pre class="json-viewer json-block text-xs font-mono" tabindex="0" aria-label="deck gateway diff"><%= highlight_json(plan.deck_diff) %></pre>
+        </div>
+      </details>
+    <% end %>
+  </section>
+
+  <% if @actionable %>
+    <%# Every name typed into the bar gates the button (see env-confirm). %>
+    <% gated = @requires_env_name || @requires_confirmation_name %>
+    <% action_label = plan.apply_mode == "pr" ? "Push branch" : "Apply" %>
+    <% typed_names = [ @requires_confirmation_name, @requires_env_name ].count(true) %>
+    <%= form_with url: apply_change_plan_path(plan), method: :post, id: "apply-plan-form",
+          class: "action-bar #{current_connection.env_tone}",
+          data: (gated ? { controller: "env-confirm" } : {}) do %>
+      <% bar_fields = @requires_confirmation_name || @requires_env_name || @requires_reauth %>
+      <%# The bar always says what pressing the button does -- the operation, the
+          entity and the environment in words -- because at uat/prod it is the
+          one place the operator is looking when they commit. The environment
+          sits on the second line, which wraps, so a long entity name that
+          truncates on the first cannot push it out of sight. %>
+      <p class="action-bar__what">
+        <strong title="<%= plan.operation.capitalize %> <%= plan.entity_type.humanize.downcase %> <%= plan.entity_label %>"><%= plan.operation.capitalize %> <%= plan.entity_type.humanize.downcase %> <%= plan.entity_label %></strong>
+        <span>
+          <span class="font-semibold text-ink"><%= env_name %></span> &middot;
+          <%= fields[:count] %> <%= fields[:label] %> &middot;
+          <% if plan.apply_mode == "pr" %>
+            pushes a branch, Kong unchanged until it is merged
+          <% else %>
+            writes to Kong now
+          <% end %>
+        </span>
+      </p>
+
+      <% if bar_fields %>
+        <div class="action-bar__fields">
+          <% if @requires_confirmation_name %>
+            <div>
+              <label for="confirmation_name" class="block text-sm font-medium mb-1 <%= @protected_entity ? "text-danger" : "text-ink" %>">
+                <% if @protected_entity %>
+                  This is protected. Type <span class="font-mono"><%= plan.entity_label %></span> to confirm deletion.
+                <% else %>
+                  Type <span class="font-mono"><%= plan.entity_label %></span> to confirm deleting it from <%= env_name %>
+                <% end %>
+              </label>
+              <input type="text" id="confirmation_name" name="confirmation_name" class="field-input font-mono text-sm" autocomplete="off" autocapitalize="off" spellcheck="false"
+                data-expected="<%= plan.entity_label %>" data-exact data-env-confirm-target="input" data-action="input->env-confirm#check" />
+            </div>
+          <% end %>
+          <% if @requires_env_name %>
+            <div>
+              <label id="confirm_env_name_label" for="confirm_env_name" class="block text-sm font-medium mb-1 text-ink">
+                Type the connection name <span class="font-mono"><%= current_connection.name %></span>
+              </label>
+              <input type="text" id="confirm_env_name" name="confirm_env_name" class="field-input font-mono text-sm" autocomplete="off" autocapitalize="off" spellcheck="false"
+                data-expected="<%= current_connection.name %>" data-env-confirm-target="input" data-action="input->env-confirm#check" />
+            </div>
+          <% end %>
+          <% if @requires_reauth %>
+            <div>
+              <%# In PR mode nothing is written, so "for every write" would
+                  contradict the panel above and the Push branch button beside
+                  it: the credential is used to diff this change against Kong. %>
+              <label for="password" class="block text-sm font-medium mb-1 text-ink">
+                <% if plan.apply_mode == "pr" %>
+                  Re-enter your Kong password &mdash; it diffs this change against <%= env_name %> before the branch is pushed.
+                <% else %>
+                  Re-enter your Kong password &mdash; <%= env_name %> needs a fresh credential for every write.
+                <% end %>
+              </label>
+              <input type="password" id="password" name="password" class="field-input text-sm" autocomplete="current-password" />
+            </div>
+          <% end %>
         </div>
       <% end %>
-      <% if @requires_reauth %>
-        <div>
-          <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">
-            This connection is rank <%= current_connection.rank %> — confirm your password to apply.
-          </label>
-          <input type="password" name="password" class="field-input" autocomplete="current-password" />
+
+      <div class="action-bar__buttons">
+        <% if gated %>
+          <p id="unlock-hint" class="action-bar__hint" data-env-confirm-target="hint">
+            <%= action_label %> unlocks when <%= typed_names > 1 ? "both names match" : "the name matches" %>
+          </p>
+        <% end %>
+        <% submit_class = if !@requires_env_name then "btn-primary"
+                          elsif plan.apply_mode == "pr" then "btn-env"
+                          else "btn-danger" end %>
+        <div class="action-bar__actions">
+          <%= link_to "Cancel", entities_path(type: plan.entity_type), class: "btn-sm btn-text" %>
+          <button type="submit" class="<%= submit_class %> btn" data-env-confirm-target="submit" <%= tag.attributes(aria: { describedby: "unlock-hint" }) if gated %>><%= action_label %></button>
         </div>
-      <% end %>
-      <div class="flex gap-2">
-        <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer"><%= @change_plan.apply_mode == "pr" ? "Push branch" : "Apply" %></button>
-        <%= link_to "Cancel", entities_path(type: @change_plan.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
       </div>
     <% end %>
   <% else %>
-    <div>
-      <%= link_to "Back to #{entity_type_label(@change_plan.entity_type).downcase}", entities_path(type: @change_plan.entity_type), class: "btn-text px-3 py-1.5 text-sm" %>
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <%# An applied plan's way on: the entry it left in the audit log, and the
+          record it changed. Each shows only when there is one to go to. %>
+      <% if @audit_event %>
+        <%= link_to "View audit entry", audit_events_path(anchor: "audit-event-#{@audit_event.id}"), class: "btn-sm btn-secondary" %>
+      <% end %>
+      <% if @applied_entity %>
+        <%= link_to "View #{@applied_entity.entity_type.humanize.downcase}", entity_path(@applied_entity), class: "btn-sm btn-secondary" %>
+      <% end %>
+      <%= link_to "Back to #{entity_type_label(plan.entity_type).downcase}", entities_path(type: plan.entity_type), class: "btn-sm btn-text" %>
     </div>
   <% end %>
 </div>

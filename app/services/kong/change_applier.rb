@@ -62,11 +62,48 @@ module Kong
 
       execute!
     rescue Kong::Client::Error, Kong::GitClient::Error, Kong::DeckCli::Error => e
-      @change_plan.update!(status: "failed")
+      # Keep the failing side's own words on the plan, not just in the flash
+      # that dies on the next request -- a reviewer opening this plan later
+      # needs to know why it failed.
+      @change_plan.update!(status: "failed", failure_reason: failure_reason_for(e))
       raise e
     end
 
     private
+
+    # A stored reason is read back by every operator who opens the plan, for as
+    # long as the plan exists, so it goes through the same bar as anything else
+    # entering the read-model (docs/DESIGN.md section 8).
+    FAILURE_REASON_LIMIT = 2000
+    # `https://user:token@host/repo.git` -- git echoes the remote it was given
+    # in its own stderr, and `run!` puts the argv in the message, so a config
+    # repo URL carrying a token would otherwise be persisted verbatim.
+    URL_CREDENTIAL = %r{://[^/\s@]+@}
+
+    def failure_reason_for(error)
+      text = [ error.message, kong_detail(error) ].compact_blank.join(" -- ")
+
+      Kong::CertificateKeyPolicy.scrub(text)
+        .gsub(URL_CREDENTIAL, "://")
+        .truncate(FAILURE_REASON_LIMIT)
+    end
+
+    # Kong::Client raises a classification of the status ("unexpected Kong Admin
+    # API status 400"), keeping Kong's own body on the exception. The
+    # classification alone cannot tell an operator *which field* Kong objected
+    # to, which is the whole point of showing a reason, so the body's message
+    # and field errors are appended to it.
+    def kong_detail(error)
+      return nil unless error.is_a?(Kong::Client::Error) && error.response
+
+      body = error.response.body
+      body = JSON.parse(body) if body.is_a?(String)
+      return nil unless body.is_a?(Hash)
+
+      [ body["message"], body["fields"].presence&.to_json ].compact_blank.join(" ")
+    rescue JSON::ParserError
+      nil
+    end
 
     # A nested type (target) resolves every path through its upstream, which
     # the planner stored on the plan as parent_kong_id.

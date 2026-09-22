@@ -1,72 +1,109 @@
 <% content_for :title, entity_type_label(@type) %>
 
-<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+<%
+  certificate_type = %w[certificate ca_certificate].include?(@type)
+  # CA certificates are a sibling of certificates, not a destination of their
+  # own: one tab, and the other kind is a link in the header.
+  active_tab = certificate_type ? "certificate" : @type
+  extra_filters = [ @filters[:tags].present?, @filters[:sort].present? && @filters[:sort] != "-updated_at" ].count(true)
+  filtered = @filters[:q].present? || extra_filters.positive?
+%>
+
+<div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 mb-4">
   <div>
-    <h1 class="text-xl font-semibold" style="color: var(--color-ink)"><%= entity_type_label(@type) %></h1>
-    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">Synced from <%= current_connection.name %>.</p>
+    <h1 class="page-title"><%= entity_type_label(@type) %></h1>
+    <%# Sync is upkeep, not the page's job: a quiet action beside the sentence
+        that says how fresh the data is, so the header keeps one filled button. %>
+    <div class="text-sm mt-0.5 flex flex-wrap items-center gap-x-1.5 text-ink-soft">
+      <%= sync_freshness(@synced_at, current_connection.name) %>
+      <%= button_to "Sync now", sync_entities_path(type: @type), method: :post,
+            form: { class: "inline" }, class: "underline underline-offset-2 bg-transparent border-0 p-0 text-accent" %>
+    </div>
   </div>
-  <div class="flex gap-2">
-    <% if @type == "plugin" %>
-      <%= link_to "New global plugin", new_plugin_path, class: "btn-primary px-3.5 py-2 text-sm" %>
-    <% elsif @type == "upstream" %>
-      <%= link_to "New upstream", new_entity_path(type: "upstream"), class: "btn-primary px-3.5 py-2 text-sm" %>
-    <% elsif @type == "certificate" || @type == "ca_certificate" %>
-      <%= link_to "Expiring soon", expiring_certificates_path, class: "btn-secondary px-3.5 py-2 text-sm" %>
-      <%= link_to(@type == "certificate" ? "New certificate" : "New CA certificate", new_entity_path(type: @type), class: "btn-primary px-3.5 py-2 text-sm") %>
+  <div class="flex flex-wrap items-center gap-2">
+    <% if certificate_type %>
+      <%= link_to "Expiring soon", expiring_certificates_path, class: "btn-sm btn-text" %>
+      <%= link_to(@type == "certificate" ? "CA certificates" : "Certificates", entities_path(type: @type == "certificate" ? "ca_certificate" : "certificate"), class: "btn-sm btn-text") %>
     <% end %>
-    <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-secondary px-3.5 py-2 text-sm cursor-pointer" %>
+    <% if @type == "plugin" %>
+      <%= link_to "New global plugin", new_plugin_path, class: "btn-primary btn" %>
+    <% elsif @type == "upstream" %>
+      <%= link_to "New upstream", new_entity_path(type: "upstream"), class: "btn-primary btn" %>
+    <% elsif certificate_type %>
+      <%= link_to(@type == "certificate" ? "New certificate" : "New CA certificate", new_entity_path(type: @type), class: "btn-primary btn") %>
+    <% end %>
   </div>
 </div>
 
-<nav class="flex gap-1 mb-6" style="border-bottom: 1px solid var(--color-border)">
-  <% %w[service route consumer plugin upstream certificate ca_certificate].each do |type| %>
+<nav aria-label="Entity types" class="tab-nav tab-nav--rule mb-6">
+  <% %w[service route consumer plugin upstream certificate].each do |type| %>
     <%= link_to entity_type_label(type), entities_path(type: type),
-          class: "px-3 py-2 text-sm #{'font-semibold' if @type == type}",
-          style: @type == type ? "color: var(--color-ink); border-bottom: 2px solid var(--color-accent)" : "color: var(--color-ink-soft)" %>
+          class: "tab",
+          aria: { current: (active_tab == type ? "page" : nil) } %>
   <% end %>
 </nav>
 
-<%= form_with url: entities_path, method: :get, class: "panel p-4 mb-5 flex flex-wrap items-end gap-4" do %>
+<%# One field and one button in view; tags and sort are a disclosure that opens
+    itself when either is in use, so an active filter is never hidden. %>
+<%= form_with url: entities_path, method: :get, class: "panel p-3 mb-5 grid gap-3" do %>
   <input type="hidden" name="type" value="<%= @type %>" />
-  <div class="flex-1 min-w-[180px]">
-    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Search</label>
-    <input type="text" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" />
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label for="entities-q" class="block text-sm font-medium mb-1 text-ink">Search</label>
+      <input type="text" id="entities-q" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" />
+    </div>
+    <button type="submit" class="btn-secondary btn">Filter</button>
+    <% if filtered %>
+      <%= link_to "Clear", entities_path(type: @type), class: "btn btn-text" %>
+    <% end %>
   </div>
-  <div class="flex-1 min-w-[180px]">
-    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Tags <span class="font-normal" style="color: var(--color-ink-soft)">(comma separated, matches all)</span></label>
-    <input type="text" name="tags" value="<%= @filters[:tags] %>" placeholder="payment, core" class="field-input font-mono text-sm" />
-  </div>
-  <div>
-    <label class="block text-sm font-medium mb-1" style="color: var(--color-ink)">Sort</label>
-    <select name="sort" class="field-input">
-      <% [["Updated (newest)", "-updated_at"], ["Updated (oldest)", "updated_at"],
-          ["Created (newest)", "-created_at"], ["Created (oldest)", "created_at"],
-          ["Name (A–Z)", "name"], ["Name (Z–A)", "-name"]].each do |label, value| %>
-        <option value="<%= value %>" <%= "selected" if @filters[:sort] == value %>><%= label %></option>
-      <% end %>
-    </select>
-  </div>
-  <button type="submit" class="btn-primary px-4 py-2 text-sm">Filter</button>
+  <details <%= "open" if extra_filters.positive? %>>
+    <summary class="w-fit cursor-pointer text-sm text-ink-soft">
+      Tags and sort<%= " · #{extra_filters} in use" if extra_filters.positive? %>
+    </summary>
+    <div class="flex flex-wrap items-end gap-4 mt-3">
+      <div class="flex-1 min-w-[180px]">
+        <label for="entities-tags" class="block text-sm font-medium mb-1 text-ink">Tags <span id="entities-tags-hint" class="font-normal text-ink-soft">(comma separated, matches all)</span></label>
+        <input type="text" id="entities-tags" name="tags" value="<%= @filters[:tags] %>" placeholder="payment, core" aria-describedby="entities-tags-hint" class="field-input font-mono text-sm" />
+      </div>
+      <div>
+        <label for="entities-sort" class="block text-sm font-medium mb-1 text-ink">Sort</label>
+        <select id="entities-sort" name="sort" class="field-input">
+          <% [["Updated (newest)", "-updated_at"], ["Updated (oldest)", "updated_at"],
+              ["Created (newest)", "-created_at"], ["Created (oldest)", "created_at"],
+              ["Name (A–Z)", "name"], ["Name (Z–A)", "-name"]].each do |label, value| %>
+            <option value="<%= value %>" <%= "selected" if @filters[:sort] == value %>><%= label %></option>
+          <% end %>
+        </select>
+      </div>
+    </div>
+  </details>
 <% end %>
 
 <% if @entities.empty? %>
-  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+  <div class="panel p-6 text-sm text-center text-ink-soft">
     No <%= entity_type_label(@type).downcase %> match this filter yet. Try
     <%= link_to "clearing the filter", entities_path(type: @type) %>, or
-    <%= button_to "sync now", sync_entities_path(type: @type), method: :post, class: "inline underline bg-transparent border-0 cursor-pointer p-0", style: "color: var(--color-accent)" %>
+    <%= button_to "sync now", sync_entities_path(type: @type), method: :post, class: "inline underline bg-transparent border-0 p-0 text-accent" %>
     if this connection has never been synced.
   </div>
 <% else %>
-  <%= render "count" %>
+  <p id="entities-count" role="status" aria-atomic="true" class="text-xs mb-2 text-ink-faint"><%= render "count" %></p>
 
-  <div class="overflow-x-auto panel entity-table">
+  <%# A real table to assistive technology (role="table", rows, column headers,
+      cells) that stays a CSS grid to the eye. The wrapper scrolls sideways on a
+      narrow screen; each row's name link is focusable, so the scroll is reachable
+      from the keyboard. %>
+  <div class="overflow-x-auto panel entity-table" role="table" aria-label="<%= entity_type_label(@type) %>">
     <div style="--entity-cols: <%= entity_table_grid_columns(@type) %>; min-width: <%= entity_table_min_width(@type) %>">
-      <div class="entity-row entity-row--head">
-        <% entity_table_headers(@type).each do |label| %>
-          <span class="section-label"><%= label %></span>
-        <% end %>
+      <div role="rowgroup">
+        <div class="entity-row entity-row--head" role="row">
+          <% entity_table_headers(@type).each do |label| %>
+            <span class="section-label" role="columnheader"><%= label %></span>
+          <% end %>
+        </div>
       </div>
-      <div id="entities-list">
+      <div id="entities-list" role="rowgroup">
         <%= render partial: "entity_row", collection: @entities, as: :entity, locals: { type: @type } %>
       </div>
     </div>

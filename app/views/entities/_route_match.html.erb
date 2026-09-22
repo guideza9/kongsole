@@ -1,0 +1,19 @@
+<%# One route's match as a request line: the methods, then where it listens
+    (hosts and paths). Used by the list row and the route page, so the two
+    always say the same thing. %>
+<span class="route-match">
+  <span class="route-match__methods">
+    <% if match[:methods].empty? %>
+      <span class="route-method route-method--any">ANY</span>
+    <% else %>
+      <% match[:methods].each do |method| %><span class="route-method"><%= method %></span><% end %>
+    <% end %>
+  </span>
+  <span class="route-match__where">
+    <% match[:hosts].each do |host| %><span class="route-host"><%= host %></span><% end %>
+    <% match[:paths].each do |path| %>
+      <span class="route-path"><% if path.start_with?("~") %><span class="route-path__regex" title="Regular expression">~</span><%= path.delete_prefix("~") %><% else %><%= path %><% end %></span>
+    <% end %>
+    <% if match[:paths].empty? && match[:hosts].empty? %><span class="route-path route-path--open">every path</span><% end %>
+  </span>
+</span>

@@ -19,17 +19,31 @@ class ChangePlansController < ApplicationController
   end
 
   def show
-    @requires_confirmation_name = @change_plan.delete? &&
+    @protected_entity = @change_plan.delete? &&
       Kong::ChangeGuardrails.protected_entity?(current_connection, @change_plan.before)
+    @requires_confirmation_name = @protected_entity || (@change_plan.delete? && current_connection.protected_env?)
     @requires_reauth = current_connection.rank >= REAUTH_RANK_THRESHOLD
+    @requires_env_name = current_connection.protected_env?
     @dependent_routes = dependent_routes
     @dependent_targets = dependent_targets
     @env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.env_vars_for(@change_plan) : []
     @deck_env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.deck_vars_for(@change_plan) : []
     @dependent_snis = dependent_snis
+    @actionable = @change_plan.status == "pending" && !@change_plan.expired?
+    @guardrails = @actionable ? guardrails_for(@change_plan) : []
+    # Where an applied plan goes next: the record it left in the audit log, and
+    # the entity it changed (nothing to open after a delete).
+    if @change_plan.status == "applied"
+      @audit_event = AuditEvent.find_by(change_plan_id: @change_plan.id)
+      @applied_entity = entity_for(@change_plan) unless @change_plan.delete?
+    end
   end
 
   def apply
+    if current_connection.protected_env? && !params[:confirm_env_name].to_s.strip.casecmp?(current_connection.name)
+      return redirect_to(change_plan_path(@change_plan), alert: "Connection name didn't match -- nothing was applied.")
+    end
+
     if current_connection.rank >= REAUTH_RANK_THRESHOLD && !reauthenticated?
       return redirect_to(change_plan_path(@change_plan), alert: "Password confirmation failed -- nothing was applied.")
     end
@@ -47,17 +61,74 @@ class ChangePlansController < ApplicationController
       redirect_to entity_path_for(@change_plan), notice: "Applied. Recorded in the audit log."
     end
   rescue Kong::ChangeGuardrails::Violation => e
+    # A guardrail refuses *before* anything is attempted, so the plan is still
+    # pending and the page has nothing of its own to say -- the flash is the
+    # only place this message can live.
     redirect_to change_plan_path(@change_plan), alert: e.message
-  rescue Kong::Client::Error => e
-    redirect_to change_plan_path(@change_plan), alert: "Kong rejected this change: #{e.message}"
-  rescue Kong::DeckCli::Error, Kong::GitClient::Error => e
-    # decK's own message is what an operator needs; the applier has already marked the plan failed.
-    redirect_to change_plan_path(@change_plan), alert: Kong::CertificateKeyPolicy.scrub(e.message)
+  rescue Kong::Client::Error, Kong::DeckCli::Error, Kong::GitClient::Error
+    # No flash: the applier has already marked the plan failed and stored the
+    # scrubbed reason, so the failed banner states it in full and keeps
+    # stating it on every later visit. A flash here would stack a second red
+    # banner saying the same thing, directly above it.
+    redirect_to change_plan_path(@change_plan)
   rescue NotImplementedError => e
     redirect_to change_plan_path(@change_plan), alert: e.message
   end
 
+  # One line of the review page's Guardrails list. state is :pass (already
+  # checked and clear), :confirm (the operator must act in the action bar
+  # before Apply works) or :warn (a heads-up that needs a human read).
+  Guardrail = Struct.new(:state, :label, :detail)
+
   private
+
+  # What the write path checks for this plan, as the operator sees it. The
+  # write-access and plugin checks already ran when the plan was proposed
+  # (no plan exists otherwise) and re-run on apply; the rest are collected
+  # from the same flags #show already computed, so this list cannot say
+  # something the apply path will not enforce.
+  def guardrails_for(plan)
+    list = []
+
+    list << if plan.apply_mode == "pr"
+      Guardrail.new(:pass, "No live write", "This pushes a branch for review; Kong changes only after it is merged.")
+    elsif current_connection.access_level == "rw"
+      Guardrail.new(:pass, "Credential can write", "This login has read-write access to Kong's Admin API.")
+    else
+      Guardrail.new(:warn, "Credential can't write", "Access level is #{current_connection.access_level || 'unknown'}; Kong will refuse this apply.")
+    end
+
+    protected_entity = plan.before.present? && Kong::ChangeGuardrails.protected_entity?(current_connection, plan.before)
+    list << if protected_entity && plan.delete?
+      Guardrail.new(:confirm, "Protected entity", "Part of the tool's own admin path, or tagged protected. Type its name to delete it.")
+    elsif protected_entity
+      Guardrail.new(:warn, "Protected entity", "Part of the tool's own admin path, or tagged protected. Edit with care.")
+    else
+      Guardrail.new(:pass, "Not on the admin path", "Not tagged protected, and not the route the tool reaches Kong through.")
+    end
+    list << Guardrail.new(:confirm, "Entity name", "Retype #{plan.entity_label} to confirm you mean to delete it from #{helpers.env_display_name(current_connection)}.") if @requires_confirmation_name && !@protected_entity
+
+    env_name = helpers.env_display_name(current_connection)
+    # Names it as the *connection* name: the field compares against
+    # connection.name, which need not read like the environment the rest of
+    # this page now spells out ("kong-prod-admin" vs "Production").
+    list << Guardrail.new(:confirm, "Connection name", "Retype the connection name #{current_connection.name} to confirm you mean #{env_name}.") if @requires_env_name
+    if @requires_reauth
+      # PR mode writes nothing: the credential is what diffs the rendered YAML
+      # against Kong, so promising "for every write" would contradict the
+      # branch-push copy this same page shows.
+      detail = if plan.apply_mode == "pr"
+        "Re-enter your Kong password; it diffs this change against #{env_name} before the branch is pushed."
+      else
+        "Re-enter your Kong password; #{env_name} needs a fresh credential for every write."
+      end
+      list << Guardrail.new(:confirm, "Password", detail)
+    end
+    list << Guardrail.new(:confirm, "Certificate key variables", "Confirm #{@env_vars.join(', ')} #{@env_vars.size == 1 ? 'is' : 'are'} set on every Kong node.") if @env_vars.present?
+    list << Guardrail.new(:warn, "decK CI variable", "#{@deck_env_vars.join(', ')} must be set in CI, or the sync fails before it reaches Kong.") if @deck_env_vars.present?
+
+    list
+  end
 
   def set_change_plan
     @change_plan = ChangePlan.where(kong_connection: current_connection).find(params[:id])
@@ -104,11 +175,15 @@ class ChangePlansController < ApplicationController
   # nested type (a new target has no id on the plan yet) -- its parent, which
   # is where the operator started and where the new row now shows.
   def entity_path_for(change_plan)
-    entity = KongEntity.active.find_by(kong_connection: current_connection, entity_type: change_plan.entity_type, kong_id: change_plan.target_kong_id)
-    return entity_path(entity) if entity
+    entity = entity_for(change_plan)
+    entity ? entity_path(entity) : entities_path
+  end
 
-    parent = nested_parent_for(change_plan)
-    parent ? entity_path(parent) : entities_path
+  # The entity itself, or its parent for a nested create; nil when neither is
+  # in the read-model.
+  def entity_for(change_plan)
+    KongEntity.active.find_by(kong_connection: current_connection, entity_type: change_plan.entity_type, kong_id: change_plan.target_kong_id) ||
+      nested_parent_for(change_plan)
   end
 
   def nested_parent_for(change_plan)

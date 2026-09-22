@@ -1,1 +1,1 @@
-<p class="text-xs mb-2" id="entities-count" style="color: var(--color-ink-faint)"><%= @shown_count %> <%= entity_type_label(@type, count: @shown_count).downcase %> shown<%= " · more available" if @has_more %></p>
+<%= @shown_count %> <%= entity_type_label(@type, count: @shown_count).downcase %> shown<%= " · more available" if @has_more %>

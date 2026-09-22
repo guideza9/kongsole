@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_21_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -48,6 +48,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_120000) do
     t.jsonb "diff", default: {}, null: false
     t.string "entity_type", null: false
     t.datetime "expires_at", null: false
+    t.text "failure_reason"
     t.bigint "kong_connection_id", null: false
     t.string "operation", null: false
     t.uuid "parent_kong_id"
@@ -79,6 +80,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_120000) do
     t.string "git_branch"
     t.string "git_path"
     t.string "git_repo"
+    t.string "git_web_url"
     t.string "kong_version"
     t.datetime "last_connected_at"
     t.string "last_status"

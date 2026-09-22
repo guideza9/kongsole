@@ -29,6 +29,44 @@ RSpec.describe "ChangePlans (web)", type: :request do
     expect(response.body).to include("tags")
   end
 
+  it "lays the review out as a summary strip, a real diff table, collapsed raw JSON and a sticky action bar" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection)
+
+    get change_plan_path(plan)
+
+    body = response.body
+    expect(body).to include('class="plan-summary"')
+    expect(body).to include("1 field changed").and include("All clear").and include("Direct apply")
+    expect(body).to match(%r{<table class="diff-table diff-table--compare">.*<th scope="col">From</th>.*<th scope="row" class="font-mono">tags</th>}m)
+    expect(body).to match(/<details class="disclosure">\s*<summary>Raw JSON/)
+    expect(body).not_to match(/<details[^>]*\sopen/)
+    expect(body).to include('class="action-bar ').and include('id="apply-plan-form"')
+  end
+
+  it "counts the outstanding gates at rank >= 2 and keeps the retype field inside the action bar" do
+    prod = create(:kong_connection, :prod, name: "prod", admin_url: "https://kong-prod.test", credential_mode: "session", apply_mode: "pr")
+    sign_in(prod)
+    plan = create(:change_plan, kong_connection: prod, apply_mode: "pr")
+
+    get change_plan_path(plan)
+
+    expect(response.body).to include("2 to confirm")
+    expect(response.body).to match(/class="plan-summary__cell env-strip env-prod"/)
+    expect(response.body).to match(/<form[^>]*action-bar env-prod.*name="confirm_env_name".*<\/form>/m)
+  end
+
+  it "drops the guardrail count and the countdown once a plan is applied" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection, status: "applied")
+
+    get change_plan_path(plan)
+
+    expect(response.body).not_to include(">Guardrails<")
+    expect(response.body).to include("Expiry no longer applies")
+    expect(response.body).not_to include("action-bar")
+  end
+
   it "warns about dependent routes when proposing to delete a service that still has them" do
     sign_in
     service_id = "88888888-8888-8888-8888-888888888888"
@@ -145,20 +183,21 @@ RSpec.describe "ChangePlans (web)", type: :request do
     end
   end
 
-  it "shows decK's own message instead of a 500 when deck rejects the rendered YAML, scrubbed of any key" do
+  it "lands back on the plan without a second red banner when decK rejects the rendered YAML" do
     sign_in
     plan = create(:change_plan, kong_connection: connection)
     allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
-      .and_raise(Kong::DeckCli::Error, "deck file validate failed: routes.0: name is required\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+      .and_raise(Kong::DeckCli::Error, "deck file validate failed: routes.0: name is required")
 
     post apply_change_plan_path(plan)
 
     expect(response).to redirect_to(change_plan_path(plan))
-    expect(flash[:alert]).to include("name is required")
-    expect(flash[:alert]).not_to include("AAAA")
+    # The applier stores the reason and the failed banner states it, so a flash
+    # here would stack a duplicate red banner directly above that one.
+    expect(flash[:alert]).to be_nil
   end
 
-  it "shows a git failure the same way" do
+  it "lands back on the plan the same way for a git failure" do
     sign_in
     plan = create(:change_plan, kong_connection: connection)
     allow_any_instance_of(Kong::ChangeApplier).to receive(:call).and_raise(Kong::GitClient::Error, "git push failed: remote rejected")
@@ -166,21 +205,30 @@ RSpec.describe "ChangePlans (web)", type: :request do
     post apply_change_plan_path(plan)
 
     expect(response).to redirect_to(change_plan_path(plan))
-    expect(flash[:alert]).to include("git push failed")
+    expect(flash[:alert]).to be_nil
   end
 
-  it "scrubs a PEM block out of a git failure, since git's stderr can echo file content" do
+  it "shows the stored failure reason on a failed plan, so it outlives the redirect that produced it" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection, status: "failed",
+      failure_reason: "deck file validate failed: routes.0: name is required")
+
+    get change_plan_path(plan)
+
+    expect(response.body).to match(%r{Failed\s*<time[^>]*>[^<]+</time>\s*&mdash; the change did not complete})
+    expect(response.body).to include("routes.0: name is required")
+  end
+
+  it "still surfaces a guardrail refusal as a flash, since that leaves the plan pending with nothing to show" do
     sign_in
     plan = create(:change_plan, kong_connection: connection)
     allow_any_instance_of(Kong::ChangeApplier).to receive(:call)
-      .and_raise(Kong::GitClient::Error, "git push failed: remote rejected\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----")
+      .and_raise(Kong::ChangeGuardrails::Violation, "this plan expired -- re-propose the change")
 
     post apply_change_plan_path(plan)
 
-    expect(response).to redirect_to(change_plan_path(plan))
-    expect(flash[:alert]).to include("git push failed")
-    expect(flash[:alert]).not_to include("AAAA")
-    expect(flash[:alert]).not_to include("PRIVATE KEY-----\nAAAA")
+    expect(flash[:alert]).to include("re-propose the change")
+    expect(plan.reload.status).to eq("pending")
   end
 
   it "rejects deleting an admin-path entity without the typed confirmation" do
@@ -223,7 +271,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
       after: { "id" => kong_id, "name" => "svc", "tags" => [ "x" ], "updated_at" => 1_700_000_000 },
       base_updated_at: Time.zone.at(1_700_000_000))
 
-    post apply_change_plan_path(plan)
+    post apply_change_plan_path(plan), params: { confirm_env_name: "uat-direct" }
     expect(response).to redirect_to(change_plan_path(plan))
     expect(plan.reload.status).to eq("pending")
 
@@ -234,8 +282,269 @@ RSpec.describe "ChangePlans (web)", type: :request do
     stub_request(:patch, "https://kong-uat.test/services/#{kong_id}")
       .to_return(status: 200, body: { id: kong_id, name: "svc", tags: [ "x" ], updated_at: 1_700_000_500 }.to_json)
 
-    post apply_change_plan_path(plan), params: { password: "correct" }
+    post apply_change_plan_path(plan), params: { password: "correct", confirm_env_name: "UAT-Direct" }
     expect(plan.reload.status).to eq("applied")
+  end
+
+  describe "environment chrome (rank >= 2)" do
+    let(:prod) do
+      create(:kong_connection, :prod, name: "prod", admin_url: "https://kong-prod.test", credential_mode: "session", apply_mode: "pr")
+    end
+    let(:kong_id) { "77777777-7777-7777-7777-777777777777" }
+    let(:plan) do
+      create(:change_plan, kong_connection: prod, apply_mode: "pr", target_kong_id: kong_id,
+        before: { "id" => kong_id, "name" => "svc", "updated_at" => 1_700_000_000 },
+        after: { "id" => kong_id, "name" => "svc", "tags" => [ "x" ], "updated_at" => 1_700_000_000 })
+    end
+
+    it "marks the topbar and opens the plan with a PR-mode strip naming the branch" do
+      sign_in(prod)
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("topbar env-prod")
+      expect(response.body).to include("env-strip")
+      expect(response.body).to include("PR mode")
+      expect(response.body).to include("kongctl/#{plan.id}")
+      expect(response.body).to include("nothing in Production changes yet")
+      expect(response.body).to include('name="confirm_env_name"')
+      expect(response.body).to include("btn-env")
+      expect(response.body).not_to include("btn-danger")
+    end
+
+    it "uses true danger red only for a direct-mode live write" do
+      sign_in(prod)
+      plan.update!(apply_mode: "direct")
+
+      get change_plan_path(plan)
+
+      expect(response.body).to include("live write to Kong")
+      expect(response.body).to include("This writes to Production now.")
+      expect(response.body).to include("btn-danger")
+    end
+
+    it "states the operation, entity and environment in words in the action bar, and why the button is locked" do
+      sign_in(prod)
+
+      get change_plan_path(plan)
+
+      bar = response.body[/<form[^>]*action-bar.*<\/form>/m]
+      expect(bar).to include("Update service svc")
+      expect(bar).to include("Production")
+      expect(bar).to include("pushes a branch")
+      expect(bar).to include("Type the connection name")
+      expect(bar).to include("Push branch unlocks when the name matches")
+      expect(bar).to include('aria-describedby="unlock-hint"')
+      # The summary is the first child of the bar, ahead of the fields, so it
+      # leads whether or not there are gates.
+      expect(bar.index("action-bar__what")).to be < bar.index("action-bar__fields")
+      expect(bar.index("action-bar__fields")).to be < bar.index("action-bar__buttons")
+      expect(bar).to include("action-bar__actions")
+    end
+
+    it "says a direct apply writes to Kong now, in the bar" do
+      sign_in(prod)
+      plan.update!(apply_mode: "direct")
+
+      get change_plan_path(plan)
+
+      expect(response.body[/<form[^>]*action-bar.*<\/form>/m]).to include("writes to Kong now").and include("Apply unlocks when the name matches")
+    end
+
+    it "still names the change in the bar at rank 0-1, where nothing is typed" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection)
+
+      get change_plan_path(plan)
+
+      bar = response.body[/<form[^>]*action-bar.*<\/form>/m]
+      expect(bar).to include("Development")
+      expect(bar).not_to include("unlocks when")
+    end
+
+    describe "deleting at rank >= 2" do
+      let(:delete_plan) do
+        create(:change_plan, :delete, kong_connection: prod, apply_mode: "direct", target_kong_id: kong_id,
+          before: { "id" => kong_id, "name" => "checkout-api", "tags" => [], "updated_at" => 1_700_000_000 })
+      end
+
+      it "asks for the entity's own name as well as the connection's, and names both in the hint" do
+        sign_in(prod)
+
+        get change_plan_path(delete_plan)
+
+        expect(response.body).to include('name="confirmation_name"')
+        expect(response.body).to include("to confirm deleting it from Production")
+        expect(response.body).to include("Apply unlocks when both names match")
+        expect(response.body).to include("Retype checkout-api")
+      end
+
+      it "refuses to apply the delete without the entity name" do
+        sign_in(prod)
+
+        post apply_change_plan_path(delete_plan), params: { password: "correct", confirm_env_name: "prod" }
+
+        expect(response).to redirect_to(change_plan_path(delete_plan))
+        expect(flash[:alert]).to include("requires typing")
+        expect(delete_plan.reload.status).to eq("pending")
+      end
+
+      it "keeps the admin-path wording for a protected entity" do
+        sign_in(prod)
+        prod.update!(admin_path_fingerprint: { "service_id" => kong_id })
+
+        get change_plan_path(delete_plan)
+
+        expect(response.body).to include("This is protected. Type")
+        expect(response.body).not_to include("to confirm deleting it from")
+      end
+    end
+
+    it "refuses to apply until the environment name is retyped" do
+      sign_in(prod)
+
+      post apply_change_plan_path(plan), params: { password: "correct", confirm_env_name: "produ" }
+
+      expect(response).to redirect_to(change_plan_path(plan))
+      expect(flash[:alert]).to include("Connection name didn't match")
+      expect(plan.reload.status).to eq("pending")
+    end
+
+    it "tints the login page's topbar too, before any session exists" do
+      get login_connection_path(prod)
+
+      expect(response.body).to include("topbar env-prod")
+      expect(response.body).to include("env-notice")
+    end
+
+    it "keeps rank 0-1 quiet: no rule, no strip, no retype, plain primary button" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection)
+
+      get change_plan_path(plan)
+
+      expect(response.body).not_to include("env-prod")
+      expect(response.body).not_to include("env-uat")
+      expect(response.body).not_to include("confirm_env_name")
+      expect(response.body).to include("btn-primary")
+    end
+  end
+
+  it "links Pending PRs from the primary nav, current on the list and not on a review page" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", before: { "name" => "svc" }, after: { "name" => "svc" })
+
+    get change_plans_path
+    nav = Nokogiri::HTML(response.body).css("nav[aria-label='Primary'] a")
+    expect(nav.map { |a| a.text.strip }).to include("Pending PRs")
+    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.strip }).to eq([ "Pending PRs" ])
+
+    get change_plan_path(plan)
+    nav = Nokogiri::HTML(response.body).css("nav[aria-label='Primary'] a")
+    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.strip }).to eq([ "Entities" ])
+  end
+
+  it "shows a plan's status as a badge and its time as the shared local timestamp on the list" do
+    sign_in
+    create(:change_plan, kong_connection: connection, apply_mode: "pr", status: "applied", before: { "name" => "svc" }, after: { "name" => "svc" })
+
+    get change_plans_path
+
+    doc = Nokogiri::HTML(response.body)
+    expect(doc.at_css("td .chip.chip-ok").text).to include("Applied")
+    expect(doc.css("tbody time[data-controller='local-time']").size).to eq(1)
+  end
+
+  it "tags an agent's plan as via agent on the list and the review page, and not a human's" do
+    sign_in
+    agent = create(:change_plan, kong_connection: connection, apply_mode: "pr", actor_kind: "agent", actor_username: "alice",
+      before: { "name" => "agent-svc" }, after: { "name" => "agent-svc" })
+    human = create(:change_plan, kong_connection: connection, apply_mode: "pr", actor_kind: "human", actor_username: "bob",
+      before: { "name" => "human-svc" }, after: { "name" => "human-svc" })
+
+    get change_plans_path
+    rows = Nokogiri::HTML(response.body).css("tbody tr")
+    expect(rows.find { |r| r.text.include?("agent-svc") }.css(".tag").map { |t| t.text.strip }).to include("via agent")
+    expect(rows.find { |r| r.text.include?("human-svc") }.text).not_to include("via agent")
+
+    byline = -> { Nokogiri::HTML(response.body).css("p").find { |p| p.text.include?("Proposed by") }.text }
+
+    get change_plan_path(agent)
+    expect(byline.call).to include("alice").and include("via agent")
+    get change_plan_path(human)
+    expect(byline.call).not_to include("via agent")
+  end
+
+  it "says a pushed plan's state in words and links its branch when the connection has a git URL" do
+    sign_in
+    connection.update!(git_web_url: "https://github.com/acme/kong-config/tree/{branch}")
+    plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", status: "applied", pr_state: "branch_pushed",
+      commit_sha: "abcdef1234567890", before: { "name" => "svc" }, after: { "name" => "svc" })
+
+    get change_plans_path
+
+    body = response.body
+    expect(body).to include("Branch pushed, awaiting PR")
+    expect(body).not_to include(">branch_pushed<")
+    link = Nokogiri::HTML(body).at_css("tbody a[href^='https://github.com/acme/kong-config/tree/']")
+    expect(link.text).to include("kongctl/#{plan.id}")
+    expect(link["rel"]).to eq("noopener")
+    expect(body).to include("abcdef12")
+  end
+
+  it "shows the branch as plain text without a git URL, and nothing for a plan that never pushed" do
+    sign_in
+    plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", status: "applied", pr_state: "branch_pushed",
+      before: { "name" => "pushed-svc" }, after: { "name" => "pushed-svc" })
+    create(:change_plan, kong_connection: connection, apply_mode: "pr", before: { "name" => "pending-svc" }, after: { "name" => "pending-svc" })
+
+    get change_plans_path
+
+    rows = Nokogiri::HTML(response.body).css("tbody tr")
+    pushed = rows.find { |r| r.text.include?("pushed-svc") }
+    expect(pushed.text).to include("kongctl/#{plan.id}")
+    expect(pushed.css("td").last.at_css("a")).to be_nil
+    expect(rows.find { |r| r.text.include?("pending-svc") }.css("td").last.text.strip).to eq("—")
+  end
+
+  describe "an applied plan's way on" do
+    let(:service_id) { "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
+
+    it "offers the audit entry it left and the entity it changed" do
+      sign_in
+      entity = create(:kong_entity, kong_connection: connection, entity_type: "service", kong_id: service_id, name: "payments-api")
+      plan = create(:change_plan, kong_connection: connection, status: "applied", target_kong_id: service_id)
+      event = create(:audit_event, kong_connection: connection, change_plan: plan)
+
+      get change_plan_path(plan)
+
+      links = Nokogiri::HTML(response.body).css("a").to_h { |a| [ a.text.strip, a["href"] ] }
+      expect(links["View audit entry"]).to eq(audit_events_path(anchor: "audit-event-#{event.id}"))
+      expect(links["View service"]).to eq(entity_path(entity))
+      expect(links).to include("Back to services")
+    end
+
+    it "offers no entity after a delete and no audit link when no event was recorded" do
+      sign_in
+      plan = create(:change_plan, :delete, kong_connection: connection, status: "applied", target_kong_id: service_id)
+
+      get change_plan_path(plan)
+
+      texts = Nokogiri::HTML(response.body).css("a").map { |a| a.text.strip }
+      expect(texts).not_to include("View audit entry")
+      expect(texts).not_to include("View service")
+      expect(texts).to include("Back to services")
+    end
+
+    it "offers neither on a plan that is still pending" do
+      sign_in
+      plan = create(:change_plan, kong_connection: connection)
+
+      get change_plan_path(plan)
+
+      texts = Nokogiri::HTML(response.body).css("a").map { |a| a.text.strip }
+      expect(texts).not_to include("View audit entry")
+    end
   end
 
   it "lists only PR-mode plans for the current connection on the index page" do
@@ -297,7 +606,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
       expect(plan.pr_state).to eq("branch_pushed")
 
       get change_plan_path(plan)
-      expect(response.body).to include("Pushed to branch")
+      expect(response.body).to match(%r{Pushed\s*<time[^>]*>[^<]+</time>\s*to branch})
     end
   end
 

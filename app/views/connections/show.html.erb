@@ -10,26 +10,27 @@
   <section class="panel p-4">
     <h2 class="section-label mb-3">Connectivity &amp; policy</h2>
     <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-      <dt style="color: var(--color-ink-soft)">Admin URL</dt><dd class="font-mono"><%= @connection.admin_url %></dd>
-      <dt style="color: var(--color-ink-soft)">Rank</dt><dd><%= @connection.rank %></dd>
-      <dt style="color: var(--color-ink-soft)">Apply mode</dt><dd><%= @connection.apply_mode %></dd>
-      <dt style="color: var(--color-ink-soft)">Credential mode</dt><dd><%= @connection.credential_mode %></dd>
+      <dt class="text-ink-soft">Admin URL</dt><dd class="font-mono"><%= @connection.admin_url %></dd>
+      <dt class="text-ink-soft">Apply mode</dt><dd><%= apply_mode_label(@connection.apply_mode) %></dd>
+      <dt class="text-ink-soft">Credential mode</dt><dd><%= @connection.credential_mode %></dd>
     </dl>
   </section>
 
   <section class="panel p-4">
     <h2 class="section-label mb-3">Discovered from Kong</h2>
     <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-      <dt style="color: var(--color-ink-soft)">Access level</dt><dd><%= @connection.access_level || "unknown — log in to probe" %></dd>
-      <dt style="color: var(--color-ink-soft)">Credential kind</dt><dd><%= @connection.credential_kind || "unknown — log in to classify" %></dd>
-      <dt style="color: var(--color-ink-soft)">Kong version</dt><dd><%= @connection.kong_version || "—" %></dd>
-      <dt style="color: var(--color-ink-soft)">Last connected</dt><dd><%= @connection.last_connected_at&.to_fs(:long) || "never" %></dd>
-      <dt style="color: var(--color-ink-soft)">Admin path fingerprint</dt>
+      <dt class="text-ink-soft">Access level</dt><dd><%= @connection.access_level || "unknown — log in to probe" %></dd>
+      <dt class="text-ink-soft">Credential kind</dt><dd><%= @connection.credential_kind || "unknown — log in to classify" %></dd>
+      <dt class="text-ink-soft">Kong version</dt><dd><%= @connection.kong_version || "—" %></dd>
+      <dt class="text-ink-soft">Last connected</dt><dd><%= plan_timestamp(@connection.last_connected_at) || "never" %></dd>
+      <dt class="text-ink-soft">Admin path fingerprint</dt>
       <dd>
         <% if @connection.admin_path_fingerprint.present? && @connection.admin_path_fingerprint["service_id"] %>
-          <span style="color: var(--color-success)">found — service <%= @connection.admin_path_fingerprint["service_id"] %>, <%= Array(@connection.admin_path_fingerprint["route_ids"]).size %> route(s), <%= Array(@connection.admin_path_fingerprint["consumer_ids"]).size %> consumer(s) guarded</span>
+          <%= status_badge("guarded") %>
+          <span class="text-ink-soft">service <%= @connection.admin_path_fingerprint["service_id"] %>, <%= Array(@connection.admin_path_fingerprint["route_ids"]).size %> route(s), <%= Array(@connection.admin_path_fingerprint["consumer_ids"]).size %> consumer(s)</span>
         <% else %>
-          <span style="color: var(--color-ink-soft)">not found yet — log in to run the admin path guard</span>
+          <%= status_badge("unknown") %>
+          <span class="text-ink-soft">not found yet — log in to run the admin path guard</span>
         <% end %>
       </dd>
     </dl>
@@ -37,7 +38,7 @@
 </div>
 
 <div class="mt-6 flex gap-2">
-  <%= link_to "Log in", login_connection_path(@connection), class: "btn-primary px-3 py-1.5 text-sm" %>
-  <%= link_to "Edit", edit_connection_path(@connection), class: "btn-secondary px-3 py-1.5 text-sm" %>
-  <%= link_to "Back", connections_path, class: "btn-text px-3 py-1.5 text-sm" %>
+  <%= link_to "Log in", login_connection_path(@connection), class: "btn btn-primary" %>
+  <%= link_to "Edit", edit_connection_path(@connection), class: "btn btn-secondary" %>
+  <%= link_to "Back", connections_path, class: "btn btn-text" %>
 </div>

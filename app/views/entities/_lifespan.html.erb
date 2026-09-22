@@ -1,0 +1,13 @@
+<%# How much of this certificate's validity has passed. The bar is the
+    fraction; the ends are the dates. Its colour is the expiry badge's. %>
+<% span = certificate_lifespan(entity) %>
+<% if span %>
+  <div class="lifespan lifespan--<%= span[:tone] %> mb-4" role="img"
+       aria-label="<%= span[:percent] %>% of this certificate's validity has passed">
+    <div class="lifespan__track"><div class="lifespan__fill" style="width: <%= span[:percent] %>%"></div></div>
+    <div class="lifespan__ends">
+      <span>Valid from <%= span[:from].to_date.iso8601 %></span>
+      <span>Expires <%= span[:to].to_date.iso8601 %></span>
+    </div>
+  </div>
+<% end %>

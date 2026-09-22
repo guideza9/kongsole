@@ -28,7 +28,7 @@ module Kong
 
     def self.check_delete_confirmation!(connection:, entity:, confirmation_name:, actor_kind: "human")
       return unless entity
-      return unless protected_entity?(connection, entity)
+      return unless protected_entity?(connection, entity) || human_delete_needs_name?(connection, actor_kind)
 
       entity_name = Kong::EntityTypes.label(entity)
 
@@ -47,6 +47,14 @@ module Kong
 
     def self.protected_entity?(connection, entity)
       connection.admin_path?(entity["id"]) || Array(entity["tags"]).include?("protected")
+    end
+
+    # At uat/prod (rank >= 2) a human retypes what they are deleting, not just
+    # the connection name -- the connection name is the same on every apply
+    # and turns into muscle memory. An agent has no typed channel; its
+    # rank >= 2 writes are already held to PR mode and review.
+    def self.human_delete_needs_name?(connection, actor_kind)
+      actor_kind != "agent" && connection.protected_env?
     end
 
     # docs/DESIGN.md section 15 M4: an admin-route plugin (basic-auth, acl,

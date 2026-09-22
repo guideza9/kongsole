@@ -2,10 +2,10 @@
 
 <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
   <div>
-    <h1 class="text-xl font-semibold" style="color: var(--color-ink)">Connections</h1>
-    <p class="text-sm mt-0.5" style="color: var(--color-ink-soft)">Every registered Kong Admin API connection.</p>
+    <h1 class="page-title">Connections</h1>
+    <p class="text-sm mt-0.5 text-ink-soft">Every registered Kong Admin API connection.</p>
   </div>
-  <%= link_to "Add connection", new_connection_path, class: "btn-primary shrink-0 px-3.5 py-2 text-sm" %>
+  <%= link_to "Add connection", new_connection_path, class: "btn btn-primary shrink-0" %>
 </div>
 
 <div class="grid gap-3">
@@ -14,35 +14,34 @@
       <div class="flex-1 min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <%= env_badge(connection, size: :lg) %>
-          <span class="text-xs" style="color: var(--color-ink-faint)">rank <%= connection.rank %></span>
           <%= status_badge(connection.last_status) %>
         </div>
 
-        <div class="mt-2 text-sm font-mono truncate" style="color: var(--color-ink-soft)"><%= connection.admin_url %></div>
+        <div class="mt-2 text-sm font-mono truncate text-ink-soft"><%= connection.admin_url %></div>
 
         <div class="mt-2 flex flex-wrap gap-1.5">
-          <span class="tag">apply: <%= connection.apply_mode %></span>
-          <% if connection.access_level %>
-            <span class="tag">access: <%= connection.access_level %></span>
-          <% end %>
-          <% if connection.credential_kind %>
-            <span class="tag">credential: <%= connection.credential_kind %></span>
+          <% connection_policy_labels(connection).each do |label| %>
+            <span class="tag"><%= label %></span>
           <% end %>
         </div>
       </div>
 
-      <div class="flex items-center gap-2 text-sm shrink-0">
-        <%= link_to "Log in", login_connection_path(connection), class: "btn-primary px-3 py-1.5" %>
-        <%= link_to "Edit", edit_connection_path(connection), class: "btn-secondary px-3 py-1.5" %>
-        <%= button_to "Remove", connection_path(connection), method: :delete,
-              form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from the registry? This does not touch anything in Kong itself." } },
-              class: "btn-text-danger px-3 py-1.5 bg-transparent cursor-pointer" %>
+      <div class="flex items-center gap-2 text-sm w-full sm:w-auto shrink-0">
+        <%= link_to "Log in", login_connection_path(connection), class: "btn-sm btn-secondary" %>
+        <%= link_to "Edit", edit_connection_path(connection), class: "btn-sm btn-text" %>
+        <%# Remove is the only destructive action on the row: it gets its own
+            side of a hairline, so a slip aimed at Log in or Edit cannot land on it. %>
+        <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
+          <%= button_to "Remove", connection_path(connection), method: :delete,
+                form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from the registry? This does not touch anything in Kong itself." } },
+                class: "btn-sm btn-text-danger bg-transparent" %>
+        </div>
       </div>
     </div>
   <% end %>
 
   <% if @connections.empty? %>
-    <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">
+    <div class="panel p-6 text-sm text-center text-ink-soft">
       No connections yet. Add one above, or run <code class="font-mono">rails kong:load_connections</code> to load <code class="font-mono">config/connections.yml</code>.
     </div>
   <% end %>

@@ -1,7 +1,7 @@
 <% content_for :title, "New #{creatable_type_name(@creatable_type)}" %>
 
-<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">New <%= creatable_type_name(@creatable_type) %></h1>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)">
+<h1 class="page-title mb-1">New <%= creatable_type_name(@creatable_type) %></h1>
+<p class="text-sm mb-6 text-ink-soft">
   <% if @parent %>
     <span class="font-mono"><%= @parent.entity_type %>: <%= @parent.name %></span> ·
   <% end %>
@@ -12,19 +12,19 @@
   <%# Presets seed the editor server-side (a plain GET), same idea as the
       plugin catalog step -- no client script needed to switch starting point. %>
   <% if @creatable_type == "upstream" %>
-    <nav class="flex flex-wrap items-center gap-2 text-sm" aria-label="Start from">
+    <nav class="tab-nav flex-wrap items-center" aria-label="Start from">
       <span class="section-label">Start from</span>
       <% Kong::UpstreamPresets.choices.each do |key, label| %>
         <% active = params[:preset].to_s == key.to_s %>
         <%= link_to label, new_entity_path(type: "upstream", preset: key),
-              class: "px-2.5 py-1 rounded #{'font-semibold' if active}",
-              style: active ? "color: var(--color-ink); background: var(--color-surface-subtle)" : "color: var(--color-ink-soft)" %>
+              class: "tab",
+              aria: { current: (active ? "true" : nil) } %>
       <% end %>
     </nav>
   <% end %>
 
   <% if @creatable_type == "certificate" %>
-    <section class="panel p-4 text-sm" style="color: var(--color-ink-soft)">
+    <section class="panel p-4 text-sm text-ink-soft">
       <h2 class="section-label mb-2">Private key</h2>
       <p>
         A private key can't be pasted here. Set it as an environment variable on every Kong node, then reference it:
@@ -48,17 +48,17 @@
     <% end %>
 
     <section class="panel p-4">
-      <h2 class="section-label mb-3"><%= creatable_type_name(@creatable_type).sub(/\A./, &:upcase) %> document</h2>
-      <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+      <h2 id="json-editor-heading" class="section-label mb-3"><%= creatable_type_name(@creatable_type).sub(/\A./, &:upcase) %> document</h2>
+      <p class="text-xs mb-3 text-ink-soft">
         Kong checks this against its own schema when you press Review, and reports any field it rejects.
       </p>
 
       <% if @payload_error.present? %>
-        <p class="notice-banner mb-3 text-xs" style="background: var(--color-danger-tint); border-color: var(--color-danger); color: var(--color-danger)">
+        <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-3 text-xs" } do %>
           <%= @payload_error %>
-        </p>
+        <% end %>
         <% if @payload_withheld %>
-          <p class="text-xs mb-3" style="color: var(--color-ink-soft)">
+          <p class="text-xs mb-3 text-ink-soft">
             Your text wasn't kept because it may contain key material, so the editor is back at its starting document.
           </p>
         <% end %>
@@ -67,17 +67,18 @@
       <div class="json-editor" data-json-editor-target="wrapper">
         <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
         <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
+                  aria-labelledby="json-editor-heading"
                   class="json-editor__textarea"
                   data-json-editor-target="input"
                   data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>
       </div>
 
-      <p class="text-xs mt-2 font-mono" data-json-editor-target="status" style="color: var(--color-ink-faint)"></p>
+      <p role="status" class="text-xs mt-2 font-mono text-ink-faint" data-json-editor-target="status"></p>
 
       <div class="flex gap-2 mt-4">
-        <button type="submit" class="btn-primary px-4 py-2 text-sm cursor-pointer" data-json-editor-target="submit">Review change</button>
-        <button type="button" class="btn-secondary px-3 py-1.5 text-sm cursor-pointer" data-action="json-editor#format">Format</button>
-        <%= link_to "Cancel", (@parent ? entity_path(@parent) : entities_path(type: @creatable_type)), class: "btn-text px-3 py-1.5 text-sm" %>
+        <button type="submit" class="btn-primary btn" data-json-editor-target="submit">Review change</button>
+        <button type="button" class="btn-sm btn-secondary" data-action="json-editor#format">Format</button>
+        <%= link_to "Cancel", (@parent ? entity_path(@parent) : entities_path(type: @creatable_type)), class: "btn-sm btn-text" %>
       </div>
     </section>
   <% end %>

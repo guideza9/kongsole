@@ -1,32 +1,38 @@
 <% content_for :title, "Audit log" %>
 
-<h1 class="text-xl font-semibold mb-1" style="color: var(--color-ink)">Audit log</h1>
-<p class="text-sm mb-6" style="color: var(--color-ink-soft)">Every applied change on <%= current_connection.name %>, newest first.</p>
+<h1 class="page-title mb-1">Audit log</h1>
+<p class="text-sm mb-6 text-ink-soft">Every applied change on <%= current_connection.name %>, newest first.</p>
 
 <% if @audit_events.empty? %>
-  <div class="panel p-6 text-sm text-center" style="color: var(--color-ink-soft)">No changes have been applied on this connection yet.</div>
+  <div class="panel p-6 text-sm text-center text-ink-soft">No changes have been applied on this connection yet.</div>
 <% else %>
   <div class="overflow-x-auto panel">
     <table class="w-full text-sm min-w-[720px]">
       <thead>
-        <tr class="text-left" style="border-bottom: 1px solid var(--color-border); background: var(--color-surface-subtle)">
-          <th class="px-3 py-2 section-label">When</th>
-          <th class="px-3 py-2 section-label">Actor</th>
-          <th class="px-3 py-2 section-label">Operation</th>
-          <th class="px-3 py-2 section-label">Entity</th>
+        <tr class="text-left border-b border-border bg-surface-subtle">
+          <th scope="col" class="px-3 py-2 section-label">When</th>
+          <th scope="col" class="px-3 py-2 section-label">Actor</th>
+          <th scope="col" class="px-3 py-2 section-label">Operation</th>
+          <th scope="col" class="px-3 py-2 section-label">Entity</th>
         </tr>
       </thead>
       <tbody>
         <% @audit_events.each do |event| %>
-          <tr style="border-bottom: 1px solid var(--color-border)">
-            <td class="px-3 py-2.5 font-mono" style="color: var(--color-ink-soft)"><%= event.created_at.to_fs(:short) %></td>
-            <td class="px-3 py-2.5">
-              <%= event.actor_username %><% if event.actor_operator.present? %>
-                <span style="color: var(--color-ink-soft)"> (as <%= event.actor_operator %>)</span>
-              <% end %>
-            </td>
+          <tr class="border-b border-border" id="audit-event-<%= event.id %>">
+            <td class="px-3 py-2.5 font-mono whitespace-nowrap text-ink-soft"><%= plan_timestamp(event.created_at) %></td>
+            <td class="px-3 py-2.5"><%= actor_summary(event) %></td>
             <td class="px-3 py-2.5"><span class="tag"><%= event.operation %></span></td>
-            <td class="px-3 py-2.5"><%= event.entity_name %> <span style="color: var(--color-ink-faint)">(<%= event.entity_type %>)</span></td>
+            <td class="px-3 py-2.5">
+              <%# The plan behind the event holds the diff. Older events, and any
+                  recorded without a plan, have nothing to open. %>
+              <% name = event.entity_name.presence || event.entity_type.humanize %>
+              <% if event.change_plan_id %>
+                <%= link_to change_plan_path(event.change_plan_id) do %><%= name %><span class="sr-only"> — open this change and its diff</span><% end %>
+              <% else %>
+                <%= name %>
+              <% end %>
+              <span class="text-ink-faint">(<%= event.entity_type %>)</span>
+            </td>
           </tr>
         <% end %>
       </tbody>

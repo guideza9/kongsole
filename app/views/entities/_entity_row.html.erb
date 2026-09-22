@@ -1,45 +1,54 @@
-<%= link_to entity_path(entity), class: "entity-row" do %>
-  <span class="entity-cell font-semibold text-sm" style="color: var(--color-ink)" title="<%= entity.name %>"><%= entity.name %></span>
+<%# One row of the entity table (see entities/index: role="table"). The row is a
+    real row and each column a cell; the name is the one link, stretched over the
+    whole row by CSS so the entire row is still the click target. %>
+<div class="entity-row<%= " entity-row--admin" if entity.is_admin_path? %>" role="row">
+  <% if type.in?(%w[certificate ca_certificate]) %>
+    <% hostnames = certificate_hostnames(entity) %>
+    <span role="cell" class="entity-cell" title="<%= entity.name %>">
+      <%= link_to entity.name, entity_path(entity), class: "entity-link block font-semibold text-sm text-ink truncate" %>
+      <% if hostnames[:shown].any? %>
+        <span class="block font-mono text-xs truncate text-ink-soft"><%= hostnames[:shown].join(", ") %><%= " +#{hostnames[:more]}" if hostnames[:more].positive? %></span>
+      <% end %>
+    </span>
+  <% else %>
+    <span role="cell" class="entity-cell" title="<%= entity.name %>"><%= link_to entity.name, entity_path(entity), class: "entity-link font-semibold text-sm text-ink" %></span>
+  <% end %>
 
   <% if type == "route" %>
-    <% path = route_path_summary(entity) %>
-    <span class="entity-cell font-mono text-xs" title="<%= path[:methods] %> <%= path[:path] %>">
-      <span style="color: var(--color-ink-soft)"><%= path[:methods] %></span>
-      <span style="color: var(--color-ink)"><%= path[:path] %></span>
-    </span>
+    <span role="cell" class="entity-cell"><%= render "entities/route_match", match: route_match(entity) %></span>
   <% end %>
 
   <% if type == "plugin" %>
-    <span class="entity-cell text-xs" style="color: var(--color-ink-soft)"><%= plugin_scope_label(entity) %></span>
+    <span role="cell" class="entity-cell"><%= render "entities/scope", scope: plugin_scope(entity) %></span>
   <% end %>
 
   <% if type == "upstream" %>
-    <span class="entity-cell font-mono text-xs" style="color: var(--color-ink-soft)"><%= entity.data["algorithm"] || "—" %></span>
+    <span role="cell" class="entity-cell font-mono text-xs text-ink-soft"><%= entity.data["algorithm"] || "—" %></span>
   <% end %>
 
   <% if type == "target" %>
-    <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-soft)"><%= entity.data["weight"] || "—" %></span>
+    <span role="cell" class="entity-cell font-mono text-xs tabular-nums text-ink-soft"><%= entity.data["weight"] || "—" %></span>
   <% end %>
 
   <% if type == "certificate" %>
-    <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-soft)"><%= Array(entity.data["snis"]).size %></span>
+    <span role="cell" class="entity-cell font-mono text-xs tabular-nums text-ink-soft"><%= Array(entity.data["snis"]).size %></span>
   <% end %>
 
   <% if type.in?(%w[certificate ca_certificate]) %>
-    <div class="entity-cell flex flex-wrap items-center gap-1.5">
+    <div role="cell" class="entity-cell flex flex-wrap items-center gap-1.5">
       <%= expiry_badge(entity) %>
       <% if entity.not_after %>
-        <span class="text-xs" style="color: var(--color-ink-soft)"><%= expiry_when(entity) %></span>
+        <span class="text-xs text-ink-soft"><%= expiry_when(entity) %></span>
       <% end %>
     </div>
   <% end %>
 
-  <div class="entity-cell flex items-center gap-1.5">
+  <div role="cell" class="entity-cell flex items-center gap-1.5">
     <% visible_tags(entity).each do |tag| %>
       <span class="tag"><%= tag %></span>
     <% end %>
     <% if hidden_tag_count(entity).positive? %>
-      <span class="text-xs shrink-0" style="color: var(--color-ink-faint)">+<%= hidden_tag_count(entity) %></span>
+      <span class="text-xs shrink-0 text-ink-faint">+<%= hidden_tag_count(entity) %></span>
     <% end %>
   </div>
 
@@ -49,25 +58,19 @@
       or nothing. service and plugin are the two types that genuinely have
       the field. %>
   <% has_enabled_field = type.in?(%w[service plugin]) %>
-  <div class="entity-cell flex items-center gap-1.5">
+  <div role="cell" class="entity-cell flex items-center gap-1.5">
     <% if entity.is_admin_path? %>
-      <span class="chip shrink-0" style="background-color: var(--color-warning-tint); color: var(--color-warning)">
-        <svg class="chip-dot" width="10" height="10" viewBox="0 0 10 10" fill="none" style="border-radius:0">
-          <rect x="2" y="4.2" width="6" height="4.3" rx="0.8" stroke="currentColor" stroke-width="1"/>
-          <path d="M3.2 4.2V3a1.8 1.8 0 0 1 3.6 0v1.2" stroke="currentColor" stroke-width="1" fill="none"/>
-        </svg>
-        protected
-      </span>
+      <%= render "shared/admin_path_chip" %>
     <% end %>
     <% if has_enabled_field && !entity.enabled %>
       <span class="tag shrink-0">disabled</span>
     <% end %>
     <% unless entity.is_admin_path? || (has_enabled_field && !entity.enabled) %>
-      <span style="color: var(--color-ink-faint)">—</span>
+      <span class="text-ink-faint">—</span>
     <% end %>
   </div>
 
-  <span class="entity-cell font-mono text-xs tabular-nums" style="color: var(--color-ink-faint)">
-    <%= entity.kong_updated_at&.to_fs(:short) || "—" %>
+  <span role="cell" class="entity-cell font-mono text-xs tabular-nums text-ink-faint">
+    <%= plan_timestamp(entity.kong_updated_at) || "—" %>
   </span>
-<% end %>
+</div>

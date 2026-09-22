@@ -51,7 +51,7 @@ class ConnectionsController < ApplicationController
 
   def connection_params
     params.require(:kong_connection).permit(
-      :name, :env, :rank, :color_tag, :admin_url, :auth_type,
+      :name, :env, :color_tag, :admin_url, :auth_type,
       :credential_mode, :apply_mode, :verify_ssl, :ca_bundle_path,
       :git_repo, :git_branch, :git_path, :select_tags_raw
     )

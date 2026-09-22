@@ -31,13 +31,157 @@ RSpec.describe "Entities (web)", type: :request do
     expect(response.body).to include("payments-api")
   end
 
-  it "shows a protected badge for admin-path entities" do
+  it "dates the list by its oldest row, so a write-through refresh of one row cannot make the rest look fresh" do
     sign_in
-    create(:kong_entity, kong_connection: connection, name: "admin-api", is_admin_path: true)
+    create(:kong_entity, kong_connection: connection, name: "old-api", synced_at: 3.hours.ago)
+    create(:kong_entity, kong_connection: connection, name: "just-applied-api", synced_at: 1.minute.ago)
 
     get entities_path
 
-    expect(response.body).to include("protected")
+    expect(response.body).to include("about 3 hours ago").and include("may be out of date")
+  end
+
+  it "says so, rather than dating the list, when the connection has never synced" do
+    sign_in
+
+    get entities_path
+
+    expect(response.body).to include("Never synced from #{connection.name}")
+  end
+
+  it "marks admin-path entities as the admin path, on the row itself" do
+    sign_in
+    create(:kong_entity, kong_connection: connection, name: "admin-api", is_admin_path: true)
+    create(:kong_entity, kong_connection: connection, name: "payments-api")
+
+    get entities_path
+
+    rows = Nokogiri::HTML(response.body).css(".entity-row:not(.entity-row--head)")
+    admin, other = rows.partition { |row| row.text.include?("admin-api") }.map(&:first)
+    expect(admin["class"]).to include("entity-row--admin")
+    expect(admin.text).to include("admin path")
+    expect(other["class"]).not_to include("entity-row--admin")
+    expect(other.text).not_to include("admin path")
+  end
+
+  it "opens an admin-path entity with what that means for delete and decK" do
+    sign_in
+    service = create(:kong_entity, kong_connection: connection, name: "admin-api", is_admin_path: true)
+
+    get entity_path(service)
+
+    expect(response.body).to include("This is Kongsole's own way into Kong.")
+    expect(response.body).to include("An agent can never delete it").and include("left out of every decK YAML")
+  end
+
+  it "says an admin-path plugin is read-only, not deletable" do
+    sign_in
+    plugin = create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "basic-auth", is_admin_path: true)
+
+    get entity_path(plugin)
+
+    expect(response.body).to include("guards the admin route").and include("read-only")
+    expect(response.body).not_to include("An agent can never delete it")
+  end
+
+  describe "Kong-native marks" do
+    let(:service_id) { "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
+
+    it "lists a route as a request line: method chips, host, and a path with its regex marked" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "orders",
+        data: { "methods" => %w[GET POST], "hosts" => [ "api.example.com" ], "paths" => [ "/orders", "~/orders/\\d+" ] })
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "anything", data: {})
+
+      get entities_path(type: "route")
+
+      doc = Nokogiri::HTML(response.body)
+      orders, anything = %w[orders anything].map { |name| doc.css(".entity-row").find { |row| row.text.include?(name) } }
+      expect(orders.css(".route-method").map(&:text)).to eq(%w[GET POST])
+      expect(orders.at_css(".route-host").text).to eq("api.example.com")
+      expect(orders.css(".route-path").map { |p| p.text.strip }).to eq([ "/orders", "~/orders/\\d+" ])
+      expect(orders.css(".route-path__regex").size).to eq(1)
+      expect(anything.at_css(".route-method--any").text).to eq("ANY")
+      expect(anything.text).to include("every path")
+    end
+
+    it "opens a route on what it matches and links the service it forwards to" do
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, name: "orders-svc", kong_id: service_id)
+      route = create(:kong_entity, kong_connection: connection, entity_type: "route", name: "orders",
+        data: { "methods" => [ "GET" ], "paths" => [ "/orders" ], "service" => { "id" => service_id }, "strip_path" => false, "protocols" => %w[https] })
+
+      get entity_path(route)
+
+      doc = Nokogiri::HTML(response.body)
+      panel = doc.at_css("section[aria-labelledby='route-match-heading']")
+      expect(panel.at_css(".route-method").text).to eq("GET")
+      expect(panel.at_css("a")["href"]).to eq(entity_path(service))
+      expect(panel.text).to include("keeps the matched path").and include("https")
+    end
+
+    it "says so when a route's service has not been synced" do
+      sign_in
+      route = create(:kong_entity, kong_connection: connection, entity_type: "route", name: "orders",
+        data: { "service" => { "id" => "ffffffff-0000-0000-0000-ffffffffffff" } })
+
+      get entity_path(route)
+
+      expect(response.body).to include("a service that has not been synced yet")
+    end
+
+    it "shows a global plugin as the solid Global mark and a scoped one as kind plus name" do
+      sign_in
+      svc = create(:kong_entity, kong_connection: connection, name: "checkout", kong_id: service_id)
+      create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "cors")
+      create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "key-auth",
+        parent_type: "service", parent_kong_id: svc.kong_id)
+
+      get entities_path(type: "plugin")
+
+      doc = Nokogiri::HTML(response.body)
+      cors, key_auth = %w[cors key-auth].map { |name| doc.css(".entity-row").find { |row| row.text.include?(name) } }
+      expect(cors.at_css(".scope--global .scope__kind").text).to eq("Global")
+      expect(key_auth.at_css(".scope__kind").text).to eq("service")
+      expect(key_auth.at_css(".scope__name").text).to eq("checkout")
+      expect(key_auth.at_css(".scope--global")).to be_nil
+    end
+
+    it "opens a plugin on its scope, in a sentence, with a link to what it is attached to" do
+      sign_in
+      route = create(:kong_entity, kong_connection: connection, entity_type: "route", name: "orders", kong_id: service_id)
+      plugin = create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "rate-limiting",
+        parent_type: "route", parent_kong_id: route.kong_id)
+
+      get entity_path(plugin)
+
+      panel = Nokogiri::HTML(response.body).at_css("section[aria-labelledby='plugin-scope-heading']")
+      expect(panel.text).to include("Runs on requests that match this route.")
+      expect(panel.at_css("a")["href"]).to eq(entity_path(route))
+    end
+
+    it "lists the hostnames a certificate answers for under its name" do
+      sign_in
+      create(:kong_entity, kong_connection: connection, entity_type: "certificate", name: "cert-1", not_after: 90.days.from_now,
+        data: { "snis" => %w[x.example], "_metadata" => { "sans" => %w[a.example b.example c.example d.example] } })
+
+      get entities_path(type: "certificate")
+
+      expect(response.body).to include("a.example, b.example +2")
+    end
+
+    it "draws a certificate's lifespan on its page, toned like its expiry badge" do
+      sign_in
+      certificate = create(:kong_entity, kong_connection: connection, entity_type: "certificate", name: "cert-1",
+        not_after: 10.days.from_now,
+        data: { "_metadata" => { "not_before" => 90.days.ago.utc.iso8601, "not_after" => 10.days.from_now.utc.iso8601 } })
+
+      get entity_path(certificate)
+
+      bar = Nokogiri::HTML(response.body).at_css(".lifespan")
+      expect(bar["class"]).to include("lifespan--warning")
+      expect(bar["aria-label"]).to match(/\A9\d% of this certificate's validity has passed\z/)
+    end
   end
 
   describe "pagination" do
@@ -66,7 +210,9 @@ RSpec.describe "Entities (web)", type: :request do
       expect(response.media_type).to eq("text/vnd.turbo-stream.html")
       expect(response.body).to include('turbo-stream action="append" target="entities-list"')
       expect(response.body).to include('turbo-stream action="replace" target="entities-pagination"')
-      expect(response.body).to include('turbo-stream action="replace" target="entities-count"')
+      # update, not replace: #entities-count is a persistent live region.
+      expect(response.body).to include('turbo-stream action="update" target="entities-count"')
+      expect(response.body).not_to include('turbo-stream action="replace" target="entities-count"')
     end
 
     it "the turbo_stream response's own Load more link keeps the running shown count, not just the new page's" do
@@ -208,6 +354,41 @@ RSpec.describe "Entities (web)", type: :request do
       expect(response).to redirect_to(entities_path)
       follow_redirect!
       expect(response.body).to include("Unknown entity type")
+    end
+  end
+
+  describe "one filled primary action per list page" do
+    def primary_texts
+      Nokogiri::HTML(response.body).css(".btn-primary").map { |node| node.text.strip }
+    end
+
+    it "makes only 'New upstream' primary on the upstreams list; Filter is secondary" do
+      sign_in
+
+      get entities_path(type: "upstream")
+
+      expect(primary_texts).to eq([ "New upstream" ])
+      filter = Nokogiri::HTML(response.body).css("button[type=submit]").find { |node| node.text.strip == "Filter" }
+      expect(filter["class"].split).to include("btn", "btn-secondary")
+      expect(filter["class"].split).not_to include("btn-primary")
+    end
+
+    it "renders at most one filled primary on the services list" do
+      sign_in
+
+      get entities_path(type: "service")
+
+      expect(primary_texts.size).to be <= 1
+    end
+
+    it "gives header actions the shared .btn sizing rather than per-view padding" do
+      sign_in
+
+      get entities_path(type: "upstream")
+
+      new_link = Nokogiri::HTML(response.body).css("a.btn-primary").first
+      expect(new_link["class"].split).to include("btn")
+      expect(new_link["class"]).not_to match(/\bp[xy]-\d/)
     end
   end
 
@@ -708,7 +889,7 @@ RSpec.describe "Entities (web)", type: :request do
     expect(response.body).not_to include("disabled")
   end
 
-  it "still shows a protected route as protected in the table" do
+  it "still marks an admin-path route as the admin path in the table" do
     sign_in
     connection.update!(admin_path_fingerprint: { "route_ids" => [ "99999999-9999-9999-9999-999999999999" ] })
     create(:kong_entity, kong_connection: connection, entity_type: "route", kong_id: "99999999-9999-9999-9999-999999999999",
@@ -716,7 +897,7 @@ RSpec.describe "Entities (web)", type: :request do
 
     get entities_path(type: "route")
 
-    expect(response.body).to include("protected")
+    expect(response.body).to include("admin path")
   end
 
   describe "certificates (M5b)" do

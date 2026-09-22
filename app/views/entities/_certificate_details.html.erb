@@ -6,17 +6,18 @@
 <section class="panel p-4">
   <h2 class="section-label mb-3">Certificate</h2>
   <% if meta["parse_error"] %>
-    <p class="text-sm" style="color: var(--color-warning)">Kong's copy of this certificate couldn't be read here (<%= meta["parse_error"] %>), so no details are shown.</p>
+    <p class="text-sm text-warning">Kong's copy of this certificate couldn't be read here (<%= meta["parse_error"] %>), so no details are shown.</p>
   <% else %>
+    <%= render "entities/lifespan", entity: @entity %>
     <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-      <dt style="color: var(--color-ink-soft)">Expires</dt>
-      <dd class="flex flex-wrap items-center gap-2"><%= expiry_badge(@entity) %> <%= @entity.not_after&.to_fs(:long) %> <% if @entity.not_after %><span style="color: var(--color-ink-soft)">(<%= expiry_when(@entity) %>)</span><% end %></dd>
-      <dt style="color: var(--color-ink-soft)">Valid from</dt><dd><%= certificate_time(meta["not_before"]) %></dd>
-      <dt style="color: var(--color-ink-soft)">Subject</dt><dd class="font-mono text-xs break-all"><%= meta["subject"] %></dd>
-      <dt style="color: var(--color-ink-soft)">Issuer</dt><dd class="font-mono text-xs break-all"><%= meta["issuer"] %></dd>
-      <dt style="color: var(--color-ink-soft)">SANs</dt><dd class="font-mono text-xs"><%= Array(meta["sans"]).join(", ").presence || "—" %></dd>
-      <dt style="color: var(--color-ink-soft)">Serial</dt><dd class="font-mono text-xs break-all"><%= meta["serial"] %></dd>
-      <dt style="color: var(--color-ink-soft)">SHA-256</dt><dd class="font-mono text-xs break-all"><%= meta["fingerprint_sha256"] %></dd>
+      <dt class="text-ink-soft">Expires</dt>
+      <dd class="flex flex-wrap items-center gap-2"><%= expiry_badge(@entity) %> <%= plan_timestamp(@entity.not_after) %> <% if @entity.not_after %><span class="text-ink-soft">(<%= expiry_when(@entity) %>)</span><% end %></dd>
+      <dt class="text-ink-soft">Valid from</dt><dd><%= certificate_time(meta["not_before"]) %></dd>
+      <dt class="text-ink-soft">Subject</dt><dd class="font-mono text-xs break-all"><%= meta["subject"] %></dd>
+      <dt class="text-ink-soft">Issuer</dt><dd class="font-mono text-xs break-all"><%= meta["issuer"] %></dd>
+      <dt class="text-ink-soft">SANs</dt><dd class="font-mono text-xs"><%= Array(meta["sans"]).join(", ").presence || "—" %></dd>
+      <dt class="text-ink-soft">Serial</dt><dd class="font-mono text-xs break-all"><%= meta["serial"] %></dd>
+      <dt class="text-ink-soft">SHA-256</dt><dd class="font-mono text-xs break-all"><%= meta["fingerprint_sha256"] %></dd>
     </dl>
   <% end %>
 </section>
@@ -26,15 +27,15 @@
     <h2 class="section-label mb-3">Key reference</h2>
     <% if key[:kind] == :reference %>
       <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
-        <dt style="color: var(--color-ink-soft)">Reference</dt><dd class="font-mono text-xs break-all"><%= key[:value] %></dd>
-        <dt style="color: var(--color-ink-soft)">Kong reads</dt><dd class="font-mono text-xs"><%= key[:env_var] %></dd>
+        <dt class="text-ink-soft">Reference</dt><dd class="font-mono text-xs break-all"><%= key[:value] %></dd>
+        <dt class="text-ink-soft">Kong reads</dt><dd class="font-mono text-xs"><%= key[:env_var] %></dd>
       </dl>
-      <p class="text-xs mt-3" style="color: var(--color-ink-faint)">
+      <p class="text-xs mt-3 text-ink-faint">
         The private key lives only in that environment variable on each Kong node. Kong doesn't check that it is set —
         if it is missing, TLS for this certificate's hostnames fails.
       </p>
     <% else %>
-      <p class="text-sm" style="color: var(--color-warning)">
+      <p class="text-sm text-warning">
         Kong holds a plaintext private key for this certificate. This tool never sets one and can't show it — replace it
         with a <code class="font-mono">{vault://env/…}</code> reference when you next edit the certificate.
       </p>
