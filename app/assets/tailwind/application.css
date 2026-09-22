@@ -116,6 +116,45 @@ body {
   outline-offset: 2px;
 }
 
+/* Skip link: the first focusable thing on every page, so a keyboard user does
+   not tab through the whole topbar (wordmark, six nav links, env chip, Switch,
+   Sign out) on every navigation. Off-screen until focused rather than
+   display:none, because a hidden element cannot be focused at all. Focused, it
+   lands over the topbar as the same white-on-ink chip .btn-primary already is
+   -- no animation, so it appears the instant Tab is pressed rather than sliding
+   in after it. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-surface);
+  background: var(--color-ink);
+  border-bottom-right-radius: 0.5rem;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+/* The accent focus ring would sit outside the chip and over whatever env tone
+   the topbar is wearing. Drawn inside in the label's own white instead, so it
+   reads the same on every environment. */
+.skip-link:focus-visible {
+  outline-color: var(--color-surface);
+  outline-offset: -4px;
+}
+
+/* The skip link's destination. Focused only programmatically, by following the
+   link, and the page heading right below it already says where you landed, so
+   it takes no ring of its own. */
+main[tabindex="-1"]:focus {
+  outline: none;
+}
+
 /* The one heading on a page. 24px against 14px body is a 1.7 step: far
    enough to lead without shouting, and with the weight and the tighter
    tracking a larger size wants. Balanced so a long entity name breaks evenly. */
@@ -157,6 +196,14 @@ body {
 
 .tab:hover {
   color: var(--color-ink);
+}
+
+/* .tab-nav scrolls horizontally, and a scroll container clips on both axes, so
+   the default 2px-outside focus ring is shaved off the first and last tab and
+   off the top of every one. Drawn inside the tab instead, where nothing can
+   clip it. */
+.tab:focus-visible {
+  outline-offset: -2px;
 }
 
 .tab[aria-current] {
@@ -779,6 +826,31 @@ input:where([type="submit"]):not(:disabled) { cursor: pointer; }
 
 .json-editor--invalid .json-editor__textarea {
   border-color: var(--color-danger);
+}
+
+/* Forced-colors (Windows High Contrast): the whole two-layer trick depends on
+   the textarea's text being transparent, and forced-colors replaces every
+   colour -- including that transparent -- with a system one. The typed text
+   and the highlighted copy would then both be opaque, one over the other,
+   doubled and unreadable. So drop the illusion here: hide the highlight layer
+   and let the textarea be an ordinary textarea. Syntax colour is a reading
+   aid, and forced-colors mode has already opted out of colour as information.
+   The invalid border stays -- it is shape, not fill. */
+@media (forced-colors: active) {
+  .json-editor__highlight {
+    display: none;
+  }
+
+  .json-editor__textarea {
+    background: Field;
+    color: FieldText;
+    caret-color: FieldText;
+  }
+
+  .json-editor--invalid .json-editor__textarea {
+    border-width: 2px;
+    border-style: dashed;
+  }
 }
 
 /* ---- change_plans#show: the review page ------------------------------ */

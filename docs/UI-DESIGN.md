@@ -134,6 +134,14 @@ pages to keep it so (`spec/requests/consistency_spec.rb`):
 
 ## Targets and structure
 
+- **Skip link.** `.skip-link` is the first focusable element in `<body>` on
+  every page, pointing at `<main id="main" tabindex="-1">`, so a keyboard user
+  does not tab the whole three-row topbar on every navigation. It is parked
+  off-screen (`left: -9999px`) rather than hidden, since a hidden element
+  cannot be focused, and on focus lands as the same white-on-ink chip
+  `.btn-primary` is, with an inset white focus ring so it reads over any env
+  tone. `<main>` itself shows no ring: the page title right below it already
+  says where you landed.
 - **Topbar targets.** The primary nav, Switch and Sign out share `.topbar-action`:
   14px text, 36px tall for a mouse and 44px for a coarse pointer
   (`@media (pointer: coarse)`), with a hover fill so the whole target shows. The
@@ -180,6 +188,13 @@ pages to keep it so (`spec/requests/consistency_spec.rb`):
 - `.btn-text-danger` / `.btn-text` — plain text actions (Remove, Sign out,
   Back, and Edit inside a dense list row).
 - `.field-input` — form inputs; focus ring uses the accent color.
+- `.json-editor` — the full-document entity editor: a transparent `<textarea>`
+  over a syntax-highlighted `<pre>`. Forced-colors mode overrides that
+  transparent and would double the text, so there the overlay is hidden and the
+  textarea falls back to `Field`/`FieldText`; the invalid state becomes a 2px
+  dashed border, which is shape rather than fill. Parse failures are rewritten
+  in the app's own words with a line and column
+  (`json_editor_controller.js#plainError`), never the browser's `error.message`.
 - `.section-label` — small caps label for form/detail section headers.
 - `.notice-banner` — flash/notice/warning banner (tint background, semantic
   border/text color), toned by `.notice-banner--danger|warning|success`. Never
@@ -187,7 +202,13 @@ pages to keep it so (`spec/requests/consistency_spec.rb`):
   notice/alert flashes too) goes through the `shared/_notice` partial,
   `render layout: "shared/notice", locals: { tone:, role:, tag:, class: } do … end`.
   `role` is optional (omit for a static banner), `tag` defaults to `:div`
-  (`:p` for plain-text copy), `class` appends extra classes.
+  (`:p` for plain-text copy), `class` appends extra classes, `data` adds data
+  attributes. The layout's two flashes pass `data: { controller: "flash" }`:
+  a flash is parsed together with its live region, so there is no change for
+  that region to report and a screen reader hears nothing after a redirect.
+  `flash_controller.js` lifts the text out on connect and re-inserts it in the
+  next frame, before paint. The banner is server-rendered complete, so with JS
+  off nothing is removed.
 - `.failure-reason` — verbatim output from Kong, decK or git inside a notice
   banner: monospace, tinted from the banner's own `currentColor`, wrapping
   rather than scrolling so a reason is never half-hidden. Only ever fed
@@ -212,6 +233,11 @@ pages to keep it so (`spec/requests/consistency_spec.rb`):
   `.btn-secondary` (the connections index's per-row "Log in", the entities
   index's "Filter"). The one exception is entities/edit, which has two
   Review-change forms (Fields / Full JSON), each with its own submit.
+- **Focus rings are drawn inside anything that clips or colours them.**
+  `:focus-visible` is a 2px accent outline at `outline-offset: 2px` by default,
+  but `.tab` (inside the horizontally scrolling `.tab-nav`), `.entity-row` and
+  `.skip-link` use a negative offset so the ring is not shaved off by a scroll
+  container or lost against its own ground.
 - **Table header cells carry `scope="col"`** (audit events, change plans
   index, expiring certificates, health).
 - **The product is "Kongsole"** everywhere it is named: title fallback,

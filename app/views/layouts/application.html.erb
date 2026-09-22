@@ -28,6 +28,8 @@
   </head>
 
   <body class="font-sans">
+    <%= link_to "Skip to content", "#main", class: "skip-link" %>
+
     <header class="topbar <%= content_for(:env_tone) || current_connection&.env_tone %> px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 sm:sticky sm:top-0 z-10">
       <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
         <%= link_to "Kongsole", root_path, class: "wordmark text-[15px] whitespace-nowrap" %>
@@ -57,12 +59,17 @@
       <% end %>
     </header>
 
-    <main class="w-full max-w-5xl mx-auto mt-8 px-4 sm:px-6 pb-16">
+    <main id="main" tabindex="-1" class="w-full max-w-5xl mx-auto mt-8 px-4 sm:px-6 pb-16">
+      <%# A flash arrives with the page, so its live region already holds the
+          text by the time a screen reader reaches it and nothing is announced.
+          The flash controller re-inserts the text a frame later, into a region
+          that is by then established and empty -- which is the change a live
+          region reports. Without JS the banner simply stays as rendered. %>
       <% if notice %>
-        <%= render layout: "shared/notice", locals: { tone: :success, role: "status", tag: :p, class: "mb-6" } do %><%= notice %><% end %>
+        <%= render layout: "shared/notice", locals: { tone: :success, role: "status", tag: :p, class: "mb-6", data: { controller: "flash" } } do %><%= notice %><% end %>
       <% end %>
       <% if alert %>
-        <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-6" } do %><%= alert %><% end %>
+        <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-6", data: { controller: "flash" } } do %><%= alert %><% end %>
       <% end %>
 
       <%= yield %>

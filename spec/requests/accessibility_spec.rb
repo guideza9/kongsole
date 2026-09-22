@@ -45,6 +45,28 @@ RSpec.describe "Accessibility semantics", type: :request do
       expect(page.at_css("html")["lang"]).to eq("en")
     end
 
+    it "opens with a skip link that reaches the main landmark" do
+      get root_path
+
+      first_link = page.at_css("body a")
+      expect(first_link.text.strip).to eq("Skip to content")
+      expect(first_link["href"]).to eq("#main")
+      expect(page.at_css("main")["id"]).to eq("main")
+      expect(page.at_css("main")["tabindex"]).to eq("-1")
+    end
+
+    # The banner ships complete so it still reads with JS off; the controller
+    # is what re-inserts the text into the already-live region so a screen
+    # reader hears it after a redirect.
+    it "hands each flash banner to the announcing controller" do
+      get entities_path # signed out: bounced with an alert
+      follow_redirect!
+
+      banner = page.at_css("main p.notice-banner[role='alert']")
+      expect(banner["data-controller"]).to eq("flash")
+      expect(banner.text).to include("Log into a connection first.")
+    end
+
     it "announces an alert assertively" do
       get entities_path # signed out: bounced with an alert
       follow_redirect!
