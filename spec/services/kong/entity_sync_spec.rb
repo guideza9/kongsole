@@ -19,6 +19,12 @@ RSpec.describe Kong::EntitySync do
   let(:sync) { described_class.new(connection: connection, client: client, entity_type: "service") }
 
   describe "#call" do
+    # A plugin sync reads each plugin's schema to know which fields are secret.
+    before do
+      stub_request(:get, %r{\Ahttps://kong-admin\.internal/schemas/plugins/})
+        .to_return(status: 200, body: { fields: [] }.to_json)
+    end
+
     it "syncs services into kong_entities, redacting data and computing a digest" do
       stub_request(:get, "https://kong-admin.internal/services")
         .with(query: { size: "100" })
@@ -559,6 +565,42 @@ RSpec.describe Kong::EntitySync do
 
       expect(result.synced_count).to eq(2)
       expect(KongEntity.active.where(entity_type: "target").count).to eq(1)
+    end
+  end
+
+  describe "plugin secrets" do
+    it "stores an aws-lambda plugin with its schema-marked secrets redacted" do
+      connection = create(:kong_connection, admin_url: "https://kong.test")
+      client = Kong::Client.new(connection: connection, secret: "pw")
+      stub_request(:get, "https://kong.test/plugins").with(query: hash_including({}))
+        .to_return(status: 200, body: { data: [ { id: SecureRandom.uuid, name: "aws-lambda", tags: [],
+          config: { aws_key: "AKIAREALKEY", aws_secret: "s3cr3t", aws_region: "ap-southeast-1" } } ], offset: nil }.to_json)
+      stub_request(:get, "https://kong.test/schemas/plugins/aws-lambda").to_return(status: 200, body: { fields: [
+        { config: { type: "record", fields: [
+          { aws_key: { type: "string", encrypted: true, referenceable: true } },
+          { aws_secret: { type: "string", encrypted: true, referenceable: true } } ] } } ] }.to_json)
+
+      described_class.new(connection: connection, client: client, entity_type: "plugin").call
+
+      stored = KongEntity.find_by!(entity_type: "plugin").data.to_json
+      expect(stored).not_to include("AKIAREALKEY")
+      expect(stored).not_to include("s3cr3t")
+    end
+
+    it "still stores no plaintext when the plugin schema cannot be fetched" do
+      connection = create(:kong_connection, admin_url: "https://kong.test")
+      client = Kong::Client.new(connection: connection, secret: "pw")
+      stub_request(:get, "https://kong.test/plugins").with(query: hash_including({}))
+        .to_return(status: 200, body: { data: [ { id: SecureRandom.uuid, name: "team-oauth", tags: [],
+          config: { client_secret: "s3cr3t", headers: { "Authorization" => "Basic abc" }, timeout: 5 } } ], offset: nil }.to_json)
+      stub_request(:get, "https://kong.test/schemas/plugins/team-oauth").to_return(status: 503, body: "{}")
+
+      described_class.new(connection: connection, client: client, entity_type: "plugin").call
+
+      stored = KongEntity.find_by!(entity_type: "plugin").data
+      expect(stored.to_json).not_to include("s3cr3t")
+      expect(stored.to_json).not_to include("Basic abc")
+      expect(stored.dig("config", "timeout")).to eq(5)
     end
   end
 end

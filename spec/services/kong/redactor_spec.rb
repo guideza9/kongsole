@@ -133,4 +133,35 @@ RSpec.describe Kong::Redactor do
       expect(a[:digest]).not_to eq(b[:digest])
     end
   end
+
+  describe "plugins" do
+    let(:plugin) do
+      { "name" => "aws-lambda", "config" => {
+        "aws_key" => "AKIAREALKEY", "aws_region" => "ap-southeast-1",
+        "redis" => { "password" => "pw", "host" => "r" },
+        "vaulted" => "{vault://env/aws-secret}"
+      } }
+    end
+
+    it "redacts the schema's secret paths at any depth" do
+      data = described_class.call("plugin", plugin, secret_paths: [ %w[config aws_key], %w[config redis password] ])[:data]
+      expect(data.dig("config", "aws_key")).to eq(described_class::MARK)
+      expect(data.dig("config", "redis", "password")).to eq(described_class::MARK)
+      expect(data.dig("config", "aws_region")).to eq("ap-southeast-1")
+    end
+
+    it "keeps a vault reference visible on a referenceable field -- it names a variable, it is not a secret" do
+      data = described_class.call("plugin", plugin, secret_paths: [ %w[config vaulted] ])[:data]
+      expect(data.dig("config", "vaulted")).to eq("{vault://env/aws-secret}")
+    end
+
+    it "fails closed without a schema: secret-looking names and any headers map are redacted" do
+      input = { "name" => "http-log", "config" => {
+        "http_endpoint" => "https://x", "headers" => { "Authorization" => "Basic abc" }, "api_token" => "t" } }
+      data = described_class.call("plugin", input, secret_paths: nil)[:data]
+      expect(data.dig("config", "headers")).to eq(described_class::MARK)
+      expect(data.dig("config", "api_token")).to eq(described_class::MARK)
+      expect(data.dig("config", "http_endpoint")).to eq("https://x")
+    end
+  end
 end

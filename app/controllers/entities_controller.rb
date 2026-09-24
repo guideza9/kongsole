@@ -326,7 +326,8 @@ class EntitiesController < ApplicationController
     response = current_client.get(path)
     body = response.body
     raw = body.is_a?(String) ? JSON.parse(body) : body
-    Kong::Redactor.call(@entity.entity_type, raw)[:data].except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
+    Kong::Redactor.for_connection(@entity.entity_type, raw, client: current_client)[:data]
+      .except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)
   rescue Kong::Client::Error, JSON::ParserError
     @payload_stale = true
     @entity.data.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS)

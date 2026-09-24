@@ -26,8 +26,29 @@ module Kong
     # second, defense-in-depth pass.
     SCHEMA_MARKED_FIELDS = %w[key password secret client_secret private_key tls_key].freeze
 
-    def self.call(entity_type, data)
-      new(entity_type, data).call
+    # Plugin fail-closed rule (docs/DESIGN.md section 8): when a plugin's
+    # schema could not be read, any config key whose name looks secret -- and
+    # every `headers` map, where an Authorization header lives -- is redacted.
+    FAIL_CLOSED_NAME = /(key|secret|password|passwd|token|credential|auth|private|cert)/i
+    FAIL_CLOSED_MAPS = %w[headers].freeze
+
+    # A `{vault://...}` value names a variable, it is not a secret.
+    VAULT_REFERENCE = /\A\{vault:\/\/[^}]+\}\z/
+
+    # `secret_paths` only matters for a plugin: an Array is the list of paths
+    # its schema on this connection marks secret (Kong::PluginSecretFields);
+    # nil means the schema could not be read, so the fail-closed heuristic
+    # applies. `:unused` keeps every other entity_type's behavior unchanged.
+    def self.call(entity_type, data, secret_paths: :unused)
+      new(entity_type, data, secret_paths: secret_paths).call
+    end
+
+    # The one place a caller holding a live client redacts an entity: a
+    # plugin is redacted against its own schema on that connection.
+    def self.for_connection(entity_type, data, client:, schema_fields: Kong::PluginSecretFields.new)
+      return call(entity_type, data) unless entity_type.to_s == "plugin"
+
+      call(entity_type, data, secret_paths: schema_fields.fetch(client: client, plugin_name: data["name"]))
     end
 
     # Whether a field name carries a secret for this entity_type -- the one
@@ -95,17 +116,53 @@ module Kong
     end
     private_class_method :deep_prune
 
-    def initialize(entity_type, data)
+    def initialize(entity_type, data, secret_paths: :unused)
       @entity_type = entity_type.to_s
       @data = data || {}
+      @secret_paths = secret_paths
     end
 
     def call
       redacted = deep_redact(@data)
+      redacted = redact_plugin(redacted) if @entity_type == "plugin" && @secret_paths != :unused
       { data: redacted, digest: digest(redacted) }
     end
 
     private
+
+    def redact_plugin(data)
+      return fail_closed(data) if @secret_paths.nil?
+
+      @secret_paths.each_with_object(data) do |path, acc|
+        parent = path.size == 1 ? acc : acc.dig(*path[0...-1])
+        next unless parent.is_a?(Hash)
+
+        value = parent[path.last]
+        next if value.nil? || (value.is_a?(String) && VAULT_REFERENCE.match?(value))
+
+        parent[path.last] = MARK
+      end
+    end
+
+    def fail_closed(data)
+      return data unless data["config"].is_a?(Hash)
+
+      data.merge("config" => fail_closed_redact(data["config"]))
+    end
+
+    def fail_closed_redact(value)
+      case value
+      when Hash
+        value.each_with_object({}) do |(key, v), acc|
+          secret_name = FAIL_CLOSED_MAPS.include?(key.to_s) || FAIL_CLOSED_NAME.match?(key.to_s)
+          acc[key] = secret_name && !v.nil? ? MARK : fail_closed_redact(v)
+        end
+      when Array
+        value.map { |v| fail_closed_redact(v) }
+      else
+        value
+      end
+    end
 
     def deep_redact(value)
       case value

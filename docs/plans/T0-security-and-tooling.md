@@ -105,7 +105,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 - Produces `Kong::Redactor.call(entity_type, data, secret_paths: nil)` — สำหรับ `plugin`: `secret_paths: nil` = fail-closed heuristic
 - Produces `Kong::Redactor.for_connection(entity_type, data, client:, schema_fields: Kong::PluginSecretFields.new)` — จุดเดียวที่ caller ใช้
 
-- [ ] **Step 1: test ของ PluginSecretFields**
+- [x] **Step 1: test ของ PluginSecretFields**
 
 ```ruby
 # spec/services/kong/plugin_secret_fields_spec.rb
@@ -138,7 +138,7 @@ RSpec.describe Kong::PluginSecretFields do
 end
 ```
 
-- [ ] **Step 2: test ของ Redactor**
+- [x] **Step 2: test ของ Redactor**
 
 ```ruby
 # spec/services/kong/redactor_spec.rb — เพิ่ม
@@ -174,7 +174,7 @@ describe "plugins" do
 end
 ```
 
-- [ ] **Step 3: test ของ EntitySync (ไม่มี plaintext เข้า DB)**
+- [x] **Step 3: test ของ EntitySync (ไม่มี plaintext เข้า DB)**
 
 ```ruby
 # spec/services/kong/entity_sync_spec.rb — เพิ่ม
@@ -213,9 +213,9 @@ it "still stores no plaintext when the plugin schema cannot be fetched" do
 end
 ```
 
-- [ ] **Step 4:** รัน `bundle exec rspec spec/services/kong/plugin_secret_fields_spec.rb spec/services/kong/redactor_spec.rb spec/services/kong/entity_sync_spec.rb` → FAIL (`uninitialized constant Kong::PluginSecretFields` / plaintext stored)
+- [x] **Step 4:** รัน `bundle exec rspec spec/services/kong/plugin_secret_fields_spec.rb spec/services/kong/redactor_spec.rb spec/services/kong/entity_sync_spec.rb` → FAIL (`uninitialized constant Kong::PluginSecretFields` / plaintext stored)
 
-- [ ] **Step 5: เขียน `Kong::PluginSecretFields`**
+- [x] **Step 5: เขียน `Kong::PluginSecretFields`**
 
 ```ruby
 module Kong
@@ -253,15 +253,15 @@ module Kong
 end
 ```
 
-- [ ] **Step 6: แก้ `Kong::Redactor`** — เพิ่ม `secret_paths:` (ค่า default `:unused` เพื่อให้ type อื่นทำงานเหมือนเดิม), สำหรับ `plugin`:
+- [x] **Step 6: แก้ `Kong::Redactor`** — เพิ่ม `secret_paths:` (ค่า default `:unused` เพื่อให้ type อื่นทำงานเหมือนเดิม), สำหรับ `plugin`:
   - `secret_paths` เป็น Array → redact แต่ละ path ที่ค่าไม่ใช่ `nil` และไม่ใช่ reference (`/\A\{vault:\/\/[^}]+\}\z/`)
   - `secret_paths == nil` → fail-closed: redact ทุก key ใต้ `config` (ทุกความลึก) ที่ชื่อ match `FAIL_CLOSED_NAME = /(key|secret|password|passwd|token|credential|auth|private|cert)/i` และทุก key ชื่อ `headers`
   - คง `SCHEMA_MARKED_FIELDS` เดิมไว้เป็นชั้นที่สอง
   - เพิ่ม `def self.for_connection(entity_type, data, client:, schema_fields: Kong::PluginSecretFields.new)` → ถ้า plugin: `call(entity_type, data, secret_paths: schema_fields.fetch(client:, plugin_name: data["name"]))` ไม่งั้น `call(entity_type, data)`
-- [ ] **Step 7:** เปลี่ยน caller ทั้งสามให้ใช้ `Kong::Redactor.for_connection`: `EntitySync` (สร้าง `PluginSecretFields.new` หนึ่งตัวต่อการ sync หนึ่งรอบ), `ChangePlanner#fetch_current`, `EntitiesController#editable_payload`
-- [ ] **Step 8:** รันทั้ง 3 ไฟล์ + `spec/services/kong/change_planner_spec.rb spec/requests/entities_spec.rb` → PASS
-- [ ] **Step 9:** รันทั้ง suite → 0 failures
-- [ ] **Step 10:** Commit `fix(T0.2): redact plugin secrets from each plugin's own schema, fail closed without it`
+- [x] **Step 7:** เปลี่ยน caller ทั้งสามให้ใช้ `Kong::Redactor.for_connection`: `EntitySync` (สร้าง `PluginSecretFields.new` หนึ่งตัวต่อการ sync หนึ่งรอบ), `ChangePlanner#fetch_current`, `EntitiesController#editable_payload`
+- [x] **Step 8:** รันทั้ง 3 ไฟล์ + `spec/services/kong/change_planner_spec.rb spec/requests/entities_spec.rb` → PASS
+- [x] **Step 9:** รันทั้ง suite → 0 failures
+- [x] **Step 10:** Commit `fix(T0.2): redact plugin secrets from each plugin's own schema, fail closed without it`
 
 **เกณฑ์ผ่าน:** test ใหม่ทั้งหมดผ่าน · suite 0 failures · ตรวจกับ compose: สร้าง plugin `aws-lambda` บน `dev-readwrite` (rank 0) ด้วย `aws_secret: "probe-secret"` → Sync now → `bin/rails runner 'puts KongEntity.where(entity_type: "plugin").pluck(:data).to_json.include?("probe-secret")'` ต้องได้ `false` แล้วลบ plugin ทิ้ง
 

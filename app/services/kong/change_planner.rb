@@ -179,7 +179,7 @@ module Kong
       response = @client.get(@definition.member_path(@target_kong_id, parent_kong_id: @parent_kong_id))
       body = response.body
       raw = body.is_a?(String) ? JSON.parse(body) : body
-      Kong::Redactor.call(@entity_type, raw)[:data]
+      Kong::Redactor.for_connection(@entity_type, raw, client: @client)[:data]
     end
 
     # prune_marked keeps the "[REDACTED]" placeholder that `before` now

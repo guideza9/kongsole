@@ -48,6 +48,8 @@ module Kong
       @client = client
       @entity_type = entity_type
       @definition = Kong::EntityTypes.fetch(entity_type)
+      # One per sync run: each plugin's schema is read once, not per row.
+      @schema_fields = Kong::PluginSecretFields.new
     end
 
     def call
@@ -62,7 +64,7 @@ module Kong
     end
 
     def upsert(raw)
-      redacted = Kong::Redactor.call(@entity_type, raw)
+      redacted = Kong::Redactor.for_connection(@entity_type, raw, client: @client, schema_fields: @schema_fields)
       metadata = certificate_metadata(raw)
       data = metadata ? cached_certificate_data(redacted[:data], metadata) : redacted[:data]
       now = Time.current
