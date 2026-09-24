@@ -155,6 +155,16 @@ RSpec.describe Kong::Redactor do
       expect(data.dig("config", "vaulted")).to eq("{vault://env/aws-secret}")
     end
 
+    it "keeps a vault reference on a secret-named field too, with or without a schema" do
+      input = { "name" => "rate-limiting", "config" => { "redis" => { "password" => "{vault://env/redis-pw}" },
+                                                         "secret" => "{vault://env/session}" } }
+      [ [ %w[config redis password], %w[config secret] ], nil ].each do |paths|
+        data = described_class.call("plugin", input, secret_paths: paths)[:data]
+        expect(data.dig("config", "redis", "password")).to eq("{vault://env/redis-pw}")
+        expect(data.dig("config", "secret")).to eq("{vault://env/session}")
+      end
+    end
+
     it "fails closed without a schema: secret-looking names and any headers map are redacted" do
       input = { "name" => "http-log", "config" => {
         "http_endpoint" => "https://x", "headers" => { "Authorization" => "Basic abc" }, "api_token" => "t" } }

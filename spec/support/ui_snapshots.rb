@@ -8,14 +8,14 @@ module UiSnapshots
   LOCAL_STYLESHEET = %r{<link[^>]*rel="stylesheet"[^>]*href="/assets/[^"]*"[^>]*>\s*}
 
   # Writes only when UI_SNAPSHOTS=1, so the ordinary suite stays side-effect
-  # free; `force: true` is for this helper's own spec. Returns the path, or
-  # nil when nothing was written.
-  def snapshot!(name, force: false)
+  # free; `force:` and `dir:` are for this helper's own spec. Returns the
+  # path, or nil when nothing was written.
+  def snapshot!(name, force: false, dir: DIR)
     expect(response).to have_http_status(:ok)
     return unless force || ENV["UI_SNAPSHOTS"] == "1"
 
-    FileUtils.mkdir_p(DIR)
-    path = DIR.join("#{name}.html")
+    FileUtils.mkdir_p(dir)
+    path = dir.join("#{name}.html")
     File.write(path, inline_stylesheets(response.body))
     path
   end
@@ -23,7 +23,9 @@ module UiSnapshots
   private
 
   def inline_stylesheets(html)
-    style = "<style>#{File.read(TAILWIND)}</style>\n"
+    # The build is gitignored and CI never runs tailwindcss:build.
+    css = File.exist?(TAILWIND) ? File.read(TAILWIND) : "/* #{TAILWIND.basename} not built */"
+    style = "<style>#{css}</style>\n"
     first = true
     html.gsub(LOCAL_STYLESHEET) do
       next "" unless first

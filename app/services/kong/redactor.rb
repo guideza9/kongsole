@@ -155,7 +155,7 @@ module Kong
       when Hash
         value.each_with_object({}) do |(key, v), acc|
           secret_name = FAIL_CLOSED_MAPS.include?(key.to_s) || FAIL_CLOSED_NAME.match?(key.to_s)
-          acc[key] = secret_name && !v.nil? ? MARK : fail_closed_redact(v)
+          acc[key] = secret_name && !v.nil? && !vault_reference?(v) ? MARK : fail_closed_redact(v)
         end
       when Array
         value.map { |v| fail_closed_redact(v) }
@@ -177,8 +177,15 @@ module Kong
       end
     end
 
+    # A plugin's `{vault://...}` value names a variable, so it stays readable
+    # even on a secret-named field (redis.password, session secret).
+    def vault_reference?(value)
+      @entity_type == "plugin" && value.is_a?(String) && VAULT_REFERENCE.match?(value)
+    end
+
     def redact?(key, value)
-      self.class.sensitive_key?(@entity_type, key) && !self.class.reference_passthrough?(@entity_type, key, value)
+      self.class.sensitive_key?(@entity_type, key) && !self.class.reference_passthrough?(@entity_type, key, value) &&
+        !vault_reference?(value)
     end
 
     def digest(redacted)

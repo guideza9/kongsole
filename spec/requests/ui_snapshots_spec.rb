@@ -13,10 +13,19 @@ RSpec.describe "UI snapshots", type: :request do
   it "writes the connections index with the stylesheet inlined" do
     create(:kong_connection, name: "dev-1")
     get connections_path
-    path = snapshot!("connections-index", force: true)
+    path = snapshot!("connections-index", force: true, dir: Pathname(Dir.mktmpdir))
     html = File.read(path)
     expect(html).to include("<style>")
     expect(html).not_to include('rel="stylesheet" href="/assets')
+  end
+
+  # CI runs the suite without `tailwindcss:build`, and the build is gitignored.
+  it "still writes a snapshot when the Tailwind build is missing" do
+    stub_const("UiSnapshots::TAILWIND", Rails.root.join("tmp", "no-such-tailwind.css"))
+    create(:kong_connection, name: "dev-1")
+    get connections_path
+    html = File.read(snapshot!("connections-index", force: true, dir: Pathname(Dir.mktmpdir)))
+    expect(html).to include("<style>")
   end
 
   describe "pages" do

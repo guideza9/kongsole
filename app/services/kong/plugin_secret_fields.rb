@@ -13,7 +13,7 @@ module Kong
         next [] unless spec.is_a?(Hash)
 
         path = prefix + [ name ]
-        marked = secret?(spec) || MEMBER_SPECS.any? { |member| spec[member].is_a?(Hash) && secret?(spec[member]) }
+        marked = secret?(spec) || MEMBER_SPECS.any? { |member| member_secret?(spec[member]) }
         own = marked ? [ path ] : []
         nested = spec["fields"] ? paths(spec, path) : []
         own + nested
@@ -24,6 +24,14 @@ module Kong
       spec["encrypted"] || spec["referenceable"]
     end
     private_class_method :secret?
+
+    # A member spec is marked itself, or is a record with a secret anywhere
+    # inside -- a path cannot index into an array or map, so the whole
+    # collection is redacted.
+    def self.member_secret?(member)
+      member.is_a?(Hash) && (secret?(member) || (member["fields"] && paths(member).any?))
+    end
+    private_class_method :member_secret?
 
     def initialize
       @cache = {}

@@ -23,8 +23,11 @@ module Kong
       end
     end
 
+    # A pending plan still inside its window is left alone: applying it would
+    # send "[REDACTED]" to Kong as the secret. Once expired it can never apply.
     def scrub_plans
-      count_changed(ChangePlan.where(entity_type: "plugin")) do |plan|
+      appliable = ChangePlan.pending.where("expires_at > ?", Time.current)
+      count_changed(ChangePlan.where(entity_type: "plugin").where.not(id: appliable)) do |plan|
         changes = {
           before: redact(plan.before)[:data],
           after: plan.after && redact(plan.after)[:data],

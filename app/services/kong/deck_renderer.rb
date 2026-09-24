@@ -68,12 +68,30 @@ module Kong
       index = locate!(list, plan, definition)
       refuse_rename_onto_taken!(list, index, plan, definition)
       existing = list[index]
-      incoming = plan.after.except(*MANAGED)
+      incoming = keep_redacted(plan.after.except(*MANAGED), plan.before, existing)
       incoming["snis"] = keep_sni_entries(existing["snis"], incoming["snis"]) if plan.entity_type == "certificate" && incoming["snis"].is_a?(Array)
 
       list[index] = renderable(existing.merge(incoming), definition, keep_id: true)
     end
     private_class_method :update
+
+    # `before` is redacted and Kong::Redactor.prune_marked drops those marks
+    # from `after`, so a secret Kong holds arrives here as a missing key. Git
+    # holds its value (an env placeholder); keep it, or `deck gateway sync`
+    # would clear the secret in Kong. A top-level key already survives the
+    # shallow merge in #update -- this covers nested ones (a plugin's config).
+    def self.keep_redacted(incoming, before, existing)
+      return incoming unless incoming.is_a?(Hash) && before.is_a?(Hash) && existing.is_a?(Hash)
+
+      before.each_with_object(incoming.dup) do |(key, was), acc|
+        if was == Kong::Redactor::MARK
+          acc[key] = existing[key] if !acc.key?(key) && existing.key?(key)
+        elsif was.is_a?(Hash) && acc[key].is_a?(Hash)
+          acc[key] = keep_redacted(acc[key], was, existing[key])
+        end
+      end
+    end
+    private_class_method :keep_redacted
 
     # A rename (the identity field differs before and after) must not land on an
     # identity another entry in the list already has: that would write two

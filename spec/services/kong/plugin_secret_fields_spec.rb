@@ -31,6 +31,19 @@ RSpec.describe Kong::PluginSecretFields do
     expect(described_class.paths(schema)).to contain_exactly(%w[config headers], %w[config tokens])
   end
 
+  # A custom plugin may hold an array (or map) of records with a secret
+  # inside; the path cannot index into it, so the whole collection goes.
+  it "lists an array or map of records that has a secret field somewhere inside" do
+    schema = { "fields" => [ { "config" => { "type" => "record", "fields" => [
+      { "upstreams" => { "type" => "array", "elements" => { "type" => "record", "fields" => [
+        { "url" => { "type" => "string" } }, { "token" => { "type" => "string", "referenceable" => true } } ] } } },
+      { "by_team" => { "type" => "map", "values" => { "type" => "record", "fields" => [
+        { "creds" => { "type" => "record", "fields" => [ { "secret" => { "type" => "string", "encrypted" => true } } ] } } ] } } },
+      { "plain" => { "type" => "array", "elements" => { "type" => "record", "fields" => [ { "url" => { "type" => "string" } } ] } } }
+    ] } } ] }
+    expect(described_class.paths(schema)).to contain_exactly(%w[config upstreams], %w[config by_team])
+  end
+
   it "returns nil when the schema cannot be read, so the caller fails closed" do
     client = instance_double(Kong::Client)
     allow(client).to receive(:get).and_raise(Kong::Client::UpstreamUnavailable.new("down"))

@@ -224,6 +224,37 @@ RSpec.describe Kong::DeckRenderer do
         expect(doc["consumers"][0]["plugins"]).to eq([ { "name" => "cors", "config" => {} } ])
       end
 
+      # The planner redacts `before` and prunes those marks from `after`, so a
+      # secret field Kong holds is simply absent from `after`. It must keep
+      # git's value, or `deck gateway sync` would clear it in Kong.
+      it "keeps git's value for a nested field that was redacted and left out of the update" do
+        env_auth = '${{ env "DECK_LOG_AUTH" }}'
+        doc["plugins"] = [ { "name" => "http-log", "config" => {
+          "http_endpoint" => '${{ env "DECK_LOG_URL" }}', "headers" => { "Authorization" => env_auth },
+          "redis" => { "password" => '${{ env "DECK_REDIS_PW" }}', "host" => "r" }, "timeout" => 1000
+        } } ]
+
+        render_change(entity_type: "plugin", operation: "update",
+          before: { "name" => "http-log", "config" => { "http_endpoint" => "[REDACTED]", "headers" => "[REDACTED]",
+                    "redis" => { "password" => "[REDACTED]", "host" => "r" }, "timeout" => 1000 } },
+          after: { "name" => "http-log", "config" => { "redis" => { "host" => "r2" }, "timeout" => 5000 } })
+
+        expect(doc["plugins"][0]["config"]).to eq(
+          "http_endpoint" => '${{ env "DECK_LOG_URL" }}', "headers" => { "Authorization" => env_auth },
+          "redis" => { "password" => '${{ env "DECK_REDIS_PW" }}', "host" => "r2" }, "timeout" => 5000
+        )
+      end
+
+      it "still takes a redacted field's new value when the update supplies one" do
+        doc["plugins"] = [ { "name" => "aws-lambda", "config" => { "aws_secret" => '${{ env "OLD" }}' } } ]
+
+        render_change(entity_type: "plugin", operation: "update",
+          before: { "name" => "aws-lambda", "config" => { "aws_secret" => "[REDACTED]" } },
+          after: { "name" => "aws-lambda", "config" => { "aws_secret" => '${{ env "NEW" }}' } })
+
+        expect(doc["plugins"][0]["config"]).to eq("aws_secret" => '${{ env "NEW" }}')
+      end
+
       it "refuses a plugin scoped to more than one entity, which decK YAML cannot express" do
         expect {
           render_change(entity_type: "plugin", operation: "create",
