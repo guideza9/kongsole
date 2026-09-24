@@ -10,7 +10,7 @@ export interface Config {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const token = "kctl_b27f7fbc89671fcdc1e951ba78bfcc2fb40195b316c576bf"
+  const token = env.KONGCTL_TOKEN?.trim();
   if (!token) {
     throw new Error(
       "KONGCTL_TOKEN is required -- issue a personal access token from the Kongsole web UI " +

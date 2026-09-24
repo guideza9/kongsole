@@ -53,7 +53,7 @@ git commit -m "docs(T0.0): apply agreed requirement decisions and scope rule 2 t
 
 **Interfaces:** Produces `loadConfig(env: NodeJS.ProcessEnv): Config` — throws `KONGCTL_TOKEN is required …` เมื่อไม่มี token
 
-- [ ] **Step 1: เพิ่ม test ที่ยืนยันว่าไม่มี token ใน source**
+- [x] **Step 1: เพิ่ม test ที่ยืนยันว่าไม่มี token ใน source**
 
 ```ts
 // mcp/src/config.test.ts — เพิ่มใน describe("loadConfig")
@@ -69,8 +69,8 @@ it("reads the token from KONGCTL_TOKEN", () => {
 });
 ```
 
-- [ ] **Step 2:** `cd mcp && npm test` → FAIL 2 ข้อ (test เดิม "throws a clear error…" ล้มอยู่แล้ว + test ใหม่)
-- [ ] **Step 3: แก้**
+- [x] **Step 2:** `cd mcp && npm test` → FAIL 2 ข้อ (test เดิม "throws a clear error…" ล้มอยู่แล้ว + test ใหม่)
+- [x] **Step 3: แก้**
 
 ```ts
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -86,8 +86,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 }
 ```
 
-- [ ] **Step 4:** `cd mcp && npm test` → **28/28 pass**
-- [ ] **Step 5:** Commit `fix(T0.1): mcp reads KONGCTL_TOKEN from the environment, no token in source`
+- [x] **Step 4:** `cd mcp && npm test` → **28/28 pass**
+- [x] **Step 5:** Commit `fix(T0.1): mcp reads KONGCTL_TOKEN from the environment, no token in source`
 
 **เกณฑ์ผ่าน:** vitest ผ่านทั้งหมด · `git grep -n "kctl_[0-9a-f]\{8\}" -- mcp/src` ว่าง
 
