@@ -10,7 +10,10 @@ Engineer ที่ต้องเพิ่ม auth, rate limiting หรือ c
 สร้าง plugin ได้ทั้งแบบที่มากับ Kong และ custom โดยอย่างน้อยเห็น schema ว่ามี field อะไร
 
 ## เกณฑ์ยอมรับ (ร่าง)
-- [ ] รายการ plugin ที่ใช้ได้มาจาก node ของ connection นั้นจริง (`GET /` → plugins ที่โหลดอยู่บน server) รวม custom plugin
+- [ ] รายการ plugin มาจาก `GET /` → `plugins.available_on_server` ของ connection นั้น (ไม่ใช่ `enabled_in_cluster`)
+      รวม custom plugin · plugin ที่ไม่ได้โหลดบน node ไม่แสดง
+- [ ] custom plugin: คำอธิบายจาก `config/custom_plugins/<name>.yml` ถ้าไม่มี บอกชัดว่าไม่มี
+- [ ] เตือนเมื่อ schema ของ plugin เดียวกันต่างจาก env อื่นใน project เดียวกัน
 - [ ] ฟอร์มสร้างจาก `GET /schemas/plugins/{name}` ของ connection นั้น: type, required, default, enum, field ซ้อนกัน
 - [ ] field ที่ schema ระบุว่าเป็นความลับหรือรองรับ reference แสดงแบบ mask และแนะนำให้ใช้ `{vault://env/...}`
 - [ ] ค่าที่เป็นความลับผ่าน redactor ก่อนเข้า read-model และไม่แสดงกลับใน UI หรือ MCP

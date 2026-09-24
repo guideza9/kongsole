@@ -32,9 +32,9 @@
 | R2 | สร้าง service และ route | สูง | M1 (service), M3 (route) |
 | R3 | Hint สำหรับมือใหม่ | สูง (ทำคู่กับทุก feature) | ทุก milestone |
 | R4 | Plugins + schema | สูง | M4 |
-| R5 | ช่วยให้เข้าใจแต่ละ project | กลาง | ใหม่ |
-| R6 | Dashboard สถิติ | กลาง | ใหม่ |
-| R7 | Export config + template | กลาง | ใหม่ |
+| R5 | ช่วยให้เข้าใจแต่ละ project | กลาง | M7 |
+| R6 | Dashboard สถิติ | กลาง | M8 |
+| R7 | Export config + template | กลาง | M6 |
 | R8 | PR mode แบบ changeset | สูง | M2 |
 
 ## การพึ่งพา (ให้ AI ตรวจและเติม)
@@ -46,8 +46,11 @@
 ## เกณฑ์ที่ใช้กับทุก requirement
 - [ ] ทุกหน้าที่สร้างหรือแก้ผ่านเกณฑ์ของ R3
 - [ ] ไม่ละเมิดกฎใน CLAUDE.md (credential, admin path, apply_mode)
-- [ ] ข้อความทั้งหมดรองรับภาษาไทยโดยไม่ล้นหรือตัดคำผิด
-- [ ] test ของ backend ผ่านทั้งหมด และ `npx impeccable detect` ไม่มี finding หลักบนหน้าที่แก้
+- [ ] UI เป็นภาษาอังกฤษทั้งหมด และข้อมูลที่ผู้ใช้กรอกเป็นภาษาไทย (ชื่อ entity, notes ของ R5) แสดงได้ไม่ล้นไม่ถูกตัด
+- [ ] test ของ backend ผ่านทั้งหมด และ `npx impeccable detect` บน snapshot HTML ของหน้าที่แก้
+      (`tmp/ui-snapshots/`, ดู T0.6) ไม่มี finding หลักเพิ่มจาก baseline — detect อ่าน `.erb` ไม่ได้
+- [ ] เมื่อเครื่องนี้เข้า network ของ project ไม่ได้ (DNS, refused, timeout, TLS) ทุกหน้าบอกชนิดปัญหาและ
+      `network_note` ของ project ไม่รวมเป็น "Admin API ล่ม" และไม่ตอบ 500
 - [ ] เปิดหน้าจริงและกดใช้ flow จริงกับ compose ในเครื่องแล้ว
 
 ## นอก scope ของรอบนี้

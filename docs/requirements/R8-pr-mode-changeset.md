@@ -16,7 +16,9 @@ Engineer ที่เตรียมการเปลี่ยนแปลง�
 - [ ] block การเปิด PR เมื่อแตะ entity ที่มี tag `kong-admin-path` หรือมีการลบเกินเกณฑ์
 - [ ] PR body สรุปรายการเปลี่ยนแปลง และมี trailer `Changed-by:` จาก operator
 - [ ] ตรวจก่อนเปิด PR ว่า git หรือ Kong เปลี่ยนไปหลังเริ่ม changeset หรือไม่ และแจ้งให้ชัด
-- [ ] หลังเปิด PR แสดงลิงก์และสถานะของ PR
+- [ ] หลัง push แสดงลิงก์ branch (จาก `git_web_url` ของ project) และ PR body ให้คัดลอก
+      ผู้ใช้วาง URL ของ PR กลับมาได้ · สถานะจาก host API ยังไม่ทำจนกว่าเลือก git host
+- [ ] ตรวจ CiGate (admin path + delete threshold ของ project, default 3) ใน Kongsole ก่อน push
 - [ ] YAML ที่ได้ผ่าน parse → serialize แล้วเหมือนเดิมทุก byte
 - [ ] ผ่านเกณฑ์ของ R3
 
@@ -27,8 +29,10 @@ Engineer ที่เตรียมการเปลี่ยนแปลง�
 - PR mode อยู่ใน M2: branch → PR → CAB → merge → CI รัน `deck gateway sync`
 - render จาก git, `select_tags` บังคับ, round-trip ต้องตรงทุก byte
 - R8 ขยายแนวคิด ChangePlan ที่ออกแบบไว้ ไม่สร้างกลไกใหม่แยก
+- 1 changeset ต่อ 1 connection · ไม่มี changeset ใน direct · agent เพิ่มรายการได้ ส่งได้เฉพาะคน ·
+  ทุกการเขียน PR mode เข้า changeset · git host ยังไม่เลือก · threshold ยังไม่ตัดสิน (ใช้ 3)
 
-## คำถามค้าง
+## คำถามค้าง (เดิม — ตอบแล้วตามส่วน "ตัดสินแล้ว")
 1. git host ที่ใช้
 2. changeset หนึ่งอันข้ามหลาย env ได้ไหม (เช่น uat และ prod พร้อมกัน) หรือหนึ่ง PR ต่อหนึ่ง env
 3. เกณฑ์จำนวนการลบที่ต้อง block

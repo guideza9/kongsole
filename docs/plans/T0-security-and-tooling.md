@@ -33,10 +33,10 @@
 
 (เจ้าของงานอนุมัติ §B และ §C เมื่อ 2026-09-24)
 
-- [ ] **Step 1:** แก้ตาม `docs/plans/design-amendments.md` §C1–C9 ทุกข้อ ตามตัวอักษร
-- [ ] **Step 1b:** แก้ `CLAUDE.md` กฎข้อ 2 ตาม §B ตามตัวอักษร ห้ามแตะกฎข้ออื่น
-- [ ] **Step 2:** `git diff --stat` ต้องแตะ 9 ไฟล์ใน `docs/requirements/` และ `CLAUDE.md` เท่านั้น
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** แก้ตาม `docs/plans/design-amendments.md` §C1–C9 ทุกข้อ ตามตัวอักษร
+- [x] **Step 1b:** แก้ `CLAUDE.md` กฎข้อ 2 ตาม §B ตามตัวอักษร ห้ามแตะกฎข้ออื่น
+- [x] **Step 2:** `git diff --stat` ต้องแตะ 9 ไฟล์ใน `docs/requirements/` และ `CLAUDE.md` เท่านั้น
+- [x] **Step 3:** Commit
 
 ```bash
 git add docs/requirements CLAUDE.md

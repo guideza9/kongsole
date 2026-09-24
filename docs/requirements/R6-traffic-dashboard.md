@@ -10,16 +10,18 @@ Engineer ที่ต้องดูว่า API ไหนมี error เพ�
 - จำนวน request แยกตาม HTTP status
 - request ต่อวินาที (TPS) และจำนวน request
 - ดูได้ทั้งแบบรวม ต่อ service และต่อ route
-- ใช้ข้อมูลจาก File Log plugin
-- ล้างข้อมูลเก่าอัตโนมัติ เพราะกังวลเรื่อง storage
+- ใช้ metric จาก Kong Prometheus plugin ผ่าน Prometheus ขององค์กร Kongsole ไม่เก็บ log หรือ metric เอง
 
 ## เกณฑ์ยอมรับ (ร่าง)
 - [ ] เลือก project, env, connection และช่วงเวลาได้
 - [ ] แสดงจำนวน request ตามกลุ่ม status (2xx/3xx/4xx/5xx) และตาม status code
 - [ ] แสดง TPS และจำนวน request ทั้งแบบรวม ต่อ service และต่อ route
-- [ ] raw log เก็บไม่เกิน N วัน ข้อมูลสรุปเก็บ M วัน ลบอัตโนมัติ ตั้งค่าได้ และแสดงพื้นที่ที่ใช้อยู่
-- [ ] ไม่เก็บ header, cookie, query หรือ body ที่อ่อนไหว (เช่น `Authorization`, `apikey`) — กรองก่อนเขียนลงดิสก์ของ Kongsole และมี test
-- [ ] การเก็บ log ไม่ทำให้ latency ของ Kong เพิ่มอย่างมีนัยสำคัญ
+- [ ] Kongsole ไม่เขียน metric หรือ log ลงดิสก์ และไม่ส่ง credential ให้ Prometheus · ถ้า Prometheus ตอบ 401/403
+      แสดงคำอธิบาย แล้วเพิ่ม credential เป็นงานแยก
+- [ ] ไม่ต้อง login · Prometheus ของแต่ละ project อาจอยู่คนละ network: หน้าโหลดทันที ข้อมูลโหลดแยกต่อ env
+      และบอกชนิดปัญหาเครือข่ายพร้อม `network_note` ของ project ภายใน ~10 วินาที
+- [ ] แต่ละ connection แสดง preflight: มี prometheus plugin ไหม, scope, `status_code_metrics` เปิดไหม
+      ถ้าไม่พร้อม บอกวิธีแก้ (แก้ plugin ผ่าน R4 → direct หรือ changeset)
 - [ ] ผ่านเกณฑ์ของ R3
 
 ## นอก scope
@@ -35,7 +37,10 @@ Engineer ที่ต้องดูว่า API ไหนมี error เพ�
   - Prometheus plugin ที่มากับ Kong CE (ให้ metric ต่อ service/route โดยไม่ต้องเก็บ raw log — ตรวจตามเวอร์ชัน Kong)
   - pipeline log ที่องค์กรมีอยู่แล้ว
 
-## คำถามค้าง
+## ตัดสินแล้ว
+ใช้ Prometheus plugin (มีอยู่แล้วทุก project) + Prometheus ขององค์กร (query PromQL) ทุก env
+
+## คำถามค้าง (เดิม — ตอบแล้วตามส่วน "ตัดสินแล้ว")
 1. ค่า N และ M
 2. ต้องการใน env ไหนบ้าง และยอมให้เพิ่ม plugin บน prod หรือไม่
 3. มี pipeline log หรือ monitoring ขององค์กรที่ต้องใช้ร่วมหรือห้ามซ้ำหรือไม่

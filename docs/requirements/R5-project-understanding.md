@@ -11,7 +11,8 @@
 
 ## เกณฑ์ยอมรับ (ร่าง)
 - [ ] หน้า overview ต่อ project: env ทั้งหมด, apply_mode, สถานะ connection, จำนวน entity แต่ละชนิด
-- [ ] คนใหม่ตอบได้ภายใน 5 นาทีว่า request ไปยัง path หนึ่งผ่าน route, service, plugin อะไรบ้าง
+- [ ] คนใหม่ใช้ request tracer (host + path + method) แล้วเห็น route, service และ plugin ตามลำดับที่ทำงาน
+      ภายใน 5 นาที ตามสคริปต์ทดสอบใน plan R5 (เจ้าของงานเป็นผู้ตรวจรับ)
 - [ ] มีที่สำหรับข้อมูลที่ทีมเขียนเอง (flow ธุรกิจ, owner, ติดต่อใคร, ข้อควรระวัง) และแก้ได้
 - [ ] ส่วนที่มาจาก Kong สร้างจาก read-model ไม่ต้องเรียก Admin API ใหม่
 - [ ] ผ่านเกณฑ์ของ R3
@@ -23,7 +24,6 @@
 Kongsole ใช้ DB ในเครื่องของแต่ละคน ข้อมูลที่ทีมเขียนเองจะไม่ถูกแชร์ถ้าเก็บใน DB
 การเก็บใน git ของทีมจะแชร์ได้ แต่ต้องผ่าน PR
 
-## คำถามค้าง (ให้ AI เสนอ 2-3 ทางเลือกพร้อมข้อดีข้อเสีย)
-1. รูปแบบ: หน้า overview + แผนผัง service → route → plugin จากข้อมูลจริง /
-   เอกสาร markdown ต่อ project ใน repo ของทีมแล้วแสดงใน Kongsole / ผสมกัน
-2. ข้อมูลที่ทีมเขียนเก็บที่ไหน
+## ตัดสินแล้ว
+หน้า overview + request tracer จาก read-model + notes markdown ที่ `config/projects/<key>.md`
+ใน repo Kongsole (แชร์ผ่าน git แก้ผ่าน PR) · เปิดได้โดยไม่ต้อง login

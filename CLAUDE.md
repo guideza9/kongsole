@@ -21,7 +21,11 @@
 1. connection ที่ `apply_mode = pr` ห้ามเขียน Admin API ทุกกรณี ต้องเป็น PR ของ decK YAML เท่านั้น
    รวมถึง import, bulk update, sync และปุ่มลัดทุกชนิด
    (เหตุผล: ทุกการเปลี่ยน uat/prod ต้องมีร่องรอยให้ CAB ตรวจ)
-2. Render decK YAML จาก git ไม่ใช่จาก `deck dump` และต้องมี `_info.select_tags` เสมอ
+2. YAML ที่ Kongsole เขียนลง git ของ env PR mode ต้อง render จาก git ไม่ใช่จาก `deck dump`
+   และต้องมี `_info.select_tags` เสมอ
+   ข้อยกเว้นเดียว: export (R7) ใช้ `deck gateway dump --select-tag` ได้ แต่ต้องผ่าน `Kong::ExportSanitizer`
+   ทุกครั้ง (ตัด credential, private key, secret ของ plugin, entity `kong-admin-path`) ต้องมี select_tag
+   อย่างน้อย 1 ค่าและห้ามเป็น `kong-admin-path` · output ของ dump ห้ามเขียนลงดิสก์ก่อนผ่าน sanitizer
    (เหตุผล: `deck gateway sync` ลบทุกอย่างใน Kong ที่ไม่อยู่ในไฟล์ ถ้าไฟล์ผิดคือ outage)
 3. Entity ที่มี tag `kong-admin-path` ห้าม render ลง YAML ห้ามลบผ่าน MCP
    และการลบผ่าน UI ต้องพิมพ์ชื่อ connection ยืนยัน

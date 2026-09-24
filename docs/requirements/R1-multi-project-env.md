@@ -18,12 +18,21 @@ Engineer ที่ดูแลหลาย project สลับไปมาใ�
 ## เกณฑ์ยอมรับ (ร่าง)
 - [ ] สร้าง project และกำหนดรายการ env พร้อมลำดับได้ ทดสอบด้วยชุด env ของ ProjectA และ ProjectX ข้างต้น
 - [ ] ทุก connection ผูกกับ project และ env เดียว
-- [ ] แต่ละ env กำหนด `rank` และ `apply_mode` ได้
+- [ ] env ที่ `apply_mode = pr` กำหนดได้เฉพาะใน `config/connections.yml` (ต้องมี git)
+      env ที่เป็น direct สร้างและแก้ใน UI ได้ · UI ไม่มีทางตั้งหรือถอด `pr`
+- [ ] connection ที่สร้างใน UI อยู่ใน DB ของเครื่องนั้นเท่านั้น และมีป้าย "Local only"
+      connection จาก `connections.yml` แก้ใน UI ไม่ได้
+- [ ] ชื่อ env ตั้งเองได้ต่อ project · ชื่อ dev/sit/uat/prod ได้ rank 0/1/2/3 อัตโนมัติ
+      ชื่ออื่นแสดงเป็น "other" และต้องเลือก rank 0–3 เอง ไม่มีค่า default
+- [ ] หนึ่ง env มีหนึ่ง connection
+- [ ] project มี `network_note` (เช่น ต้องต่อ VPN ไหน) แสดงต่อท้าย error เครือข่าย และสถานะ connection
+      แยก "unreachable" (เข้า network ไม่ได้) จาก "unavailable" (Kong ตอบ 502/503)
 - [ ] env ที่ยังไม่ได้กำหนด `apply_mode` ต้องไม่ถูกตีความเป็น `direct`
-- [ ] header แสดง project + env + สีประจำ connection ตลอดเวลา และสลับ env ภายใน project ได้ในคลิกเดียว
+- [ ] header แสดง project + env + สีประจำ connection ตลอดเวลา และ switcher แสดง env ของ project
+      ตามลำดับ คลิกแล้วไปหน้า login ของ env นั้น (login ใหม่ทุกครั้งที่สลับ)
 - [ ] `config/connections.yml` รองรับ project/env โดยยังไม่มี secret ในไฟล์
 - [ ] `connections.yml` และข้อมูลในเครื่องแบบเดิมย้ายมาได้โดยไม่ต้องกรอก credential ใหม่
-- [ ] MCP ยังต้องระบุ connection ชัดเจน และชื่อที่ใช้อ้างไม่กำกวมเมื่อมีหลาย project
+- [ ] MCP อ้าง connection ด้วย `project/env` เท่านั้น
 - [ ] migration reversible
 
 ## นอก scope
@@ -34,12 +43,12 @@ Engineer ที่ดูแลหลาย project สลับไปมาใ�
 - rank 0 (dev) ถึง 3 (prod)
 - registry อยู่ใน git ของทีม credential อยู่ใน DB ในเครื่องของแต่ละคน
 
-## คำถามค้าง
-1. rank มี 4 ระดับ แต่ ProjectA มี 6 env — pt และ ps อยู่ rank ไหน
-2. `apply_mode` ของแต่ละ env ของ ProjectA และ ProjectX
-3. หนึ่ง env มี Kong หลาย node (หลาย connection) ได้ไหม ถ้าได้ แสดงอย่างไร
-4. แต่ละ project ใช้ config repo ของ decK แยกกัน หรือ repo เดียว
-5. สีประจำ connection กำหนดต่อ env หรือต่อ rank
+## ตัดสินแล้ว (จากคำตอบของเจ้าของงาน 2026-09-24)
+1. rank ของชื่อ env อื่น (เช่น pt, ps) ผู้ใช้เลือกเอง
+2. `apply_mode` ตาม `connections.yml` (pr) / UI (direct)
+3. 1 env = 1 node
+4. repo แยกต่อ project
+5. ความดังของ UI ตาม rank, จุดสีตาม `color_tag` ของ env
 
 ## ตัวอย่างประกอบ (ไม่ใช่ schema ที่ตัดสินแล้ว)
 ```yaml
