@@ -24,11 +24,11 @@ module Kong
       root = parsed(client.get("/"))
       @connection.kong_version = root["version"]
       @connection.mode = root.dig("configuration", "role") || root.dig("configuration", "database")
-      # docs/DESIGN.md section 15 M4's plugin catalog: `enabled_in_cluster`
-      # is the actually-creatable subset (loaded on this Kong node) --
-      # `available_on_server` is everything the binary ships with, most of
-      # which isn't loaded and would 400 on create. Stored verbatim so both
-      # stay available without a second Kong call.
+      # docs/DESIGN.md section 15 M4's plugin catalog: `available_on_server`
+      # is every plugin loaded on this Kong node (bundled and custom) -- the
+      # set that can be created. `enabled_in_cluster` is only the plugins that
+      # already have an instance somewhere (Kong 3.7.1 compose: 43 vs 2).
+      # Stored verbatim so both stay available without a second Kong call.
       @connection.plugins_available = root["plugins"] || {}
 
       @connection.access_level = Kong::AccessProbe.new(client).call

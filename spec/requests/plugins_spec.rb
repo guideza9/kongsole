@@ -16,18 +16,16 @@ RSpec.describe "Plugins (web)", type: :request do
   end
 
   describe "GET /plugins/new (catalog step)" do
-    it "lists only the plugins actually loaded on this Kong node, not everything the binary ships with" do
+    it "lists every plugin loaded on this node, including ones with no instance yet" do
       sign_in
       connection.update!(plugins_available: {
         "enabled_in_cluster" => %w[acl basic-auth],
-        "available_on_server" => { "acl" => {}, "basic-auth" => {}, "rate-limiting" => {} }
+        "available_on_server" => { "acl" => {}, "basic-auth" => {}, "rate-limiting" => {}, "my-custom" => {} }
       })
 
       get new_plugin_path
 
-      expect(response.body).to include("acl")
-      expect(response.body).to include("basic-auth")
-      expect(response.body).not_to include("rate-limiting")
+      %w[acl basic-auth rate-limiting my-custom].each { |name| expect(response.body).to include(name) }
     end
   end
 

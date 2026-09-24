@@ -25,7 +25,7 @@ class PluginsController < ApplicationController
       @schema = fetch_schema(@plugin_name)
       @payload_json = JSON.pretty_generate(seed_payload(@plugin_name, @schema))
     else
-      @catalog = Array(current_connection.plugins_available["enabled_in_cluster"]).sort
+      @catalog = current_connection.plugins_available.fetch("available_on_server", {}).keys.sort
     end
   rescue Kong::Client::Error => e
     redirect_to new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id),

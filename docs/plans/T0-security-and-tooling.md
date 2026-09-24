@@ -346,7 +346,7 @@ config.active_record.encryption.key_derivation_salt = "test-key-derivation-salt-
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** T0.4 · **ไฟล์ที่แก้ได้:** `app/controllers/plugins_controller.rb`, `app/services/kong/connection_login.rb` (comment), `spec/requests/plugins_spec.rb`
 
-- [ ] **Step 1: แก้ test เดิมที่ล็อกพฤติกรรมผิด**
+- [x] **Step 1: แก้ test เดิมที่ล็อกพฤติกรรมผิด**
 
 ```ruby
 it "lists every plugin loaded on this node, including ones with no instance yet" do
@@ -362,10 +362,10 @@ it "lists every plugin loaded on this node, including ones with no instance yet"
 end
 ```
 
-- [ ] **Step 2:** รัน → FAIL (rate-limiting ไม่แสดง)
-- [ ] **Step 3:** `@catalog = current_connection.plugins_available.fetch("available_on_server", {}).keys.sort` และแก้ comment ใน `connection_login.rb` ให้บอกความหมายที่ถูก (available_on_server = plugin ที่โหลดบน node นี้, enabled_in_cluster = ที่มี instance แล้ว; ยืนยันกับ Kong 3.7.1: 43 vs 2)
-- [ ] **Step 4:** PASS · suite 0 failures
-- [ ] **Step 5:** Commit `fix(T0.5): plugin catalog lists plugins loaded on the node, not only ones already in use`
+- [x] **Step 2:** รัน → FAIL (rate-limiting ไม่แสดง)
+- [x] **Step 3:** `@catalog = current_connection.plugins_available.fetch("available_on_server", {}).keys.sort` และแก้ comment ใน `connection_login.rb` ให้บอกความหมายที่ถูก (available_on_server = plugin ที่โหลดบน node นี้, enabled_in_cluster = ที่มี instance แล้ว; ยืนยันกับ Kong 3.7.1: 43 vs 2)
+- [x] **Step 4:** PASS · suite 0 failures
+- [x] **Step 5:** Commit `fix(T0.5): plugin catalog lists plugins loaded on the node, not only ones already in use`
 
 (comment ใน `app/views/plugins/new.html.erb` บรรทัด 9–11 ยังผิด — แก้ใน R4.7 ชั้น UI)
 
