@@ -1,7 +1,7 @@
 # 00 — Roadmap: R1–R8
 
 > สถานะ: **รออนุมัติ plan (ปรับรอบ 2 แล้ว 2026-09-24)** — ห้ามสร้าง worktree ห้ามเริ่ม subagent ห้ามแก้โค้ด จนกว่าเจ้าของงานพิมพ์ "อนุมัติ plan"
-> Worktree (ช่วงที่ 2): _บันทึก path ที่นี่เมื่อสร้าง_ · branch ตั้งต้น: `feature/update_ui_format` @ `661668b`
+> Worktree (ช่วงที่ 2): `.claude/worktrees/roadmap-r1-r8` (branch `feature/roadmap-r1-r8`) · branch ตั้งต้น: `feature/update_ui_format` @ `dc0ca74` (661668b + plan รอบ 2)
 
 ## สรุปหน้าเดียว
 
