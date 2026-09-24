@@ -1,0 +1,407 @@
+# R3 — Onboarding hints Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** มีที่เก็บ hint แหล่งเดียว (`config/locales/hints.en.yml`), ชิ้นส่วน UI ที่ใช้ซ้ำได้สำหรับคำอธิบาย field / empty state / คำเตือนผลกระทบ / error, การปิด hint แบบละเอียดที่คงอยู่หลัง reload และ retrofit หน้าที่มีอยู่แล้วทั้งหมด
+
+**Architecture:** hint ทุกข้อความเป็น I18n key ใต้ `hints.*` · test env เปิด `raise_on_missing_translations` ทำให้ view ที่อ้าง key ที่ไม่มีล้ม test ทันที · การปิด hint = cookie `kongsole_hints` (`detailed` | `compact`) ที่ server อ่านได้ (ไม่มี flash) · error ของ `Kong::Client` ทั้ง 6 แบบแปลเป็น cause + next step ด้วย `Kong::ErrorExplanation` ตัวเดียว
+
+**Tech Stack:** Rails I18n, Stimulus, Tailwind (tokens ใน `app/assets/tailwind/application.css`), RSpec request/helper specs
+
+**Spec:** `docs/requirements/R3-onboarding-hints.md` (แก้ตาม `design-amendments.md` §C4), `docs/UI-DESIGN.md` (ภาษาภาพ + copy register), `docs/plans/00-roadmap.md`
+
+## Global Constraints
+
+- UI ภาษาอังกฤษทั้งหมด (Q15) · copy register ตาม `UI-DESIGN.md` §Copy register: label สั้นตรง, ประโยคที่สำคัญสุภาพและเจาะจง
+- hint ที่ AI ไม่มั่นใจ ขึ้นต้นด้วย `To Edit: ` (มีช่องว่าง) — ห้ามลบ prefix เองจนกว่าเจ้าของงานแก้
+- 13px เป็นขนาดต่ำสุด (`--text-xs`), ห้ามใส่ `style="…var(--color…)"` (มี spec บังคับ)
+- ห้ามใส่ค่าลับหรือค่าจริงของ env ทีมใน example (ใช้ `example.internal`, `payments-api` ฯลฯ)
+- ชั้น UI แก้ได้เฉพาะ `app/views/**`, `app/helpers/**` (presentational), `app/javascript/controllers/**`, `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`
+
+## Review Focus
+
+1. ผู้ใช้กด "Hide detailed hints" แล้ว reload / เปิดหน้าอื่น → ยังซ่อนอยู่ ไม่กระพริบ — request spec ใน R3.1
+2. key hint ที่ view อ้างแต่ไม่มีใน yml → test ล้ม (ไม่ใช่แสดง "translation missing") — config ใน R3.1 + spec ใน R3.4
+3. error ที่ไม่ใช่ 6 แบบ (`UnexpectedResponse`, timeout ของ Faraday) → ต้องมีคำอธิบาย generic ไม่ใช่ 500 — spec ใน R3.2
+4. cookie ถูกแก้เป็นค่าแปลก (`kongsole_hints=<script>`) → ตีความเป็น `detailed` — spec ใน R3.1
+5. ข้อความ hint ยาว / tag ยาว / ชื่อ entity ภาษาไทย บนจอ 390px → ไม่ล้นแนวนอน — ตรวจใน R3.4 ด้วย snapshot 390x844
+
+---
+
+## Contract UI ↔ backend
+
+| สิ่งที่ backend ให้ | ชนิด | ใช้ที่ |
+|---|---|---|
+| `detailed_hints?` (helper_method ใน `ApplicationController`) | `Boolean` — `true` เว้นแต่ cookie `kongsole_hints == "compact"` | partial hint, toggle |
+| `PATCH /hint_preference` (`hint_preference_path`) param `mode=detailed\|compact` | redirect back (fallback `root_path`), set `cookies.permanent[:kongsole_hints]` httponly: false, same_site: :lax | toggle (form ปกติ ทำงานได้โดยไม่มี JS) |
+| `Kong::ErrorExplanation.for(error) -> Kong::ErrorExplanation::Result(key:, title:, cause:, next_step:)` | อ่าน `hints.errors.<key>.*` | controller rescue ทุกจุด + login |
+| `flash[:error_explanation]` = `{ "key", "title", "cause", "next_step" }` | Hash (string keys) | layout แสดงใต้ alert |
+| `@schema_fields` ใน `entities#new/edit` | `Array<{name: String, type: String, required: Boolean, default: Object, one_of: Array, nested: Array}>` จาก `GET /schemas/<entity>` (nil ถ้าอ่านไม่ได้) | reference panel ของ type ที่ใช้ JSON editor |
+| key ใน `hints.en.yml` | ตามโครงข้างล่าง | ทุก view |
+
+โครง key (ห้ามเปลี่ยนชื่อชั้นบนสุดหลัง R3.1):
+
+```yaml
+en:
+  hints:
+    fields:            # hints.fields.<form>.<field>.{help,example}
+      connection: { name: {help:, example:}, … }
+      login: { … }
+      service: { … }   # เติมโดย R2
+      route: { … }     # เติมโดย R2
+      upstream: { … }
+      target: { … }
+      certificate: { … }
+      ca_certificate: { … }
+      sni: { … }
+      consumer: { … }
+      plugin: { … }    # ส่วนกลางของ plugin (scope, enabled, tags) — config ของแต่ละ plugin อยู่ R4
+    empty_states:      # hints.empty_states.<page>.{title,body,action}
+    risks:             # hints.risks.<situation>.{title,body}
+    errors:            # hints.errors.<key>.{title,cause,next_step}
+    pages:             # hints.pages.<page>.intro — บรรทัดอธิบายใต้ h1
+```
+
+---
+
+### Task R3.1: โครงสร้าง hint + การปิด hint (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** T0 ทั้งหมด · **ไฟล์ที่แก้ได้:**
+- Create: `config/locales/hints.en.yml` (โครง key + ค่า `To Edit: pending` ขั้นต่ำที่ spec ต้องใช้), `app/controllers/hint_preferences_controller.rb`, `lib/tasks/hints.rake`, `spec/requests/hint_preferences_spec.rb`, `spec/lib/hints_rake_spec.rb`
+- Modify: `config/routes.rb`, `app/controllers/application_controller.rb`, `config/environments/test.rb` (`config.i18n.raise_on_missing_translations = true`)
+
+**Interfaces:** Produces `detailed_hints?`, `hint_preference_path`, rake `hints:todo`
+
+- [ ] **Step 1: test การตั้งค่า**
+
+```ruby
+# spec/requests/hint_preferences_spec.rb
+require "rails_helper"
+
+RSpec.describe "Hint preference", type: :request do
+  it "remembers compact hints across requests (a permanent cookie, read on the server)" do
+    patch hint_preference_path, params: { mode: "compact" }, headers: { "HTTP_REFERER" => connections_url }
+    expect(response).to redirect_to(connections_url)
+    expect(cookies[:kongsole_hints]).to eq("compact")
+
+    get connections_path
+    expect(controller.send(:detailed_hints?)).to be(false)
+  end
+
+  it "treats anything but 'compact' as detailed" do
+    cookies[:kongsole_hints] = "<script>"
+    get connections_path
+    expect(controller.send(:detailed_hints?)).to be(true)
+  end
+
+  it "rejects an unknown mode without touching the cookie" do
+    patch hint_preference_path, params: { mode: "bogus" }
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(cookies[:kongsole_hints]).to be_nil
+  end
+end
+```
+
+- [ ] **Step 2: test ของ rake `hints:todo`**
+
+```ruby
+# spec/lib/hints_rake_spec.rb
+require "rails_helper"
+require "rake"
+
+RSpec.describe "hints:todo" do
+  before(:all) { Rails.application.load_tasks }
+
+  it "lists every hint still marked To Edit, by key" do
+    I18n.backend.store_translations(:en, hints: { fields: { demo: { x: { help: "To Edit: check this" } } } })
+    expect { Rake::Task["hints:todo"].execute }.to output(/hints\.fields\.demo\.x\.help/).to_stdout
+  end
+end
+```
+
+- [ ] **Step 3:** รัน 2 ไฟล์ → FAIL
+- [ ] **Step 4: implement**
+
+```ruby
+# app/controllers/hint_preferences_controller.rb
+# R3: the "hide detailed hints" switch. No user database (docs/DESIGN.md
+# section 3), so the choice belongs to the browser, as a cookie the server
+# reads -- the page renders in the chosen mode with no flash of hints.
+class HintPreferencesController < ApplicationController
+  MODES = %w[detailed compact].freeze
+
+  def update
+    mode = params[:mode].to_s
+    return head(:unprocessable_entity) unless MODES.include?(mode)
+
+    cookies.permanent[:kongsole_hints] = { value: mode, same_site: :lax }
+    redirect_back fallback_location: root_path
+  end
+end
+```
+
+```ruby
+# app/controllers/application_controller.rb — เพิ่ม
+helper_method :detailed_hints?
+
+def detailed_hints?
+  cookies[:kongsole_hints] != "compact"
+end
+```
+
+```ruby
+# config/routes.rb
+resource :hint_preference, only: :update
+```
+
+```ruby
+# lib/tasks/hints.rake
+namespace :hints do
+  desc "List hints still marked 'To Edit:' for the owner to review (R3)"
+  task todo: :environment do
+    I18n.backend.send(:init_translations) unless I18n.backend.initialized?
+    walk = lambda do |node, path|
+      case node
+      when Hash then node.each { |k, v| walk.call(v, [ *path, k ]) }
+      when String then puts "#{path.join('.')}: #{node}" if node.start_with?("To Edit:")
+      end
+    end
+    walk.call(I18n.backend.send(:translations).dig(:en, :hints) || {}, [ "hints" ])
+  end
+end
+```
+
+- [ ] **Step 5:** PASS ทั้ง 2 ไฟล์ · รันทั้ง suite (เปิด `raise_on_missing_translations` แล้ว) → 0 failures (ถ้า view เดิมมี `t()` ที่หาย key ให้หยุดรายงาน)
+- [ ] **Step 6:** Commit `feat(R3.1): one hints file, a server-read hint preference, and hints:todo`
+
+**เกณฑ์ผ่าน:** 3+1 examples ผ่าน · suite 0 failures
+
+---
+
+### Task R3.2: คำอธิบาย error ของ Kong 6 แบบ (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R3.1 · **ไฟล์ที่แก้ได้:**
+- Create: `app/services/kong/error_explanation.rb`, `spec/services/kong/error_explanation_spec.rb`
+- Modify: `app/controllers/sessions_controller.rb` (`login_error_message` → ใช้ ErrorExplanation), `app/controllers/entities_controller.rb`, `app/controllers/plugins_controller.rb` (rescue `Kong::Client::Error` ใส่ `flash[:error_explanation]`), `config/locales/hints.en.yml` (key `hints.errors.*` 8 ตัว — ค่าเป็น `To Edit: pending`, R3.3 เขียนจริง), `spec/requests/sessions_spec.rb`, `spec/requests/entities_spec.rb`
+
+**Interfaces:**
+- Produces `Kong::ErrorExplanation.for(error) -> Result` โดย `Result = Struct.new(:key, :title, :cause, :next_step, keyword_init: true)` และ `Result#to_flash -> Hash`
+- mapping: `Unauthorized→unauthorized`, `Forbidden→forbidden`, `RouteNotMatched→route_not_matched`, `EntityNotFound→entity_not_found`, `RateLimited→rate_limited`, `UpstreamUnavailable→upstream_unavailable`, `UnexpectedResponse→unexpected_response`, อื่นๆ (รวม `Faraday::Error`) → `connection_failed`
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/services/kong/error_explanation_spec.rb
+require "rails_helper"
+
+RSpec.describe Kong::ErrorExplanation do
+  {
+    Kong::Client::Unauthorized => "unauthorized",
+    Kong::Client::Forbidden => "forbidden",
+    Kong::Client::RouteNotMatched => "route_not_matched",
+    Kong::Client::EntityNotFound => "entity_not_found",
+    Kong::Client::RateLimited => "rate_limited",
+    Kong::Client::UpstreamUnavailable => "upstream_unavailable",
+    Kong::Client::UnexpectedResponse => "unexpected_response"
+  }.each do |klass, key|
+    it "explains #{klass.name.demodulize} with its own cause and next step" do
+      result = described_class.for(klass.new("x"))
+      expect(result.key).to eq(key)
+      expect([ result.title, result.cause, result.next_step ]).to all(be_present)
+    end
+  end
+
+  it "gives a generic explanation for a network failure instead of raising" do
+    expect(described_class.for(Faraday::ConnectionFailed.new("refused")).key).to eq("connection_failed")
+  end
+
+  it "never tells a read-only credential that the entity is missing" do
+    ro = described_class.for(Kong::Client::RouteNotMatched.new("x"))
+    expect(ro.cause).not_to match(/not found|does not exist/i)
+  end
+end
+```
+
+```ruby
+# spec/requests/sessions_spec.rb — เพิ่ม
+it "explains a wrong password with a cause and what to do next" do
+  connection = create(:kong_connection, admin_url: "https://kong.test")
+  stub_request(:get, "https://kong.test/").to_return(status: 401, headers: { "WWW-Authenticate" => "Basic" },
+    body: { message: "Unauthorized" }.to_json)
+  post login_connection_path(connection), params: { username: "a", password: "b" }
+  expect(response.body).to include(I18n.t("hints.errors.unauthorized.next_step"))
+end
+```
+
+- [ ] **Step 2:** FAIL → implement (อ่าน `I18n.t("hints.errors.#{key}.title")` ฯลฯ) → PASS
+- [ ] **Step 3:** ใน `EntitiesController`/`PluginsController` ทุก `rescue Kong::Client::Error => e` ใส่ `flash[:error_explanation] = Kong::ErrorExplanation.for(e).to_flash` (สำหรับ `render` ใช้ `flash.now`) ข้อความ alert เดิมคงไว้
+- [ ] **Step 4:** request spec: plan create ที่ Kong ตอบ 404 no-route → `flash[:error_explanation]["key"] == "route_not_matched"`
+- [ ] **Step 5:** suite 0 failures · Commit `feat(R3.2): every Kong error names its cause and the next step`
+
+**เกณฑ์ผ่าน:** 10 examples ใหม่ผ่าน · ไม่มี controller ใดต่อ `e.message` ของ Faraday เข้าหน้าเว็บโดยไม่ผ่าน explanation
+
+---
+
+### Task R3.3: schema fields สำหรับ reference panel (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R3.1 · **ไฟล์ที่แก้ได้:**
+- Create: `app/services/kong/entity_schema.rb`, `spec/services/kong/entity_schema_spec.rb`
+- Modify: `app/controllers/entities_controller.rb` (`new`, `edit`, `render_new_with_error` ตั้ง `@schema_fields`), `spec/requests/entities_spec.rb`
+
+**Interfaces:** Produces `Kong::EntitySchema.fields(client:, entity_type:) -> Array<Hash> | nil` — flatten `GET /schemas/<Kong::EntityTypes.fetch(type).schema_name || type+"s">` เป็น `{name:, type:, required:, default:, one_of:, nested:}` · ตัด `Kong::EntityTypes::KONG_MANAGED_FIELDS` · nil เมื่อ `Kong::Client::Error`
+
+- [ ] **Step 1: test**
+
+```ruby
+require "rails_helper"
+
+RSpec.describe Kong::EntitySchema do
+  let(:connection) { create(:kong_connection, admin_url: "https://kong.test") }
+  let(:client) { Kong::Client.new(connection: connection, secret: "pw") }
+
+  it "flattens Kong's upstream schema into reference rows, without Kong-managed fields" do
+    stub_request(:get, "https://kong.test/schemas/upstreams").to_return(status: 200, body: { fields: [
+      { id: { type: "string", auto: true } },
+      { name: { type: "string", required: true } },
+      { algorithm: { type: "string", default: "round-robin", one_of: %w[consistent-hashing least-connections round-robin] } }
+    ] }.to_json)
+
+    rows = described_class.fields(client: client, entity_type: "upstream")
+    expect(rows.map { _1[:name] }).to eq(%w[name algorithm])
+    expect(rows.last).to include(default: "round-robin", one_of: include("least-connections"))
+  end
+
+  it "returns nil when Kong cannot be read, so the page falls back to hints alone" do
+    stub_request(:get, "https://kong.test/schemas/upstreams").to_return(status: 503, body: "{}")
+    expect(described_class.fields(client: client, entity_type: "upstream")).to be_nil
+  end
+end
+```
+
+- [ ] **Step 2:** FAIL → implement → PASS · ตั้ง `@schema_fields` ใน controller + request spec ว่า `entities#new?type=upstream` ตอบ 200 เมื่อ schema 503
+- [ ] **Step 3:** ยืนยัน path schema ของแต่ละ type กับ compose (GET เท่านั้น): `/schemas/upstreams`, `/schemas/targets`, `/schemas/certificates`, `/schemas/ca_certificates`, `/schemas/snis`, `/schemas/consumers` → ถ้า path ใดไม่ใช่ ให้ใช้ `schema_name` จาก registry
+- [ ] **Step 4:** suite 0 failures · Commit `feat(R3.3): entity forms get Kong's own schema as reference rows`
+
+---
+
+### Task R3.4: ชิ้นส่วน hint + toggle (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R3.1, R3.2 · **ไฟล์ที่แก้ได้:**
+- Create: `app/views/shared/_field_hint.html.erb`, `app/views/shared/_empty_state.html.erb`, `app/views/shared/_risk_notice.html.erb`, `app/views/shared/_error_explanation.html.erb`, `app/views/shared/_hint_toggle.html.erb`, `app/views/shared/_schema_reference.html.erb` (ย้ายจาก `plugins/_schema_reference`), `app/helpers/hints_helper.rb`, `app/javascript/controllers/hint_toggle_controller.js`, `spec/helpers/hints_helper_spec.rb`
+- Modify: `app/views/layouts/application.html.erb` (toggle ใน topbar + `_error_explanation` ใต้ alert), `app/assets/tailwind/application.css`, `app/views/plugins/new.html.erb` (render partial ใหม่), `spec/requests/ui_snapshots_spec.rb`
+
+**คำสั่ง:** `/impeccable shape shared hint components` → `/impeccable onboard` → `/impeccable harden`
+บอก Impeccable: design system อยู่ที่ `docs/UI-DESIGN.md` (ห้ามเขียนทับ `docs/DESIGN.md`)
+
+**Interfaces (helper — presentational):**
+- `field_hint(form, field, id:)` → `<p id=…>` help + `<span>` "e.g. …" ; ส่วน "detail" (ถ้ามี key `detail`) แสดงเมื่อ `detailed_hints?`
+- `hint_describedby(form, field)` → id สำหรับ `aria-describedby`
+- `empty_state(page, **interpolations)` → render `_empty_state`
+- `risk_notice(situation, **interpolations)` → render `_risk_notice`
+
+- [ ] **Step 1:** helper spec (เขียนก่อน)
+
+```ruby
+require "rails_helper"
+
+RSpec.describe HintsHelper, type: :helper do
+  before do
+    I18n.backend.store_translations(:en, hints: { fields: { demo: { host: {
+      help: "Where Kong sends the request.", example: "payments.internal", detail: "Longer explanation." } } } })
+  end
+
+  it "renders help and example, linked by id for aria-describedby" do
+    allow(helper).to receive(:detailed_hints?).and_return(true)
+    html = helper.field_hint(:demo, :host, id: "demo-host-hint")
+    expect(html).to include('id="demo-host-hint"', "Where Kong sends the request.", "payments.internal", "Longer explanation.")
+  end
+
+  it "drops only the detail in compact mode -- help and example always stay" do
+    allow(helper).to receive(:detailed_hints?).and_return(false)
+    html = helper.field_hint(:demo, :host, id: "x")
+    expect(html).to include("payments.internal")
+    expect(html).not_to include("Longer explanation.")
+  end
+end
+```
+
+- [ ] **Step 2:** รัน `/impeccable shape` → สร้าง partial/CSS ตามผลลัพธ์ที่ยึด `UI-DESIGN.md` (hairline, `text-xs` 13px, ink-soft, ไม่มีไอคอนใหม่, ไม่มีสีใหม่)
+- [ ] **Step 3:** toggle: `<form>` PATCH ไป `hint_preference_path` ทำงานได้ไม่มี JS; `hint_toggle_controller.js` แค่ submit ด้วย `requestSubmit()` และอัปเดต `aria-pressed`
+- [ ] **Step 4:** `bundle exec rspec spec/helpers/hints_helper_spec.rb spec/requests` → PASS
+- [ ] **Step 5:** เพิ่ม snapshot `layout-compact-hints` + `plugins-config` แล้ว `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb && npx impeccable detect tmp/ui-snapshots`
+- [ ] **Step 6:** Commit `feat(R3.4): shared hint, empty-state, risk and error pieces with a remembered hide switch`
+
+**เกณฑ์ detect:** ไม่มี finding หลักเพิ่มจาก baseline บน snapshot ที่แตะ · ตรวจ 390px ไม่มี horizontal scroll
+
+---
+
+### Task R3.5: เขียนเนื้อหา hint ของหน้าที่มีอยู่ (UI — microcopy)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R3.4, R3.3 · **ไฟล์ที่แก้ได้:** `config/locales/hints.en.yml` เท่านั้น
+
+**คำสั่ง:** `/impeccable clarify config/locales/hints.en.yml` (บริบท: ผู้อ่านรู้ HTTP/API แต่ไม่รู้ Kong และธรรมเนียมทีม)
+
+รายการที่ต้องมีครบ (ทุก key มี `help` 1–2 บรรทัด และ `example`):
+
+| กลุ่ม | key |
+|---|---|
+| connection form | name, env (R1 เปลี่ยน), admin_url, verify_ssl, ca_bundle_path, apply_mode, credential_mode, select_tags |
+| login | username, password, operator |
+| upstream | name, algorithm, hash_on, hash_fallback, slots, healthchecks, host_header, tags |
+| target | target, weight, tags |
+| certificate | cert, key (vault reference), snis, tags |
+| ca_certificate | cert, tags |
+| sni | name, certificate, tags |
+| consumer | username, custom_id, tags |
+| plugin (ส่วนกลาง) | scope, enabled, protocols, tags |
+| entity edit (fields tab) | tags, enabled |
+| errors | unauthorized, forbidden, route_not_matched, entity_not_found, rate_limited, upstream_unavailable, unexpected_response, connection_failed |
+| empty_states | connections, entities (แยก "never synced" กับ "no match"), plugins_catalog, change_plans (pending PRs), audit_events, tokens, certificates_expiring, entity_children (routes/plugins/targets/snis/credentials) |
+| risks | delete_entity, delete_admin_path, rank_2_login (uat + prod — แทนคำเตือนที่มีแค่ prod), rank_2_apply, shared_credential_write, env_var_certificate |
+| pages.intro | ทุกหน้าที่มี h1 |
+
+- [ ] **Step 1:** เขียนทุก key · ที่ไม่มั่นใจ (ธรรมเนียมทีม, ค่าตัวอย่างของทีม, owner) → `To Edit: <ร่าง>`
+- [ ] **Step 2:** `bin/rails hints:todo` → แนบรายการในรายงาน
+- [ ] **Step 3:** ตรวจ: ไม่มี example ที่เป็น hostname/credential จริง (`grep -nE "password|secret" config/locales/hints.en.yml` ต้องเป็นคำอธิบายเท่านั้น)
+- [ ] **Step 4:** Commit `docs(R3.5): hints for every existing field, empty state, risk and error`
+
+---
+
+### Task R3.6: retrofit หน้าที่มีอยู่ (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R3.5 · **ไฟล์ที่แก้ได้:** `app/views/connections/*`, `app/views/sessions/new.html.erb`, `app/views/entities/*`, `app/views/plugins/*`, `app/views/change_plans/*`, `app/views/audit_events/index.html.erb`, `app/views/personal_access_tokens/*`, `app/views/certificates/expiring.html.erb`, `app/views/health/show.html.erb`, `app/assets/tailwind/application.css`, `spec/requests/ui_snapshots_spec.rb`, `spec/requests/consistency_spec.rb` (เพิ่ม assertion เท่านั้น)
+
+**คำสั่ง:** `/impeccable onboard app/views` → `/impeccable clarify app/views` → `/impeccable harden app/views`
+
+- [ ] **Step 1:** เพิ่ม assertion (เขียนก่อน) ใน `consistency_spec.rb`:
+  - ทุก `<input>`, `<select>`, `<textarea>` ที่มองเห็นในหน้าฟอร์มที่มีอยู่มี `aria-describedby` ที่ชี้ไป element ที่มีข้อความ
+  - หน้า entities index ที่ไม่มีข้อมูลเลย (ไม่เคย sync) แสดงข้อความของ `hints.empty_states.entities.never_synced.title` และเมื่อ filter ไม่เจอแสดง `…no_match.title`
+  - หน้า login ของ uat แสดง `hints.risks.rank_2_login.title`
+- [ ] **Step 2:** รัน → FAIL
+- [ ] **Step 3:** ใช้ `field_hint` / `empty_state` / `risk_notice` แทนข้อความที่เขียนตรงใน view; JSON editor pages แสดง `shared/_schema_reference` จาก `@schema_fields` + `field_hint` ต่อ field (fallback เป็น hint อย่างเดียวถ้า `@schema_fields` nil)
+- [ ] **Step 4:** PASS · `UI_SNAPSHOTS=1 …` + `npx impeccable detect tmp/ui-snapshots`
+- [ ] **Step 5:** เปิดแอปจริง (`bin/dev` + compose) ถ่าย 390px + 1280px: connections, login uat, entities (ว่าง/มีข้อมูล), new upstream, plugin config, plan review
+- [ ] **Step 6:** Commit `feat(R3.6): every existing page explains its fields, empty states and risks`
+
+**เกณฑ์ detect:** จำนวน finding หลักบน snapshot ≤ baseline · `/impeccable audit app/views` H10 (Help) ≥ 3
+
+---
+
+### Task R3.7: ตรวจรับของเจ้าของงาน (manual)
+
+**ชั้น:** — · **ต้องเสร็จก่อน:** R3.6 และ **R2 ทั้งหมด** (เกณฑ์ "สร้าง service และ route แรก" ต้องมีฟอร์มของ R2)
+
+- [ ] เจ้าของงานตรวจ `bin/rails hints:todo` จนว่าง หรือยอมรับรายการที่เหลือเป็นลายลักษณ์อักษร
+- [ ] ทดสอบกับคน 1 คนที่ไม่เคยใช้ Kong บน compose `local/dev`: ภารกิจ "สร้าง service `echo` ชี้ `http://httpbin.org` และ route `/echo` แล้วเรียกผ่าน proxy ให้ได้ 200" ห้ามเปิดเอกสาร · จดเวลา, จุดที่ติด, คำถามที่ถาม
+- [ ] จุดที่ติด → แก้ใน `hints.en.yml` (UI task เพิ่ม — หยุดถามก่อนเพิ่ม)
+
+## เกณฑ์ปิดงาน R3
+
+- [ ] ทุก field ในฟอร์มที่มีอยู่มี help + example จาก `hints.en.yml` (consistency_spec)
+- [ ] ทุกหน้ามี empty state ที่บอกว่าใช้ทำอะไรและเริ่มอย่างไร
+- [ ] ลบ / rank ≥ 2 / admin path มีคำอธิบายผลกระทบก่อนยืนยัน
+- [ ] error 6 แบบ (+ unexpected, connection_failed) มี cause + next step
+- [ ] ปิด hint แล้วยังปิดหลัง reload (request spec)
+- [ ] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง)
+- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่มจาก baseline · ภาพหน้าจอแนบ
+- [ ] R3.7 ทำหลัง R2 (บันทึกผลใน plan นี้)

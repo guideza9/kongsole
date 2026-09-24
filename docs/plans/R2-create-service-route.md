@@ -1,0 +1,427 @@
+# R2 — Create service and route Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** ฟอร์มทำมือสำหรับสร้าง service และ route (route สร้างใต้ service) ที่ตรวจค่าก่อนส่ง, ใส่ `select_tags` อัตโนมัติ, เตือน route ที่ทับกัน, direct → หน้า review plan, pr → เข้า changeset (R8) โดยไม่เรียก Admin API แบบเขียน และซ่อนปุ่มเมื่อเขียนไม่ได้
+
+**Architecture:** form object (`ServiceForm`, `RouteForm` — ActiveModel) แปลง params → attributes ของ Kong แล้วส่ง `Kong::ChangePlanner` เดิม; `ChangePlanner` เติม `select_tags` ให้ทุก create (คน + agent ได้กฎเดียวกัน); `Kong::RouteOverlap` อ่าน read-model (+ รายการ create ใน changeset) เท่านั้น; `can_propose_writes?` เป็นคำตอบเดียวว่าจะแสดงปุ่มเขียนไหม
+
+**Tech Stack:** Rails 8.1 ActiveModel, Stimulus (ตรวจ overlap สด), RSpec + WebMock
+
+**Spec:** `docs/requirements/R2-create-service-route.md` (+ `design-amendments.md` §C3), `docs/plans/00-roadmap.md` (Q13, Q20, Q21)
+
+## Global Constraints
+
+- PR mode: ไม่มี request `POST/PUT/PATCH/DELETE` ไปที่ Kong — มี test ยืนยัน (request spec + planner spec)
+- ปุ่มสร้างแสดงเมื่อ `apply_mode == "pr"` หรือ (`apply_mode == "direct"` และ `access_level == "rw"`) เท่านั้น
+- route ต้องมี `name` (decK ต้องการ — DESIGN §8 M5c)
+- ชื่อ service/route: `/\A[A-Za-z0-9._~-]+\z/` (ตัวอักษรที่ Kong ยอมให้ใช้ใน name)
+- overlap เป็นคำเตือน ไม่ block
+- ไม่มีค่าตั้งต้นต่อ project, ไม่มี promote flow (Q20)
+- hint ทุก field อยู่ใน `hints.fields.service.*` / `hints.fields.route.*`
+
+## Review Focus
+
+1. route ใหม่ path `/api` ขณะมี route เดิม `/api/v1` บน host เดียวกัน → เตือน (prefix) ทั้งสองทิศ — test ใน R2.3
+2. route เดิมไม่มี `hosts` (ตอบทุก host) + route ใหม่มี host → ถือว่าทับ — test ใน R2.3
+3. wildcard `*.example.com` กับ `api.example.com` → ทับ; `*.example.com` กับ `example.com` → ไม่ทับ — test ใน R2.3
+4. ผู้ใช้กรอก tag ที่ซ้ำกับ select_tag หรือว่าง → tags ไม่ซ้ำ ไม่มีค่าว่าง — test ใน R2.1
+5. service ที่สร้างใน changeset (ยังไม่อยู่ใน Kong) → หน้า "Add route" ใช้ได้และ route เข้า changeset เดียวกัน — test ใน R2.4
+
+---
+
+## Spec ที่ตกลงแล้ว
+
+**Service fields:** `name`*, `protocol` (http/https/grpc/grpcs, default http), `host`*, `port` (default ตาม protocol: 80/443), `path` (ต้องขึ้นต้น `/`), `retries` (0–32767, default 5), `connect_timeout`/`read_timeout`/`write_timeout` (ms, 1–2147483646, default 60000), `enabled` (default true), `tags`
+
+**Route fields:** `name`*, `protocols` (http,https default), `methods` (เลือกหลายค่า: GET POST PUT PATCH DELETE OPTIONS HEAD), `hosts` (คั่นบรรทัด), `paths` (คั่นบรรทัด; ขึ้นต้น `/` หรือ `~` สำหรับ regex), `strip_path` (default true), `preserve_host` (default false), `tags` · ต้องมีอย่างน้อยหนึ่งใน methods/hosts/paths
+
+**Overlap (Q21):** ทับ = host ทับ ∧ method ทับ ∧ path ทับ
+- host: ฝั่งใดว่าง = ทุก host; เทียบ exact (ไม่สนตัวพิมพ์); `*.a.b` match `x.a.b` (ชั้นเดียวขึ้นไป) ไม่ match `a.b`; `a.*` match `a.x`
+- method: ฝั่งใดว่าง = ทุก method; ไม่งั้นต้อง intersect
+- path: ฝั่งใดว่าง = `/`; เท่ากัน หรือฝั่งหนึ่งเป็น prefix ของอีกฝั่ง → ทับ; ฝั่งใดเป็น regex (`~`) → ผล `:unknown` "can't tell — regex path"
+- ผล: `Array<{route_name:, service_name:, reason: :exact | :prefix | :unknown}>`
+
+**Preview:** direct → หน้า review plan เดิม (ตาราง "New value") + overlap; pr → หน้า changeset preview (R8)
+
+## Contract UI ↔ backend
+
+| backend ให้ | รายละเอียด |
+|---|---|
+| routes | `resources :services, only: %i[new create]` · `resources :routes, only: %i[new create]` (param `service_id` = kong id หรือ provisional id) · `get "routes/overlap" => "routes#overlap", as: :routes_overlap` (JSON) |
+| `@form` | `ServiceForm` / `RouteForm` (ActiveModel: `errors`, attribute readers, `PROTOCOLS`, `METHODS`) |
+| `@service_label` (routes#new) | ชื่อ service (read-model หรือ changeset) |
+| `GET /routes/overlap?hosts[]=&paths[]=&methods[]=` | `{ "overlaps": [ {route_name, service_name, reason} ] }` — อ่าน read-model ของ connection ปัจจุบันเท่านั้น |
+| `@route_overlaps` (change_plans#show, route create) | รูปแบบเดียวกับ JSON |
+| `can_propose_writes?` (helper_method) | ตามกฎใน Global Constraints |
+| create response | direct → `redirect_to change_plan_path(plan)`; pr → `redirect_to changeset_path(plan.changeset)` + notice "Added to changeset" |
+| error | `render :new, status: 422` พร้อม `@form.errors`; Kong error → `flash.now[:error_explanation]` (R3.2) |
+
+---
+
+### Task R2.1: `ServiceForm` (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R1, R8, R3.1 · **ไฟล์ที่แก้ได้:** Create `app/forms/service_form.rb`, `spec/forms/service_form_spec.rb`
+
+**Interfaces:** `ServiceForm.new(params_hash)`; `#valid?`; `#to_attributes(select_tags:) -> Hash` (string keys, พร้อมส่ง ChangePlanner)
+
+- [ ] **Step 1: test**
+
+```ruby
+require "rails_helper"
+
+RSpec.describe ServiceForm do
+  let(:valid) { { name: "billing", protocol: "http", host: "billing.internal", port: "8080", path: "/api",
+                  retries: "5", connect_timeout: "60000", read_timeout: "60000", write_timeout: "60000", enabled: "1", tags: "team-a, payments" } }
+
+  it "builds Kong's service body with typed values" do
+    attrs = described_class.new(valid).to_attributes(select_tags: [])
+    expect(attrs).to include("name" => "billing", "protocol" => "http", "host" => "billing.internal", "port" => 8080,
+      "path" => "/api", "retries" => 5, "enabled" => true, "tags" => %w[team-a payments])
+  end
+
+  it "adds the connection's select_tags without duplicates or blanks" do
+    attrs = described_class.new(valid.merge(tags: "managed-by-kongctl, , team-a")).to_attributes(select_tags: %w[managed-by-kongctl])
+    expect(attrs["tags"]).to eq(%w[managed-by-kongctl team-a])
+  end
+
+  it "defaults the port from the protocol" do
+    expect(described_class.new(valid.merge(protocol: "https", port: "")).to_attributes(select_tags: [])["port"]).to eq(443)
+  end
+
+  {
+    name: [ "bad name", "must use letters, digits, . _ ~ -" ],
+    host: [ "", "can't be blank" ],
+    port: [ "70000", "must be between 1 and 65535" ],
+    path: [ "api", "must start with /" ],
+    read_timeout: [ "0", "must be between 1 and 2147483646" ],
+    protocol: [ "ftp", "is not included in the list" ]
+  }.each do |field, (value, message)|
+    it "rejects #{field}=#{value.inspect}" do
+      form = described_class.new(valid.merge(field => value))
+      expect(form).not_to be_valid
+      expect(form.errors[field].join).to include(message)
+    end
+  end
+
+  it "omits empty optional fields instead of sending nulls (decK rejects null)" do
+    attrs = described_class.new(valid.merge(path: "")).to_attributes(select_tags: [])
+    expect(attrs).not_to have_key("path")
+  end
+end
+```
+
+- [ ] **Step 2:** FAIL → implement (`include ActiveModel::Model, ActiveModel::Attributes`) → PASS
+- [ ] **Step 3:** Commit `feat(R2.1): service form object validates and builds Kong's service body`
+
+---
+
+### Task R2.2: `RouteForm` (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R2.1 · **ไฟล์ที่แก้ได้:** Create `app/forms/route_form.rb`, `spec/forms/route_form_spec.rb`
+
+**Interfaces:** `RouteForm.new(params_hash)`; `#to_attributes(select_tags:, service_kong_id:) -> Hash` (ใส่ `"service" => {"id" => service_kong_id}`); `#hosts_list`, `#paths_list`, `#methods_list`
+
+- [ ] **Step 1: test**
+
+```ruby
+require "rails_helper"
+
+RSpec.describe RouteForm do
+  let(:valid) { { name: "billing-v1", protocols: %w[http https], methods: %w[GET POST], hosts: "api.example.com\n",
+                  paths: "/billing\n~/billing/v[0-9]+$", strip_path: "1", preserve_host: "0", tags: "" } }
+
+  it "builds Kong's route body under its service" do
+    attrs = described_class.new(valid).to_attributes(select_tags: %w[managed-by-kongctl], service_kong_id: "s-1")
+    expect(attrs).to include("name" => "billing-v1", "protocols" => %w[http https], "methods" => %w[GET POST],
+      "hosts" => %w[api.example.com], "paths" => [ "/billing", "~/billing/v[0-9]+$" ], "strip_path" => true,
+      "preserve_host" => false, "tags" => %w[managed-by-kongctl], "service" => { "id" => "s-1" })
+  end
+
+  it "requires a name, because decK cannot place a route without one" do
+    expect(described_class.new(valid.merge(name: ""))).not_to be_valid
+  end
+
+  it "requires at least one of methods, hosts or paths" do
+    form = described_class.new(valid.merge(methods: [], hosts: "", paths: ""))
+    expect(form).not_to be_valid
+    expect(form.errors[:base].join).to match(/method, host or path/)
+  end
+
+  it "rejects a path that is neither /… nor ~regex" do
+    expect(described_class.new(valid.merge(paths: "billing"))).not_to be_valid
+  end
+
+  it "rejects an invalid regex path with the regex error, not a 500" do
+    form = described_class.new(valid.merge(paths: "~/billing/("))
+    expect(form).not_to be_valid
+    expect(form.errors[:paths].join).to match(/regex/)
+  end
+
+  it "rejects a host with a wildcard in the middle" do
+    expect(described_class.new(valid.merge(hosts: "api.*.example.com"))).not_to be_valid
+  end
+
+  it "omits empty hosts/methods instead of sending empty arrays" do
+    attrs = described_class.new(valid.merge(hosts: "", methods: [])).to_attributes(select_tags: [], service_kong_id: "s")
+    expect(attrs.keys).not_to include("hosts", "methods")
+  end
+end
+```
+
+- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.2): route form object validates matching rules and builds Kong's route body`
+
+---
+
+### Task R2.3: `Kong::RouteOverlap` (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R2.2 · **ไฟล์ที่แก้ได้:** Create `app/services/kong/route_overlap.rb`, `spec/services/kong/route_overlap_spec.rb`
+
+**Interfaces:** `Kong::RouteOverlap.check(connection:, hosts:, paths:, methods:, changeset: nil, exclude_kong_id: nil) -> Array<Hash>` (hash keys: `:route_name, :service_name, :reason`)
+
+- [ ] **Step 1: test**
+
+```ruby
+require "rails_helper"
+
+RSpec.describe Kong::RouteOverlap do
+  let(:connection) { create(:kong_connection) }
+  let(:service) { create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing") }
+
+  def route(name, hosts: [], paths: [], methods: [])
+    create(:kong_entity, kong_connection: connection, entity_type: "route", name: name,
+      parent_type: "service", parent_kong_id: service.kong_id,
+      data: { "name" => name, "hosts" => hosts, "paths" => paths, "methods" => methods })
+  end
+
+  def check(**kw) = described_class.check(connection: connection, hosts: [], paths: [], methods: [], **kw)
+
+  it "flags an identical path on the same host" do
+    route("old", hosts: %w[api.example.com], paths: %w[/billing])
+    expect(check(hosts: %w[api.example.com], paths: %w[/billing])).to contain_exactly(include(route_name: "old", reason: :exact))
+  end
+
+  it "flags a prefix in either direction" do
+    route("v1", hosts: %w[api.example.com], paths: %w[/api/v1])
+    expect(check(hosts: %w[api.example.com], paths: %w[/api]).first[:reason]).to eq(:prefix)
+  end
+
+  it "treats a route with no hosts as matching every host" do
+    route("catch-all", paths: %w[/billing])
+    expect(check(hosts: %w[api.example.com], paths: %w[/billing])).not_to be_empty
+  end
+
+  it "matches wildcards the way Kong does" do
+    route("wild", hosts: %w[*.example.com], paths: %w[/x])
+    expect(check(hosts: %w[api.example.com], paths: %w[/x])).not_to be_empty
+    expect(check(hosts: %w[example.com], paths: %w[/x])).to be_empty
+  end
+
+  it "does not flag routes whose methods do not intersect" do
+    route("reads", paths: %w[/billing], methods: %w[GET])
+    expect(check(paths: %w[/billing], methods: %w[POST])).to be_empty
+  end
+
+  it "says it cannot tell for regex paths instead of guessing" do
+    route("rx", paths: [ "~/billing/v[0-9]+$" ])
+    expect(check(paths: %w[/billing/v2]).first[:reason]).to eq(:unknown)
+  end
+
+  it "ignores deleted routes and routes on other connections" do
+    route("gone", paths: %w[/billing]).update!(deleted_at: Time.current)
+    create(:kong_entity, entity_type: "route", data: { "paths" => %w[/billing] })
+    expect(check(paths: %w[/billing])).to be_empty
+  end
+
+  it "includes routes waiting in the open changeset" do
+    changeset = create(:changeset, kong_connection: connection)
+    create(:change_plan, changeset: changeset, kong_connection: connection, operation: "create", entity_type: "route",
+      status: "pending", after: { "name" => "queued", "paths" => %w[/billing] })
+    expect(check(paths: %w[/billing], changeset: changeset).map { _1[:route_name] }).to include("queued")
+  end
+end
+```
+
+- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.3): warn when a new route overlaps an existing one`
+
+---
+
+### Task R2.4: controllers สร้าง service/route + auto select_tags (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R2.3 · **ไฟล์ที่แก้ได้:**
+- Create: `app/controllers/services_controller.rb`, `app/controllers/routes_controller.rb`, `app/views/services/new.html.erb`, `app/views/routes/new.html.erb` (ขั้นต่ำ: field + label + errors), `spec/requests/services_spec.rb`, `spec/requests/routes_spec.rb`
+- Modify: `config/routes.rb`, `app/services/kong/change_planner.rb` (`with_select_tags` สำหรับทุก create), `app/controllers/application_controller.rb` (`can_propose_writes?`), `app/controllers/change_plans_controller.rb` (`@route_overlaps` เมื่อ plan เป็น route create), `spec/services/kong/change_planner_spec.rb`
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/requests/services_spec.rb
+require "rails_helper"
+
+RSpec.describe "Create service", type: :request do
+  include SignInHelper # from R1.7
+
+  context "direct mode, read-write" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong.test", project_env: create(:project_env, apply_mode: "direct", select_tags: %w[team-a])) }
+
+    it "validates against Kong's schema, then opens the plan review" do
+      sign_in_to(connection, access: :rw)
+      stub_request(:post, "https://kong.test/schemas/services/validate").to_return(status: 200, body: "{}")
+      post services_path, params: { service_form: { name: "billing", protocol: "http", host: "billing.internal" } }
+      plan = ChangePlan.last
+      expect(response).to redirect_to(change_plan_path(plan))
+      expect(plan.after["tags"]).to eq(%w[team-a])
+    end
+
+    it "re-renders with field errors and makes no plan" do
+      sign_in_to(connection, access: :rw)
+      post services_path, params: { service_form: { name: "bad name", host: "" } }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(ChangePlan.count).to eq(0)
+    end
+  end
+
+  context "PR mode" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong.test",
+      project_env: create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])) }
+
+    it "adds to the changeset and never writes to Kong" do
+      sign_in_to(connection, access: :ro)
+      post services_path, params: { service_form: { name: "billing", protocol: "http", host: "billing.internal" } }
+      expect(response).to redirect_to(changeset_path(ChangePlan.last.changeset))
+      expect(a_request(:any, /kong\.test/).with { |req| req.method != :get }).not_to have_been_made
+    end
+  end
+
+  it "hides and refuses create for a read-only credential in direct mode" do
+    connection = create(:kong_connection, admin_url: "https://kong.test", project_env: create(:project_env, apply_mode: "direct"))
+    sign_in_to(connection, access: :ro)
+    get new_service_path
+    expect(response).to redirect_to(entities_path(type: "service"))
+    get entities_path(type: "service")
+    expect(response.body).not_to include(new_service_path)
+  end
+end
+```
+
+```ruby
+# spec/requests/routes_spec.rb
+require "rails_helper"
+
+RSpec.describe "Create route", type: :request do
+  include SignInHelper
+
+  let(:route_params) { { route_form: { name: "billing-v1", protocols: %w[http https], paths: "/billing", methods: %w[GET] } } }
+
+  context "direct mode" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong.test", project_env: create(:project_env, apply_mode: "direct")) }
+    let!(:service) { create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing") }
+
+    before do
+      sign_in_to(connection, access: :rw)
+      stub_request(:post, "https://kong.test/schemas/routes/validate").to_return(status: 200, body: "{}")
+    end
+
+    it "proposes a route under the service it was opened from" do
+      post routes_path, params: route_params.merge(service_id: service.kong_id)
+      plan = ChangePlan.last
+      expect(response).to redirect_to(change_plan_path(plan))
+      expect(plan.after).to include("name" => "billing-v1", "paths" => %w[/billing], "service" => { "id" => service.kong_id })
+    end
+
+    it "answers the overlap check from the read-model" do
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "old", parent_type: "service",
+        parent_kong_id: service.kong_id, data: { "name" => "old", "paths" => %w[/billing], "hosts" => [], "methods" => [] })
+      get routes_overlap_path, params: { paths: %w[/billing] }
+      expect(response.parsed_body["overlaps"]).to contain_exactly(include("route_name" => "old", "reason" => "exact"))
+    end
+
+    it "sends an unknown service back to the service list" do
+      get new_route_path(service_id: SecureRandom.uuid)
+      expect(response).to redirect_to(entities_path(type: "service"))
+      expect(flash[:alert]).to be_present
+    end
+  end
+
+  context "PR mode" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong.test",
+      project_env: create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])) }
+
+    it "adds a route under a service that exists only in the changeset, with no write call" do
+      sign_in_to(connection, access: :ro)
+      post services_path, params: { service_form: { name: "billing", protocol: "http", host: "billing.internal" } }
+      service_plan = ChangePlan.last
+
+      get new_route_path(service_id: service_plan.provisional_kong_id)
+      expect(response).to have_http_status(:ok)
+
+      post routes_path, params: route_params.merge(service_id: service_plan.provisional_kong_id)
+      route_plan = ChangePlan.last
+      expect(route_plan).to have_attributes(changeset_id: service_plan.changeset_id, parent_kong_id: service_plan.provisional_kong_id)
+      expect(a_request(:any, /kong\.test/).with { |req| req.method != :get }).not_to have_been_made
+    end
+  end
+end
+```
+
+- [ ] **Step 2:** FAIL → implement (planner: `attributes["tags"] = (connection.select_tags + Array(attributes["tags"])).uniq` เมื่อ create และ select_tags มีค่า — spec ใน `change_planner_spec.rb` สำหรับ agent create ด้วย)
+- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R2.4): create services and routes through the plan or changeset pipeline`
+
+---
+
+### Task R2.5: ฟอร์ม service (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R2.4, R3.4 · **ไฟล์ที่แก้ได้:** `app/views/services/new.html.erb`, `app/views/services/_form.html.erb` (create), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml` (`hints.fields.service.*`, `hints.pages.service_new.intro`), `app/javascript/controllers/service_form_controller.js` (create: ตั้ง port ตาม protocol เมื่อยังไม่ได้แก้เอง), `spec/requests/ui_snapshots_spec.rb`, `spec/requests/consistency_spec.rb` (assertion)
+
+**คำสั่ง:** `/impeccable shape service create form` → `/impeccable onboard` → `/impeccable clarify` → `/impeccable harden`
+
+- [ ] **Step 1:** assertion (ก่อน): ทุก input มี `aria-describedby` ไปยัง hint; มีตัวอย่างค่า; timeout 3 ช่องอยู่ใน `.disclosure` "Timeouts and retries" (ค่า default แสดง); ปุ่มหลัก "Review change" (direct) / "Add to changeset" (pr)
+- [ ] **Step 2:** FAIL → ทำ UI (client-side validation ด้วย attribute: `required`, `pattern`, `min`/`max` ตรงกับ ServiceForm; server ยังเป็นผู้ตัดสิน)
+- [ ] **Step 3:** PASS · snapshot direct/pr/errors · detect · ภาพ 390/1280
+- [ ] **Step 4:** Commit `feat(R2.5): service form with hints and inline validation`
+
+---
+
+### Task R2.6: ฟอร์ม route + เตือน overlap สด (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R2.4, R2.5 · **ไฟล์ที่แก้ได้:** `app/views/routes/new.html.erb`, `app/views/routes/_form.html.erb` (create), `app/views/routes/_overlaps.html.erb` (create), `app/views/change_plans/show.html.erb` (ส่วน overlap), `app/javascript/controllers/route_overlap_controller.js` (create: debounce 300ms, `fetch` `routes/overlap`, render ในพื้นที่ `aria-live="polite"`), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml` (`hints.fields.route.*`, `hints.risks.route_overlap.*`), `spec/requests/ui_snapshots_spec.rb`
+
+**คำสั่ง:** `/impeccable shape route create form` → `/impeccable clarify` → `/impeccable harden`
+
+- [ ] **Step 1:** assertion (ก่อน): หน้า new route แสดงชื่อ service; หน้า review plan ของ route create ที่มี overlap แสดงชื่อ route ที่ทับและเหตุผลเป็นคำ (`Same path`, `Path prefix`, `Can't tell (regex)`)
+- [ ] **Step 2:** FAIL → ทำ UI · preview ของ request line ใช้ mark `.route-match` เดิม (`UI-DESIGN.md` Kong-native marks)
+- [ ] **Step 3:** PASS · snapshot (มี/ไม่มี overlap) · detect
+- [ ] **Step 4:** Commit `feat(R2.6): route form under its service, with live overlap warnings`
+
+---
+
+### Task R2.7: ปุ่มสร้างตามสิทธิ์ (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R2.4 · **ไฟล์ที่แก้ได้:** `app/views/entities/index.html.erb`, `app/views/entities/show.html.erb`, `app/views/entities/_entity.html.erb`, `config/locales/hints.en.yml`, `spec/requests/entities_spec.rb` (assertion)
+
+**คำสั่ง:** `/impeccable clarify app/views/entities` (ข้อความเมื่อเขียนไม่ได้: "This credential is read-only on a direct-apply environment…" / "Apply mode isn't set for <project/env>…")
+
+- [ ] **Step 1:** assertion (ก่อน): Services tab มี "New service" เมื่อ `can_propose_writes?`; หน้า service มี "Add route"; ไม่มีทั้งสองเมื่อเขียนไม่ได้ และมีประโยคบอกเหตุผลแทน; ปุ่มเขียนที่มีอยู่เดิม (New upstream, New certificate, New global plugin, Edit, Delete) ใช้กฎเดียวกัน
+- [ ] **Step 2:** FAIL → แก้ view · PASS · detect
+- [ ] **Step 3:** Commit `feat(R2.7): write buttons follow one rule, and say why when hidden`
+
+---
+
+### Task R2.8: ตรวจ flow จริง (verification)
+
+**ชั้น:** — · **ต้องเสร็จก่อน:** R2.1–R2.7
+
+- [ ] `local/dev` (rw): สร้าง service `echo` → review → apply → สร้าง route `/echo` → apply → `curl -i localhost:8000/echo` ได้ 200 จาก upstream
+- [ ] สร้าง route `/echo/v1` → เห็นคำเตือน prefix ทั้งตอนกรอกและในหน้า review
+- [ ] `local/dev-ro` (ro, direct): ไม่เห็นปุ่มสร้าง มีประโยคบอกเหตุผล
+- [ ] `local/uat` (pr): สร้าง service + route → อยู่ใน changeset เดียวกัน, preview diff ถูก nest; ไม่มี request เขียนใน log ของ Kong
+- [ ] error: หยุด `kong-1` แล้วสร้างบน dev → เห็นคำอธิบาย `upstream_unavailable` (cause + next step)
+- [ ] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้
+- [ ] ภาพหน้าจอ 390/1280
+
+## เกณฑ์ปิดงาน R2
+
+- [ ] เกณฑ์ใน `R2-create-service-route.md` (ฉบับแก้ §C3) ครบ พร้อมหลักฐาน
+- [ ] test "PR mode ไม่เรียก Admin API แบบเขียน" ผ่าน (request + planner)
+- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่ม · `hints:todo` รายงาน
+- [ ] R3.7 บันทึกผลแล้ว
