@@ -22,7 +22,7 @@
 
 1. ผู้ใช้กด "Hide detailed hints" แล้ว reload / เปิดหน้าอื่น → ยังซ่อนอยู่ ไม่กระพริบ — request spec ใน R3.1
 2. key hint ที่ view อ้างแต่ไม่มีใน yml → test ล้ม (ไม่ใช่แสดง "translation missing") — config ใน R3.1 + spec ใน R3.4
-3. error ที่ไม่ใช่ 6 แบบ (`UnexpectedResponse`, timeout ของ Faraday) → ต้องมีคำอธิบาย generic ไม่ใช่ 500 — spec ใน R3.2
+3. เครื่องนี้ไม่ได้อยู่ใน network ของ project (DNS ไม่ resolve, refused, timeout, TLS) → บอกว่าเป็นปัญหาเครือข่ายพร้อมชนิด ไม่ใช่ "Admin API ล่ม" และ error อื่นที่ไม่ใช่ 6 แบบได้คำอธิบาย generic ไม่ใช่ 500 — spec ใน R3.2
 4. cookie ถูกแก้เป็นค่าแปลก (`kongsole_hints=<script>`) → ตีความเป็น `detailed` — spec ใน R3.1
 5. ข้อความ hint ยาว / tag ยาว / ชื่อ entity ภาษาไทย บนจอ 390px → ไม่ล้นแนวนอน — ตรวจใน R3.4 ด้วย snapshot 390x844
 
@@ -34,7 +34,8 @@
 |---|---|---|
 | `detailed_hints?` (helper_method ใน `ApplicationController`) | `Boolean` — `true` เว้นแต่ cookie `kongsole_hints == "compact"` | partial hint, toggle |
 | `PATCH /hint_preference` (`hint_preference_path`) param `mode=detailed\|compact` | redirect back (fallback `root_path`), set `cookies.permanent[:kongsole_hints]` httponly: false, same_site: :lax | toggle (form ปกติ ทำงานได้โดยไม่มี JS) |
-| `Kong::ErrorExplanation.for(error) -> Kong::ErrorExplanation::Result(key:, title:, cause:, next_step:)` | อ่าน `hints.errors.<key>.*` | controller rescue ทุกจุด + login |
+| `Kong::ErrorExplanation.for(error, network_note: nil) -> Kong::ErrorExplanation::Result(key:, title:, cause:, next_step:)` | อ่าน `hints.errors.<key>.*`; ปัญหาเครือข่ายต่อท้าย `network_note` ของ project (R1.11) | controller rescue ทุกจุด + login + R6/R7/R8 |
+| `Kong::Client::NetworkUnreachable#kind` | `:dns` / `:refused` / `:timeout` / `:tls` / `:other` (subclass ของ `UpstreamUnavailable`) | สถานะ + ข้อความ |
 | `flash[:error_explanation]` = `{ "key", "title", "cause", "next_step" }` | Hash (string keys) | layout แสดงใต้ alert |
 | `@schema_fields` ใน `entities#new/edit` | `Array<{name: String, type: String, required: Boolean, default: Object, one_of: Array, nested: Array}>` จาก `GET /schemas/<entity>` (nil ถ้าอ่านไม่ได้) | reference panel ของ type ที่ใช้ JSON editor |
 | key ใน `hints.en.yml` | ตามโครงข้างล่าง | ทุก view |
@@ -178,17 +179,77 @@ end
 
 ---
 
-### Task R3.2: คำอธิบาย error ของ Kong 6 แบบ (backend)
+### Task R3.2: คำอธิบาย error ของ Kong 6 แบบ + ปัญหาเครือข่าย (backend)
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R3.1 · **ไฟล์ที่แก้ได้:**
-- Create: `app/services/kong/error_explanation.rb`, `spec/services/kong/error_explanation_spec.rb`
-- Modify: `app/controllers/sessions_controller.rb` (`login_error_message` → ใช้ ErrorExplanation), `app/controllers/entities_controller.rb`, `app/controllers/plugins_controller.rb` (rescue `Kong::Client::Error` ใส่ `flash[:error_explanation]`), `config/locales/hints.en.yml` (key `hints.errors.*` 8 ตัว — ค่าเป็น `To Edit: pending`, R3.3 เขียนจริง), `spec/requests/sessions_spec.rb`, `spec/requests/entities_spec.rb`
+- Create: `app/services/kong/network_failure.rb`, `app/services/kong/error_explanation.rb`, `spec/services/kong/network_failure_spec.rb`, `spec/services/kong/error_explanation_spec.rb`
+- Modify: `app/services/kong/client.rb` (network failure → `NetworkUnreachable` แทน `UpstreamUnavailable` ตรงๆ), `spec/services/kong/client_spec.rb`, `app/controllers/sessions_controller.rb` (`login_error_message` → ใช้ ErrorExplanation), `app/controllers/entities_controller.rb`, `app/controllers/plugins_controller.rb` (rescue `Kong::Client::Error` ใส่ `flash[:error_explanation]`), `config/locales/hints.en.yml` (key `hints.errors.*` 12 ตัว — ค่าเป็น `To Edit: pending`, R3.5 เขียนจริง), `spec/requests/sessions_spec.rb`, `spec/requests/entities_spec.rb`
+
+**ทำไม:** แต่ละ project อยู่คนละ network (ตัดสินรอบ 2 ข้อ 4) แต่ `Kong::Client#request` ตอนนี้แปลง DNS/refused/timeout/TLS ทั้งหมดเป็น `UpstreamUnavailable` ซึ่งเป็น class เดียวกับ 502/503 จาก loopback — ผู้ใช้ที่ไม่ได้ต่อ VPN ของ project จะเห็นว่า "Admin API ล่ม" ซึ่งผิด
 
 **Interfaces:**
-- Produces `Kong::ErrorExplanation.for(error) -> Result` โดย `Result = Struct.new(:key, :title, :cause, :next_step, keyword_init: true)` และ `Result#to_flash -> Hash`
-- mapping: `Unauthorized→unauthorized`, `Forbidden→forbidden`, `RouteNotMatched→route_not_matched`, `EntityNotFound→entity_not_found`, `RateLimited→rate_limited`, `UpstreamUnavailable→upstream_unavailable`, `UnexpectedResponse→unexpected_response`, อื่นๆ (รวม `Faraday::Error`) → `connection_failed`
+- Produces `Kong::NetworkFailure.classify(exception) -> Symbol` ∈ `:dns, :refused, :timeout, :tls, :other` (ดู `exception` และ `exception.cause` ไล่ลงไป: `SocketError`/`getaddrinfo`/`Name or service not known`/`nodename nor servname` → `:dns`; `Errno::ECONNREFUSED`/`Connection refused` → `:refused`; `Faraday::TimeoutError`/`Net::OpenTimeout`/`Net::ReadTimeout`/`execution expired` → `:timeout`; `Faraday::SSLError`/`OpenSSL::SSL::SSLError`/`certificate verify failed` → `:tls`)
+- Produces `Kong::NetworkFailure.classify_text(text) -> Symbol | nil` สำหรับ stderr ของ decK/git: `no such host`/`Could not resolve host` → `:dns`; `connection refused` → `:refused`; `i/o timeout`/`timed out` → `:timeout`; `x509`/`certificate` → `:tls`; `Permission denied (publickey)`/`Authentication failed`/`could not read Username` → `:auth`; ไม่รู้จัก → nil
+- Produces `Kong::Client::NetworkUnreachable < Kong::Client::UpstreamUnavailable` พร้อม `#kind` — เป็น subclass เพื่อให้ `rescue UpstreamUnavailable` เดิมทุกจุดยังจับได้
+- Produces `Kong::ErrorExplanation.for(error, network_note: nil) -> Result` โดย `Result = Struct.new(:key, :title, :cause, :next_step, keyword_init: true)` และ `Result#to_flash -> Hash`; `next_step` ของ key `network_*` ต่อท้ายด้วย `network_note` ถ้ามี (R1 ส่งค่า `project.network_note`)
+- mapping: `Unauthorized→unauthorized`, `Forbidden→forbidden`, `RouteNotMatched→route_not_matched`, `EntityNotFound→entity_not_found`, `RateLimited→rate_limited`, `NetworkUnreachable(kind)→network_dns_failed | network_refused | network_timed_out | network_tls_failed | connection_failed`, `UpstreamUnavailable→upstream_unavailable`, `UnexpectedResponse→unexpected_response`, `Faraday::Error` อื่น → ผ่าน `NetworkFailure.classify` เหมือนกัน, อื่นๆ → `connection_failed`
+- error อื่นที่ R6/R7/R8 นำมาใช้ (`Kong::PrometheusClient::*`, `Kong::DeckCli::Error`, `Kong::GitClient::Error`) เพิ่ม mapping ใน task ของตัวเอง
 
 - [ ] **Step 1: test**
+
+```ruby
+# spec/services/kong/network_failure_spec.rb
+require "rails_helper"
+
+RSpec.describe Kong::NetworkFailure do
+  {
+    Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")) => :dns,
+    Faraday::ConnectionFailed.new(Errno::ECONNREFUSED.new("connect(2)")) => :refused,
+    Faraday::TimeoutError.new("execution expired") => :timeout,
+    Faraday::SSLError.new("SSL_connect returned=1 errno=0 state=error: certificate verify failed") => :tls,
+    Faraday::ConnectionFailed.new("something else") => :other
+  }.each do |error, kind|
+    it "classifies #{error.class.name.demodulize} (#{error.message[0, 30]}) as #{kind}" do
+      expect(described_class.classify(error)).to eq(kind)
+    end
+  end
+
+  {
+    "dial tcp: lookup kong-a-uat.internal: no such host" => :dns,
+    "fatal: unable to access 'https://git.example/': Could not resolve host: git.example" => :dns,
+    "dial tcp 10.0.0.5:443: connect: connection refused" => :refused,
+    "dial tcp 10.0.0.5:443: i/o timeout" => :timeout,
+    "x509: certificate signed by unknown authority" => :tls,
+    "git@git.example: Permission denied (publickey)." => :auth,
+    "deck: unknown flag" => nil
+  }.each do |text, kind|
+    it "classifies tool output #{text[0, 30].inspect} as #{kind.inspect}" do
+      expect(described_class.classify_text(text)).to eq(kind)
+    end
+  end
+end
+```
+
+```ruby
+# spec/services/kong/client_spec.rb — เพิ่ม
+it "raises NetworkUnreachable with the kind when DNS fails, still catchable as UpstreamUnavailable" do
+  connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+  stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+  expect { described_class.new(connection: connection, secret: "pw").get("/") }.to raise_error(Kong::Client::NetworkUnreachable) { |e|
+    expect(e.kind).to eq(:dns)
+    expect(e).to be_a(Kong::Client::UpstreamUnavailable)
+    expect(e.message).not_to include("pw")
+  }
+end
+
+it "keeps a real 502 from the loopback service as plain UpstreamUnavailable" do
+  connection = create(:kong_connection, admin_url: "https://kong.test")
+  stub_request(:get, "https://kong.test/").to_return(status: 502, body: "{}")
+  expect { described_class.new(connection: connection, secret: "pw").get("/") }.to raise_error { |e|
+    expect(e.class).to eq(Kong::Client::UpstreamUnavailable)
+  }
+end
+```
 
 ```ruby
 # spec/services/kong/error_explanation_spec.rb
@@ -211,8 +272,22 @@ RSpec.describe Kong::ErrorExplanation do
     end
   end
 
-  it "gives a generic explanation for a network failure instead of raising" do
-    expect(described_class.for(Faraday::ConnectionFailed.new("refused")).key).to eq("connection_failed")
+  { dns: "network_dns_failed", refused: "network_refused", timeout: "network_timed_out", tls: "network_tls_failed", other: "connection_failed" }.each do |kind, key|
+    it "explains an unreachable #{kind} as #{key}, not as the Admin API being down" do
+      result = described_class.for(Kong::Client::NetworkUnreachable.new("x", kind: kind))
+      expect(result.key).to eq(key)
+      expect(result.cause).not_to match(/admin api .*(down|not listening)/i)
+    end
+  end
+
+  it "adds the project's network note to the next step of a network problem" do
+    result = described_class.for(Kong::Client::NetworkUnreachable.new("x", kind: :timeout),
+      network_note: "Reachable from the NONPROD VPN only")
+    expect(result.next_step).to include("Reachable from the NONPROD VPN only")
+  end
+
+  it "classifies a bare Faraday error the same way instead of raising" do
+    expect(described_class.for(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo failed"))).key).to eq("network_dns_failed")
   end
 
   it "never tells a read-only credential that the entity is missing" do
@@ -231,14 +306,22 @@ it "explains a wrong password with a cause and what to do next" do
   post login_connection_path(connection), params: { username: "a", password: "b" }
   expect(response.body).to include(I18n.t("hints.errors.unauthorized.next_step"))
 end
+
+it "says the connection's network is out of reach instead of 'Admin API down' when DNS fails" do
+  connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+  stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+  post login_connection_path(connection), params: { username: "a", password: "b" }
+  expect(response.body).to include(I18n.t("hints.errors.network_dns_failed.title"))
+  expect(response.body).not_to include(I18n.t("hints.errors.upstream_unavailable.title"))
+end
 ```
 
-- [ ] **Step 2:** FAIL → implement (อ่าน `I18n.t("hints.errors.#{key}.title")` ฯลฯ) → PASS
-- [ ] **Step 3:** ใน `EntitiesController`/`PluginsController` ทุก `rescue Kong::Client::Error => e` ใส่ `flash[:error_explanation] = Kong::ErrorExplanation.for(e).to_flash` (สำหรับ `render` ใช้ `flash.now`) ข้อความ alert เดิมคงไว้
-- [ ] **Step 4:** request spec: plan create ที่ Kong ตอบ 404 no-route → `flash[:error_explanation]["key"] == "route_not_matched"`
-- [ ] **Step 5:** suite 0 failures · Commit `feat(R3.2): every Kong error names its cause and the next step`
+- [ ] **Step 2:** FAIL → implement `NetworkFailure` → `Client::NetworkUnreachable` (`def initialize(message, kind:, response: nil)`; ใน `Client#request` rescue ใช้ `NetworkFailure.classify(e)`; ข้อความ = `"Kong Admin API unreachable at #{@connection.admin_url} (#{kind})"` ไม่ต่อ `e.message` ที่อาจมี URL พร้อม userinfo) → `ErrorExplanation` (อ่าน `I18n.t("hints.errors.#{key}.title")` ฯลฯ) → PASS
+- [ ] **Step 3:** `Kong::ConnectionLogin` บันทึก `last_status` ของ `NetworkUnreachable` เป็น `"unavailable"` เหมือนเดิม (R1.11 แยกเป็น `"unreachable"`) — ตรวจว่า spec เดิมของ login ยังผ่าน
+- [ ] **Step 4:** ใน `EntitiesController`/`PluginsController` ทุก `rescue Kong::Client::Error => e` ใส่ `flash[:error_explanation] = Kong::ErrorExplanation.for(e).to_flash` (สำหรับ `render` ใช้ `flash.now`) ข้อความ alert เดิมคงไว้ · request spec: plan create ที่ Kong ตอบ 404 no-route → `flash[:error_explanation]["key"] == "route_not_matched"`
+- [ ] **Step 5:** suite 0 failures · Commit `feat(R3.2): every Kong error names its cause and next step; network trouble is told apart from Kong being down`
 
-**เกณฑ์ผ่าน:** 10 examples ใหม่ผ่าน · ไม่มี controller ใดต่อ `e.message` ของ Faraday เข้าหน้าเว็บโดยไม่ผ่าน explanation
+**เกณฑ์ผ่าน:** ทุก example ใหม่ผ่าน · ไม่มี controller ใดต่อ `e.message` ของ Faraday เข้าหน้าเว็บโดยไม่ผ่าน explanation · `rescue Kong::Client::UpstreamUnavailable` เดิมยังจับ network failure ได้ (suite เดิมผ่าน)
 
 ---
 
@@ -355,7 +438,7 @@ end
 | consumer | username, custom_id, tags |
 | plugin (ส่วนกลาง) | scope, enabled, protocols, tags |
 | entity edit (fields tab) | tags, enabled |
-| errors | unauthorized, forbidden, route_not_matched, entity_not_found, rate_limited, upstream_unavailable, unexpected_response, connection_failed |
+| errors | unauthorized, forbidden, route_not_matched, entity_not_found, rate_limited, upstream_unavailable, unexpected_response, connection_failed, network_dns_failed, network_refused, network_timed_out, network_tls_failed (ข้อความต้องบอกว่า "เครื่องนี้อาจไม่ได้อยู่ใน network ของ project" และให้ network note ต่อท้ายได้) |
 | empty_states | connections, entities (แยก "never synced" กับ "no match"), plugins_catalog, change_plans (pending PRs), audit_events, tokens, certificates_expiring, entity_children (routes/plugins/targets/snis/credentials) |
 | risks | delete_entity, delete_admin_path, rank_2_login (uat + prod — แทนคำเตือนที่มีแค่ prod), rank_2_apply, shared_credential_write, env_var_certificate |
 | pages.intro | ทุกหน้าที่มี h1 |
@@ -400,7 +483,7 @@ end
 - [ ] ทุก field ในฟอร์มที่มีอยู่มี help + example จาก `hints.en.yml` (consistency_spec)
 - [ ] ทุกหน้ามี empty state ที่บอกว่าใช้ทำอะไรและเริ่มอย่างไร
 - [ ] ลบ / rank ≥ 2 / admin path มีคำอธิบายผลกระทบก่อนยืนยัน
-- [ ] error 6 แบบ (+ unexpected, connection_failed) มี cause + next step
+- [ ] error 6 แบบ (+ unexpected, connection_failed, network_* 4 ชนิด) มี cause + next step · ปัญหาเครือข่ายไม่ถูกรายงานเป็น "Admin API ล่ม"
 - [ ] ปิด hint แล้วยังปิดหลัง reload (request spec)
 - [ ] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง)
 - [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่มจาก baseline · ภาพหน้าจอแนบ

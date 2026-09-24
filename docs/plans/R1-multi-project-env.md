@@ -33,7 +33,7 @@
 
 ## Spec ที่ตกลงแล้ว
 
-- **Project**: `key` (unique, ใช้ในชื่ออ้างอิง), `name` (แสดงผล), `source`, git: `git_repo`, `git_branch`, `git_web_url` (repo แยกต่อ project — Q6), `delete_threshold` (default 3 — ใช้ใน R8)
+- **Project**: `key` (unique, ใช้ในชื่ออ้างอิง), `name` (แสดงผล), `source`, git: `git_repo`, `git_branch`, `git_web_url` (repo แยกต่อ project — Q6), `delete_threshold` (default 3 — ใช้ใน R8), `network_note` (≤ 200 ตัวอักษร เช่น "Reachable from the NONPROD VPN only" — แต่ละ project อยู่คนละ network, ข้อความนี้ต่อท้าย error เครือข่ายทุกที่ ตัดสินรอบ 2)
 - **ProjectEnv**: `name`, `position` (ลำดับ, unique ต่อ project), `rank`, `apply_mode` (nullable), `color_tag`, `source`, `git_path`, `deck_extra_paths` (text[] — R8), `select_tags` (text[])
 - **Connection**: เป็นของ env เดียว; ฟิลด์เฉพาะเครื่อง (admin_url, TLS, credential_mode, auth, shared_usernames) ยังอยู่ที่ connection
 - **registry vs local**: แถวที่ loader สร้าง = `registry` (แก้ใน UI ไม่ได้, badge "From connections.yml"); แถวที่ UI สร้าง = `local` (แก้/ลบได้, badge "Local only"); env `local` ตั้ง apply_mode ได้แค่ `direct` หรือไม่ตั้ง
@@ -49,6 +49,7 @@ projects:
     git_repo: git@git.example:team/project-a-kong.git
     git_branch: main
     git_web_url: https://git.example/team/project-a-kong/tree/{branch}
+    network_note: Reachable from the NONPROD VPN (vpn-nonprod) only
     envs:
       - name: dev
         apply_mode: direct
@@ -70,6 +71,8 @@ projects:
 |---|---|
 | `@projects` (`connections#index`) | `Project.includes(project_envs: :kong_connection).order(:name)`; env เรียงตาม `position` |
 | `Project#source`, `ProjectEnv#source` | `"registry"` / `"local"` |
+| `Project#network_note`, `KongConnection#network_note` | String หรือ nil (R1.11) |
+| `KongConnection#last_status` | เพิ่มค่า `"unreachable"` = เครื่องนี้เข้า network ไม่ได้ (ต่างจาก `"unavailable"` = Kong ตอบ 502/503) (R1.11) |
 | `ProjectEnv#rank_kind` | `"known"` / `"other"` |
 | `ProjectEnv#write_policy` | `:pr` / `:direct` / `:unset` (สำหรับ label; `:unset` = "Apply mode not set — nothing can be written") |
 | `KongConnection#qualified_name` | `"project-a/uat"` |
@@ -164,6 +167,11 @@ RSpec.describe Project do
   it "defaults the changeset delete threshold to 3" do
     expect(create(:project).delete_threshold).to eq(3)
   end
+
+  it "keeps the network note short enough to sit under an error" do
+    expect(build(:project, network_note: "x" * 201)).not_to be_valid
+    expect(build(:project, network_note: "Reachable from the NONPROD VPN only")).to be_valid
+  end
 end
 ```
 
@@ -181,6 +189,7 @@ class CreateProjects < ActiveRecord::Migration[8.1]
       t.string :git_branch
       t.string :git_web_url
       t.integer :delete_threshold, null: false, default: 3
+      t.string :network_note
       t.timestamps
     end
     add_index :projects, :key, unique: true
@@ -617,12 +626,12 @@ end
 
 ### Task R1.8: หน้า Connections จัดตาม project (UI)
 
-**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.5, R3.4 · **ไฟล์ที่แก้ได้:** `app/views/connections/index.html.erb`, `app/views/connections/_project.html.erb` (create), `app/views/connections/_env_row.html.erb` (create), `app/helpers/application_helper.rb` (label helper: `write_policy_label`, `rank_label`, `source_badge`), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/ui_snapshots_spec.rb`, `spec/requests/consistency_spec.rb` (assertion)
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.5, R1.11, R3.4 · **ไฟล์ที่แก้ได้:** `app/views/connections/index.html.erb`, `app/views/connections/_project.html.erb` (create), `app/views/connections/_env_row.html.erb` (create), `app/helpers/application_helper.rb` (label helper: `write_policy_label`, `rank_label`, `source_badge`), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/ui_snapshots_spec.rb`, `spec/requests/consistency_spec.rb` (assertion)
 
 **คำสั่ง:** `/impeccable layout app/views/connections/index.html.erb` → `/impeccable onboard` (empty state: ไม่มี project / project ไม่มี env) → `/impeccable clarify`
 
 - [ ] **Step 1:** assertion (ก่อน): หน้า index แสดงชื่อ project เป็น heading, env ตาม `position`, env ที่ `apply_mode` nil แสดง `write_policy_label(:unset)`, badge `Local only` / `From connections.yml`
-- [ ] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono), แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
+- [ ] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono + `network_note` ถ้ามี), สถานะ `unreachable` แสดงเป็น "Unreachable from this machine" ต่างจาก `unavailable`, แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
 - [ ] **Step 3:** PASS · snapshot `connections-index-projects` · detect
 - [ ] **Step 4:** Commit `feat(R1.8): connections are grouped by project, envs in each project's own order`
 
@@ -632,11 +641,12 @@ end
 
 ### Task R1.9: ฟอร์ม project / env / connection (UI)
 
-**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.5, R1.8 · **ไฟล์ที่แก้ได้:** `app/views/projects/*`, `app/views/project_envs/*`, `app/views/connections/_form.html.erb`, `app/views/connections/{new,edit,show}.html.erb`, `app/javascript/controllers/env_rank_controller.js` (create), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/ui_snapshots_spec.rb`
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.5, R1.8, R1.11 · **ไฟล์ที่แก้ได้:** `app/views/projects/*`, `app/views/project_envs/*`, `app/views/connections/_form.html.erb`, `app/views/connections/{new,edit,show}.html.erb`, `app/javascript/controllers/env_rank_controller.js` (create), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/ui_snapshots_spec.rb`
 
 **คำสั่ง:** `/impeccable shape project and env forms` → `/impeccable clarify` → `/impeccable harden`
 
 - [ ] **Step 1:** env form: ช่อง name; ถ้าชื่อเป็น dev/sit/uat/prod แสดง "Rank N (fixed for this name)" ไม่มี select; ชื่ออื่นแสดง select rank ที่ **ไม่มีค่าเลือกไว้** (`include_blank: "Choose how careful to be…"`, `required`) — `env_rank_controller.js` สลับทันทีที่พิมพ์ (fallback no-JS: server validation แสดง error); apply_mode select: `Not set (read only)` / `Direct apply`; คำอธิบายว่า PR mode ตั้งใน `connections.yml` พร้อมตัวอย่าง YAML
+- [ ] **Step 1b:** project form: ช่อง `network_note` พร้อม hint และตัวอย่าง "Reachable from the NONPROD VPN only" (registry แสดงอ่านอย่างเดียว)
 - [ ] **Step 2:** connection form: เลือก env (grouped by project), admin_url, TLS, credential_mode — hint ทุก field
 - [ ] **Step 3:** registry rows: หน้า show แสดงค่าแบบอ่านอย่างเดียว + "Edit this in config/connections.yml"
 - [ ] **Step 4:** snapshot + detect · Commit `feat(R1.9): forms for local projects, envs and connections with hints`
@@ -656,15 +666,66 @@ end
 
 ---
 
-### Task R1.11: ตรวจ flow จริง (verification)
+### Task R1.11: เครือข่ายของแต่ละ project — `network_note` + สถานะ unreachable (backend)
 
-**ชั้น:** — · **ต้องเสร็จก่อน:** R1.1–R1.10
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R1.5, R3.2 · **ไฟล์ที่แก้ได้:** `app/models/project.rb`, `app/models/kong_connection.rb` (`STATUSES` เพิ่ม `"unreachable"`, `delegate :network_note`), `app/services/kong/connection_login.rb`, `app/services/kong/connections_config_loader.rb`, `app/controllers/application_controller.rb` (`explain_error(e)` = `Kong::ErrorExplanation.for(e, network_note: current_connection&.network_note)` แล้วให้ทุก controller ใช้ตัวนี้แทนการเรียกตรง), `app/controllers/sessions_controller.rb`, `app/controllers/entities_controller.rb`, `app/controllers/plugins_controller.rb`, `app/controllers/projects_controller.rb` (permit `network_note` เฉพาะ local), `app/views/projects/_form.html.erb` (field ขั้นต่ำ), `spec/services/kong/connection_login_spec.rb`, `spec/services/kong/connections_config_loader_spec.rb`, `spec/requests/sessions_spec.rb`, `spec/fixtures/connections/two_projects.yml`
+
+**ทำไม:** แต่ละ project ใช้คนละ network (ตัดสินรอบ 2 ข้อ 4) — ผู้ใช้ต้องรู้ทันทีว่า "เข้าไม่ถึงเพราะยังไม่ต่อ VPN ของ project นี้" ไม่ใช่ "Kong ล่ม"
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/services/kong/connection_login_spec.rb — เพิ่ม
+it "records a Kong this machine cannot reach as unreachable, not unavailable" do
+  connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+  stub_request(:get, "https://kong-a-uat.internal/")
+    .to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+  described_class.new(connection: connection, username: "a", secret: "b").call
+  expect(connection.reload.last_status).to eq("unreachable")
+end
+
+it "still records a 502 from the loopback service as unavailable" do
+  connection = create(:kong_connection, admin_url: "https://kong.test")
+  stub_request(:get, "https://kong.test/").to_return(status: 502, body: "{}")
+  described_class.new(connection: connection, username: "a", secret: "b").call
+  expect(connection.reload.last_status).to eq("unavailable")
+end
+```
+
+```ruby
+# spec/requests/sessions_spec.rb — เพิ่ม
+it "adds the project's network note when the login cannot reach Kong" do
+  project = create(:project, network_note: "Reachable from the NONPROD VPN only")
+  connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal", project_env: create(:project_env, project: project))
+  stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::TimeoutError.new("execution expired"))
+  post login_connection_path(connection), params: { username: "a", password: "b" }
+  expect(response.body).to include(I18n.t("hints.errors.network_timed_out.title"), "Reachable from the NONPROD VPN only")
+end
+```
+
+```ruby
+# spec/services/kong/connections_config_loader_spec.rb — เพิ่ม
+it "reads network_note per project" do
+  described_class.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+  expect(Project.find_by!(key: "project-a").network_note).to eq("Reachable from the NONPROD VPN only")
+end
+```
+
+- [ ] **Step 2:** FAIL → เพิ่ม `network_note: Reachable from the NONPROD VPN only` ให้ project-a ใน fixture → implement → PASS
+- [ ] **Step 3:** suite 0 failures · Commit `feat(R1.11): each project says which network reaches it; unreachable is told apart from Kong being down`
+
+---
+
+### Task R1.12: ตรวจ flow จริง (verification)
+
+**ชั้น:** — · **ต้องเสร็จก่อน:** R1.1–R1.11
 
 - [ ] โหลด `spec/fixtures/connections/two_projects.yml` เข้า DB dev สำเนา (หรือเพิ่มชั่วคราวใน compose) → หน้า Connections แสดง ProjectA 6 env, ProjectX 3 env ตามลำดับ
 - [ ] login `local/dev` → header แสดง `Local · dev`; switcher มี dev, dev-ro, sit, uat; คลิก uat → หน้า login ของ uat (violet)
 - [ ] สร้าง project local + env `nonprod` (rank ต้องเลือก) + connection → login ได้; ตั้ง apply_mode = Not set → ปุ่มเขียนหาย, API `kong_plan` 403
 - [ ] `bin/rails db:rollback STEP=4` → `db:migrate` บน DB สำเนา สำเร็จ (ถ้ามี env ไม่กำหนด apply_mode rollback ต้องปฏิเสธพร้อมรายชื่อ)
 - [ ] MCP: `kong_connections` คืน `local/dev`; `kong_search` ด้วย `connection: "dev"` → error บอกให้ใช้ `project/env`
+- [ ] เครือข่าย: สร้าง connection local ชี้ `https://kong.nonexistent.invalid` ใน project ที่มี `network_note` → login แสดง `network_dns_failed` + note, หน้า Connections แสดง "Unreachable from this machine"; `docker compose stop kong-1 kong-2` แล้ว login `local/dev` → `network_refused` (ไม่ใช่ "Admin API down"); start กลับ
 - [ ] ภาพหน้าจอ 390/1280 ของ connections, env form, header
 
 ## เกณฑ์ปิดงาน R1

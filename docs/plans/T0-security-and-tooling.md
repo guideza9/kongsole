@@ -29,15 +29,18 @@
 
 ### Task T0.0: แก้ไฟล์ requirement ตามที่อนุมัติ
 
-**ชั้น:** docs · **ต้องเสร็จก่อน:** — · **ไฟล์ที่แก้ได้:** `docs/requirements/*.md`
+**ชั้น:** docs · **ต้องเสร็จก่อน:** — · **ไฟล์ที่แก้ได้:** `docs/requirements/*.md`, `CLAUDE.md` (กฎข้อ 2 เท่านั้น)
+
+(เจ้าของงานอนุมัติ §B และ §C เมื่อ 2026-09-24)
 
 - [ ] **Step 1:** แก้ตาม `docs/plans/design-amendments.md` §C1–C9 ทุกข้อ ตามตัวอักษร
-- [ ] **Step 2:** `git diff --stat docs/requirements` ต้องแตะ 9 ไฟล์เท่านั้น
+- [ ] **Step 1b:** แก้ `CLAUDE.md` กฎข้อ 2 ตาม §B ตามตัวอักษร ห้ามแตะกฎข้ออื่น
+- [ ] **Step 2:** `git diff --stat` ต้องแตะ 9 ไฟล์ใน `docs/requirements/` และ `CLAUDE.md` เท่านั้น
 - [ ] **Step 3:** Commit
 
 ```bash
-git add docs/requirements
-git commit -m "docs(T0.0): apply agreed requirement decisions"
+git add docs/requirements CLAUDE.md
+git commit -m "docs(T0.0): apply agreed requirement decisions and scope rule 2 to PR-mode rendering"
 ```
 
 ---
@@ -46,7 +49,7 @@ git commit -m "docs(T0.0): apply agreed requirement decisions"
 
 **ชั้น:** backend (MCP) · **ต้องเสร็จก่อน:** — · **ไฟล์ที่แก้ได้:** `mcp/src/config.ts`, `mcp/src/config.test.ts`
 
-**เจ้าของงานต้องทำเอง (ก่อนหรือระหว่าง task นี้):** revoke PAT ที่ขึ้นต้น `kctl_b27f7fbc` ในหน้า Tokens
+**สถานะ PAT (ตรวจ 2026-09-24):** ไม่พบ token ที่ขึ้นต้น `kctl_b27f7f` ในทุก DB ของเครื่องนี้ (`kong_integration_development`, `kong_integration_test`, `kongsole`) จึงใช้กับเครื่องนี้ไม่ได้อยู่แล้ว — ผู้ที่ออก token (เครื่องของ commit `466b1ae`) ต้อง revoke ในหน้า Tokens ของเครื่องตัวเอง
 
 **Interfaces:** Produces `loadConfig(env: NodeJS.ProcessEnv): Config` — throws `KONGCTL_TOKEN is required …` เมื่อไม่มี token
 

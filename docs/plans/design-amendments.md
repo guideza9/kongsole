@@ -1,7 +1,7 @@
 # ข้อความที่เสนอแก้ในเอกสารของทีม
 
-AI ไม่แก้ไฟล์เหล่านี้เอง (DESIGN.md และ CLAUDE.md เป็นของทีม) — เจ้าของงานตรวจแล้วแก้เอง
-หรืออนุมัติให้ AI แก้เป็น task `T0.0` (ไฟล์ requirement เท่านั้น)
+สถานะ (2026-09-24): §B (CLAUDE.md กฎข้อ 2) และ §C (ไฟล์ requirement) **อนุมัติแล้ว** → AI แก้ไฟล์จริงใน task `T0.0`
+§A (`docs/DESIGN.md`) เป็นร่างให้ทีมแก้เอง
 
 ## A. `docs/DESIGN.md`
 
@@ -15,7 +15,8 @@ projects                       # R1 — กลุ่มของ connection ท�
   name, source,                # registry (connections.yml) | local (สร้างใน UI)
   git_repo, git_branch, git_web_url,   # repo แยกต่อ project
   delete_threshold,            # จำนวน delete สูงสุดต่อ changeset (default 3)
-  prometheus_url, prometheus_token_encrypted   # R6
+  network_note,                # R1 — network ที่ใช้เข้าถึง project (VPN ฯลฯ) ต่อท้าย error เครือข่าย
+  prometheus_url               # R6 — Kongsole ไม่ส่ง credential ให้ Prometheus
 
 project_envs
   id, project_id, name,        # ชื่ออิสระต่อ project: dev, sit, pt, ps, nonprod …
@@ -66,7 +67,7 @@ kong_connections.project_env_id   # unique — 1 env = 1 node = 1 connection
 > (อ่านจาก `GET /schemas/plugins/:name`, แคชต่อ connection + kong_version) ถ้าอ่าน schema ไม่ได้ ให้ redact แบบ fail-closed
 > ด้วย heuristic ชื่อ field (`key|secret|password|token|credential|auth`) และ map `headers` ทั้งก้อน
 
-## B. `CLAUDE.md` กฎข้อ 2 (ต้องแก้ก่อนเริ่ม R7)
+## B. `CLAUDE.md` กฎข้อ 2 (อนุมัติ 2026-09-24 — แก้ใน T0.0 ก่อนเริ่ม R7)
 
 ```diff
 -2. Render decK YAML จาก git ไม่ใช่จาก `deck dump` และต้องมี `_info.select_tags` เสมอ
@@ -89,6 +90,8 @@ kong_connections.project_env_id   # unique — 1 env = 1 node = 1 connection
 +- [ ] UI เป็นภาษาอังกฤษทั้งหมด และข้อมูลที่ผู้ใช้กรอกเป็นภาษาไทย (ชื่อ entity, notes ของ R5) แสดงได้ไม่ล้นไม่ถูกตัด
 +- [ ] test ของ backend ผ่านทั้งหมด และ `npx impeccable detect` บน snapshot HTML ของหน้าที่แก้
 +      (`tmp/ui-snapshots/`, ดู T0.6) ไม่มี finding หลักเพิ่มจาก baseline — detect อ่าน `.erb` ไม่ได้
++- [ ] เมื่อเครื่องนี้เข้า network ของ project ไม่ได้ (DNS, refused, timeout, TLS) ทุกหน้าบอกชนิดปัญหาและ
++      `network_note` ของ project ไม่รวมเป็น "Admin API ล่ม" และไม่ตอบ 500
 ```
 
 เพิ่มในตาราง Requirements: คอลัมน์ milestone ของ R5 = M7, R6 = M8, R7 = M6
@@ -104,6 +107,8 @@ kong_connections.project_env_id   # unique — 1 env = 1 node = 1 connection
 +- [ ] ชื่อ env ตั้งเองได้ต่อ project · ชื่อ dev/sit/uat/prod ได้ rank 0/1/2/3 อัตโนมัติ
 +      ชื่ออื่นแสดงเป็น "other" และต้องเลือก rank 0–3 เอง ไม่มีค่า default
 +- [ ] หนึ่ง env มีหนึ่ง connection
++- [ ] project มี `network_note` (เช่น ต้องต่อ VPN ไหน) แสดงต่อท้าย error เครือข่าย และสถานะ connection
++      แยก "unreachable" (เข้า network ไม่ได้) จาก "unavailable" (Kong ตอบ 502/503)
 -- [ ] header แสดง project + env + สีประจำ connection ตลอดเวลา และสลับ env ภายใน project ได้ในคลิกเดียว
 +- [ ] header แสดง project + env + สีประจำ connection ตลอดเวลา และ switcher แสดง env ของ project
 +      ตามลำดับ คลิกแล้วไปหน้า login ของ env นั้น (login ใหม่ทุกครั้งที่สลับ)
@@ -153,7 +158,7 @@ kong_connections.project_env_id   # unique — 1 env = 1 node = 1 connection
 ### C6. `R5-project-understanding.md`
 
 ตัดสินแล้ว: หน้า overview + request tracer จาก read-model + notes markdown ที่ `config/projects/<key>.md`
-ใน repo Kongsole (แชร์ผ่าน git แก้ผ่าน PR)
+ใน repo Kongsole (แชร์ผ่าน git แก้ผ่าน PR) · เปิดได้โดยไม่ต้อง login
 ```diff
 -- [ ] คนใหม่ตอบได้ภายใน 5 นาทีว่า request ไปยัง path หนึ่งผ่าน route, service, plugin อะไรบ้าง
 +- [ ] คนใหม่ใช้ request tracer (host + path + method) แล้วเห็น route, service และ plugin ตามลำดับที่ทำงาน
@@ -170,7 +175,10 @@ kong_connections.project_env_id   # unique — 1 env = 1 node = 1 connection
 -- [ ] raw log เก็บไม่เกิน N วัน ข้อมูลสรุปเก็บ M วัน ลบอัตโนมัติ ตั้งค่าได้ และแสดงพื้นที่ที่ใช้อยู่
 -- [ ] ไม่เก็บ header, cookie, query หรือ body ที่อ่อนไหว ... กรองก่อนเขียนลงดิสก์ของ Kongsole และมี test
 -- [ ] การเก็บ log ไม่ทำให้ latency ของ Kong เพิ่มอย่างมีนัยสำคัญ
-+- [ ] Kongsole ไม่เขียน metric หรือ log ลงดิสก์ · token ของ Prometheus (ถ้ามี) ไม่ถูกคืนผ่าน API และไม่ถูก log
++- [ ] Kongsole ไม่เขียน metric หรือ log ลงดิสก์ และไม่ส่ง credential ให้ Prometheus · ถ้า Prometheus ตอบ 401/403
++      แสดงคำอธิบาย แล้วเพิ่ม credential เป็นงานแยก
++- [ ] ไม่ต้อง login · Prometheus ของแต่ละ project อาจอยู่คนละ network: หน้าโหลดทันที ข้อมูลโหลดแยกต่อ env
++      และบอกชนิดปัญหาเครือข่ายพร้อม `network_note` ของ project ภายใน ~10 วินาที
 +- [ ] แต่ละ connection แสดง preflight: มี prometheus plugin ไหม, scope, `status_code_metrics` เปิดไหม
 +      ถ้าไม่พร้อม บอกวิธีแก้ (แก้ plugin ผ่าน R4 → direct หรือ changeset)
 ```

@@ -1,6 +1,6 @@
 # 00 — Roadmap: R1–R8
 
-> สถานะ: **รออนุมัติ plan** — ห้ามสร้าง worktree ห้ามเริ่ม subagent ห้ามแก้โค้ด จนกว่าเจ้าของงานพิมพ์ "อนุมัติ plan"
+> สถานะ: **รออนุมัติ plan (ปรับรอบ 2 แล้ว 2026-09-24)** — ห้ามสร้าง worktree ห้ามเริ่ม subagent ห้ามแก้โค้ด จนกว่าเจ้าของงานพิมพ์ "อนุมัติ plan"
 > Worktree (ช่วงที่ 2): _บันทึก path ที่นี่เมื่อสร้าง_ · branch ตั้งต้น: `feature/update_ui_format` @ `661668b`
 
 ## สรุปหน้าเดียว
@@ -10,21 +10,21 @@
 | ก้อน | ได้อะไร | ทำไมอยู่ตรงนี้ |
 |---|---|---|
 | **T0** ความปลอดภัยและเครื่องมือ | ปิด token หลุด, redactor อ่าน schema, catalog plugin ถูกต้อง, test ผ่านครบ, snapshot สำหรับ detect | เป็นการละเมิดกฎข้อ 4 ที่มีอยู่แล้ววันนี้ และทุก R ต้องมี baseline ที่ไม่มี test ล้ม |
-| **R3** โครงสร้าง hint | `hints.en.yml`, helper/partial, การปิด hint, error 6 แบบ, retrofit หน้าที่มีอยู่ | ทุก R หลังจากนี้ต้องผ่านเกณฑ์ R3 จึงต้องมีที่ใส่ hint ก่อน |
-| **R1** project/env | ตาราง `projects`/`project_envs`, apply_mode ไม่กำหนด = ห้ามเขียน, switcher, MCP `project/env` | ฐานของ R2, R5, R6, R7, R8 |
+| **R3** โครงสร้าง hint | `hints.en.yml`, helper/partial, การปิด hint, error 6 แบบ + ปัญหาเครือข่าย 4 ชนิด (`Kong::NetworkFailure`), retrofit หน้าที่มีอยู่ | ทุก R หลังจากนี้ต้องผ่านเกณฑ์ R3 จึงต้องมีที่ใส่ hint ก่อน |
+| **R1** project/env | ตาราง `projects`/`project_envs`, apply_mode ไม่กำหนด = ห้ามเขียน, switcher, MCP `project/env`, `network_note` ต่อ project + สถานะ `unreachable` | ฐานของ R2, R5, R6, R7, R8 |
 | **R8** changeset | สะสม plan PR mode → preview → push branch ครั้งเดียว | R2/R4 ต้องเขียนลง PR mode ผ่าน changeset |
 | **R2** service/route | ฟอร์มทำมือ, route overlap, ปุ่มตาม access | ต้องมี R1 + R8 + R3 |
 | **R4** plugins | catalog + ฟอร์มจาก schema + secret field + schema cache | ต้องมี T0 (redactor) + R8 |
 | **R5** project overview | overview + request tracer + notes ใน git | ต้องมี R1 และ read-model ครบ (R4 ทำให้ plugin chain ถูก) |
-| **R7** export | `deck gateway dump --select-tag` + sanitizer + `kong_export` | ต้องมี R1 และ **รอแก้กฎข้อ 2 ของ CLAUDE.md** (ดู "ต้องอนุมัติเพิ่ม") |
-| **R6** dashboard | query Prometheus ขององค์กร + preflight `status_code_metrics` | ต้องมี R1; การเปิด `status_code_metrics` ใน env PR ต้องใช้ R4+R8 |
+| **R7** export | `deck gateway dump --select-tag` + sanitizer + `kong_export` | ต้องมี R1 และกฎข้อ 2 ของ CLAUDE.md ที่แก้แล้วใน T0.0 (อนุมัติรอบ 2) |
+| **R6** dashboard | query Prometheus ขององค์กร (ไม่ส่ง credential), โหลดข้อมูลแยกต่อ env, บอกปัญหาเครือข่ายของ project + preflight `status_code_metrics` | ต้องมี R1; การเปิด `status_code_metrics` ใน env PR ต้องใช้ R4+R8 |
 
 ### กราฟการพึ่งพา
 
 ```
 T0 ──► R3 ──► R1 ──► R8 ──► R2
                 │      └──► R4 ──► R5
-                ├──────────────────► R7   (gate: CLAUDE.md rule 2 amendment)
+                ├──────────────────► R7   (gate: CLAUDE.md rule 2 — แก้ใน T0.0)
                 └──────────────────► R6   (preflight fix ใช้ R4+R8)
 ```
 
@@ -38,20 +38,21 @@ T0 ──► R3 ──► R1 ──► R8 ──► R2
 | `/impeccable critique app/views` (degraded, source-only, เลนส์มือใหม่) | 25/40 | H2=2, H6=2, H7=2, H10=1 (รอบก่อน 28/40 เลนส์ต่างกัน) |
 | `/impeccable audit app/views` | 15/20 | P1: ไม่มี hint infra, JSON-only forms; P2: Google Fonts, detect ไม่สแกน erb |
 | Kong ในเครื่อง | 3.7.1, 2 node | `enabled_in_cluster = [basic-auth, acl]`, `available_on_server` = 43 plugins; aws-lambda `aws_key`/`aws_secret`/`aws_assume_role_arn` เป็น `encrypted+referenceable` แต่ไม่อยู่ใน redactor; prometheus `status_code_metrics` default **false** |
-| decK | ไม่มีบน PATH ของเครื่องนี้ | R7/R8 verification ต้องติดตั้ง decK 1.51.1 หรือ 1.66.1 (หรือตั้ง `DECK_BIN`) |
+| decK | **ติดตั้งแล้ว 2026-09-24:** v1.66.1 ที่ `%LOCALAPPDATA%\Programs\deck\deck.exe` (SHA-256 ตรงกับ `checksums.txt` ของ release, เพิ่มเข้า PATH ของ user) · `deck gateway ping` ผ่าน route ro → Kong 3.7.1 | terminal / `bin/dev` ที่เปิดไว้ก่อนติดตั้งต้องเปิดใหม่ หรือตั้ง `DECK_BIN` |
 
 ## Migrations ทั้งหมด (reversible + rollback)
 
 | # | ก้อน | Migration | `down` | Rollback สำหรับ CAB |
 |---|---|---|---|---|
-| 1 | R1 | `CreateProjects` | drop table | ไม่มีข้อมูลอื่นพึ่ง ก่อน #3 ถอย |
+| 1 | R1 | `CreateProjects` (รวม `network_note`, `delete_threshold`) | drop table | ไม่มีข้อมูลอื่นพึ่ง ก่อน #3 ถอย |
 | 2 | R1 | `CreateProjectEnvs` | drop table | เหมือน #1 |
 | 3 | R1 | `AddProjectEnvToKongConnections` (+ backfill ใส่ project `default`, env = ชื่อ connection เดิม) | ลบ column `project_env_id` (ข้อมูล project/env หาย, connection เดิมยังอยู่ครบ credential ไม่แตะ) | `bin/rails db:rollback STEP=3` หลังถอดโค้ด R1; `connections.yml` รูปแบบเดิมยังโหลดได้ |
 | 4 | R1 | `MakeKongConnectionApplyModeNullable` (drop default `direct`, allow null) | **ปฏิเสธ** ถ้ามีแถว `apply_mode IS NULL` พร้อมรายชื่อ; ถ้าไม่มี คืน default+not null | ก่อน rollback ต้องกำหนด apply_mode ให้ทุก connection ที่ยังว่าง (ห้ามเดาเป็น direct — นั่นคือบั๊กที่ R1 ปิด) |
 | 5 | R8 | `CreateChangesets` | drop table | ต้อง rollback #6 ก่อน |
 | 6 | R8 | `AddChangesetToChangePlans` (+ `provisional_kong_id`) | ลบ column; plan PR ที่ค้างใน changeset กลายเป็น plan เดี่ยวที่หมดอายุแล้ว | ปิด changeset ที่ `open` ทั้งหมดก่อน (หรือยอมให้หาย — ไม่มีอะไรถูก push) |
 | 7 | R4 | `CreateKongSchemas` (schema cache) | drop table | cache ล้วน สร้างใหม่ได้ |
-| 8 | R6 | `AddPrometheusToProjects` (`prometheus_url`, `prometheus_token` encrypted) + `AddPrometheusSelectorToProjectEnvs` | ลบ columns | ไม่มีข้อมูลอื่นพึ่ง |
+| 8 | R6 | `AddPrometheusUrlToProjects` | ลบ column | ไม่มีข้อมูลอื่นพึ่ง |
+| 9 | R6 | `AddPrometheusSelectorToProjectEnvs` | ลบ column | ไม่มีข้อมูลอื่นพึ่ง |
 
 R2, R3, R5, R7, T0 ไม่มี migration
 
@@ -85,20 +86,39 @@ R2, R3, R5, R7, T0 ไม่มี migration
 | Q25 | AI ร่างแก้ DESIGN.md ให้ทีมแก้เอง | `docs/plans/design-amendments.md` |
 | Q26–27 | Docker เปิดแล้ว; ลำดับตามที่เสนอ | ตารางบนสุด |
 
-## ต้องอนุมัติเพิ่มก่อนเริ่ม (เรื่องที่ plan ตีความเอง)
+## การตัดสินใจรอบ 2 (2026-09-24)
 
-1. **CLAUDE.md กฎข้อ 2 ขัดกับ F2 ตามตัวอักษร** — "Render decK YAML จาก git ไม่ใช่จาก `deck dump`". R7 ใช้ `deck gateway dump` ตามที่เจ้าของงานตัดสิน plan จึงเสนอให้แก้กฎให้ชัดว่าหมายถึง "YAML ที่ Kongsole เขียนลง git ของ env PR" และเพิ่มข้อยกเว้น export ที่ต้องผ่าน `Kong::ExportSanitizer` เสมอ (ข้อความใน `design-amendments.md` §B). **R7 จะไม่เริ่มจนกว่ากฎถูกแก้**
-2. **connection ที่มาจาก `connections.yml` (registry) แก้ใน UI ไม่ได้ทั้งหมด** รวมถึง env direct ที่อยู่ในไฟล์ — เพราะ `kong:load_connections` รอบถัดไปจะเขียนทับ. env direct ที่สร้างใน UI แก้ได้เต็มที่และมีป้าย "Local only"
-3. **R3 ย้ายเข้า locale เฉพาะ hint** (คำอธิบาย field, ตัวอย่าง, empty state, คำอธิบายผลกระทบ, error) ไม่ย้าย label/ปุ่มทุกตัว — ข้อเสนอเดิมใน brainstorming ที่ให้ย้ายข้อความ UI ทั้งหมดถูกถอนเพื่อคุม scope
-4. **Prometheus ขององค์กรต้องมี auth ไหม** — plan รองรับ bearer token แบบ optional เก็บเข้ารหัสใน DB เครื่องตัวเอง ไม่คืนผ่าน API ใดๆ (เหมือน Kong credential)
-5. **Threshold การลบ (Q11)** — ใช้ 3 ไปก่อน
-6. **หน้า R5 (overview/tracer) และ R6 (dashboard) เปิดได้โดยไม่ต้อง login** — อ่านแค่ DB ในเครื่อง (ผ่าน redactor แล้ว) และ Prometheus ไม่เรียก Kong ถ้าต้องการให้ login ก่อน บอกได้ (เปลี่ยนแค่ `before_action` ใน 3 controller)
-7. **R6.0 แก้ `docker-compose.yml` + `docker/kong/bootstrap.sh`** เพื่อเพิ่ม Prometheus และ plugin prometheus (`status_code_metrics: true`) ใน stack ของเครื่อง — ใช้ทดสอบเท่านั้น (กฎข้อ 7)
-8. **T0 เป็นก้อนงานที่เพิ่มมาจากคำตอบ Q1–Q2** (ไม่อยู่ใน R1–R8) และ T0.0 แก้ไฟล์ `docs/requirements/` ตาม §C ของ `design-amendments.md`
+| # | เรื่อง | คำตอบ | ผลใน plan |
+|---|---|---|---|
+| 1 | CLAUDE.md กฎข้อ 2 ขัดกับ export ด้วย `deck gateway dump` | แก้ตามข้อความที่เสนอ | T0.0 แก้ `CLAUDE.md` ตาม `design-amendments.md` §B · R7.0 เหลือแค่ตรวจว่าแก้แล้ว |
+| 2 | connection จาก `connections.yml` แก้ใน UI ไม่ได้ทั้งหมด | ใช่ | R1.5 (403), R1.9 (อ่านอย่างเดียว) |
+| 3 | R3 ย้ายเข้า locale เฉพาะ hint | ใช่ | R3 |
+| 4 | R5/R6 ไม่ต้อง login | ไม่ต้อง login **แต่ต้องจัดการ error เพราะแต่ละ project อยู่คนละ network** | ดู "เครือข่ายของแต่ละ project" ข้างล่าง |
+| 5 | Prometheus ต้องมี credential ไหม | ไม่ส่ง credential ตอนนี้ — ถ้าเจอ 401/403 ค่อยเพิ่ม | R6: `AuthRequired` + คำอธิบาย `prometheus_auth_required`, ไม่มี token column/ฟอร์ม · **งานต่อที่รอ:** "Prometheus credential" เปิดเมื่อเจอ 401/403 จริง (หยุดถามก่อนทำ) |
+| 6 | threshold การลบ | 3 | `projects.delete_threshold` default 3 |
+| 7 | แก้ `docs/requirements/` และ `docker-compose.yml` | ได้ | T0.0, R6.0 |
+
+### เครือข่ายของแต่ละ project (มาจากข้อ 4)
+
+ปัญหาที่พบในโค้ดตอนนี้: `Kong::Client#request` (`app/services/kong/client.rb:83-84`) แปลง DNS / refused / timeout / TLS
+ทั้งหมดเป็น `UpstreamUnavailable` ซึ่งเป็น class เดียวกับ 502/503 จาก loopback — ผู้ใช้ที่ไม่ได้ต่อ network ของ project
+จะเห็นว่า "Admin API ล่ม" ซึ่งผิด การแก้ที่อยู่ใน plan:
+
+| ชิ้น | task | ทำอะไร |
+|---|---|---|
+| `Kong::NetworkFailure` | R3.2 | จำแนกเป็น `:dns / :refused / :timeout / :tls` จาก exception (Faraday) และจากข้อความของ decK/git (+ `:auth` ของ git) |
+| `Kong::Client::NetworkUnreachable` | R3.2 | subclass ของ `UpstreamUnavailable` (rescue เดิมยังจับได้) มี `kind` |
+| `hints.errors.network_*` | R3.2, R3.5 | ข้อความ 4 ชนิด บอกว่า "เครื่องนี้อาจไม่ได้อยู่ใน network ของ project" |
+| `projects.network_note` | R1.1, R1.11 | เช่น "Reachable from the NONPROD VPN only" จาก `connections.yml` หรือ UI; ต่อท้าย error เครือข่ายทุกที่ |
+| สถานะ `unreachable` | R1.11 | login ที่เข้าไม่ถึงบันทึกเป็น `unreachable` ไม่ใช่ `unavailable`; หน้า Connections / overview แสดง "Unreachable from this machine" |
+| R5 overview/tracer | R5 | ไม่มี network call เลย ใช้ได้เสมอ; แสดงสถานะจาก login ล่าสุด + network note |
+| R6 dashboard | R6.2, R6.5 | หน้า shell ไม่เรียก Prometheus; ข้อมูลโหลดใน Turbo Frame แบบ lazy ต่อ env; timeout 3s/10s; error แสดงในกรอบพร้อมชนิด + network note + "Try again" ไม่ 500 |
+| R7 export | R7.1 | `DeckCli::Unreachable` (kind จาก stderr ของ decK) → คำอธิบายเครือข่าย |
+| R8 changeset | R8.4 | `GitClient::Unreachable` / `AuthFailed` → preview/submit แสดงคำอธิบาย รายการใน changeset ยังอยู่ครบ |
 
 ## ข้อความที่จะแก้ในไฟล์ requirement
 
-อยู่ใน `docs/plans/design-amendments.md` §C (แก้ไฟล์จริงเป็น task แรกของช่วงที่ 2: `T0.0`)
+อยู่ใน `docs/plans/design-amendments.md` §C (อนุมัติแล้ว — แก้ไฟล์จริงเป็น task แรกของช่วงที่ 2: `T0.0` พร้อม `CLAUDE.md` §B) · §A (DESIGN.md) เป็นร่างให้ทีมแก้เอง
 
 ## ความเสี่ยง
 
@@ -109,6 +129,8 @@ R2, R3, R5, R7, T0 ไม่มี migration
 | สูง | R7 `deck gateway dump` ได้ credential/private key/secret ของ plugin ออกมาจาก Kong | dump ไม่เขียนลงดิสก์ (`-o -` → memory), sanitizer ตัดก่อนแสดง/ดาวน์โหลด, test ด้วย fixture ที่มี secret ทุกชนิด |
 | สูง | R1 เปลี่ยนที่มาของ rank → guardrail เงียบ | ชื่อ dev/sit/uat/prod ถูกบังคับ rank เดิม; ชื่ออื่นต้องเลือก rank (ไม่มี default); apply_mode ว่าง = ห้ามเขียนทุกเส้นทาง (planner, applier, API) |
 | สูง | R6 ข้อมูลว่างเพราะ `status_code_metrics=false` (default ของ Kong 3.7) | preflight ต่อ connection บอกชัดและลิงก์ไปแก้ plugin (ผ่าน R4/R8) |
+| สูง | แต่ละ project อยู่คนละ network → ผู้ใช้เห็น "Kong ล่ม" ทั้งที่แค่ยังไม่ได้ต่อ VPN / หน้าเว็บค้างรอ timeout | `NetworkFailure` + `NetworkUnreachable` แยกชนิด, `network_note` ต่อ project, สถานะ `unreachable`, R6 โหลดแบบ lazy ต่อ env พร้อม timeout 3s/10s |
+| กลาง | Prometheus ขององค์กรต้องการ credential (ยังไม่รองรับ) | ตรวจพบเป็น `AuthRequired` พร้อมคำอธิบาย ไม่ใช่ "unreachable" · เปิดงานต่อเมื่อเจอจริง |
 | กลาง | R8 route ใต้ service ที่สร้างใน changeset เดียวกัน (ยังไม่มี kong id) | `provisional_kong_id` + resolver ที่อ่าน changeset |
 | กลาง | Repo ของแต่ละ project มี base YAML / หลายไฟล์ ("ทุกอย่างในกฎของ decK") | Kongsole เขียนแค่ `git_path` ของ env (รูปแบบของตัวเอง) และส่งไฟล์อื่นเป็น `deck_extra_paths` แบบอ่านอย่างเดียวให้ validate/diff |
 | กลาง | detect ไม่อ่าน erb | T0.6 snapshot HTML จาก request spec แล้วรัน detect บน snapshot + เปิด browser จริง |

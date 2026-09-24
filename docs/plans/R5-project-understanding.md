@@ -13,7 +13,8 @@
 ## Global Constraints
 
 - ส่วนที่มาจาก Kong อ่าน read-model เท่านั้น — ไม่มี request ไป Kong ใน controller/service ของ R5 (test ด้วย `WebMock` ที่ไม่ stub อะไร)
-- หน้า overview/tracer เปิดได้โดยไม่ต้อง login (อ่าน DB ในเครื่องเท่านั้น; ข้อมูลผ่าน redactor แล้ว) — **ตัดสินใจใน plan นี้ ให้เจ้าของงานยืนยันตอนอนุมัติ**
+- หน้า overview/tracer เปิดได้โดยไม่ต้อง login (ตัดสินรอบ 2) — อ่าน DB ในเครื่องเท่านั้น ไม่มี network call จึงใช้ได้แม้เครื่องนี้ไม่ได้อยู่ใน network ของ project
+- สถานะ connection ในหน้า overview เป็นค่าจาก login ล่าสุด (ไม่ใช่ live) — แสดงเวลา และ `unreachable` (R1.11) พร้อม `network_note` ของ project ให้ผู้ใช้รู้ว่าต้องต่อ network ไหนก่อน login
 - notes: markdown ไม่มี raw HTML, ลิงก์เฉพาะ http(s)/mailto; ไฟล์ต้องอยู่ใต้ `config/projects/` เท่านั้น (key ผ่าน `Project::KEY_FORMAT`)
 - tracer บอกทุกครั้งว่าเป็น "approximation of Kong's traditional router" และไม่รองรับ expressions router, headers, SNI
 - entity admin path แสดงพร้อม mark เดิม (`.entity-row--admin`)

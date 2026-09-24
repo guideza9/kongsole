@@ -269,12 +269,12 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R8.3 · **ไฟล์ที่แก้ได้:**
 - Create: `app/services/kong/changeset_renderer.rb`, `spec/services/kong/changeset_renderer_spec.rb`, `spec/support/bare_git_repo.rb` (`module BareGitRepo`: `bare_git_repo(path:, select_tags:) -> Pathname` สร้าง bare repo ชั่วคราวที่มีไฟล์ `Kong::DeckDocument.serialize(parse(nil, select_tags:))` แบบเดียวกับ `rake kong:seed_config_repo`; `head_sha(repo) -> String`; `push_empty_commit(repo)`; `pr_connection_for(repo, path:, select_tags:) -> KongConnection` สร้าง project/env PR mode ที่ชี้ repo นี้)
-- Modify: `app/services/kong/git_client.rb` (`#diff(path) -> String`, `#remote_head_sha -> String`, `#discard!`), `app/services/kong/deck_cli.rb` (`validate(file_path, extra_paths: [])`, `diff(file_path, connection:, secret:, extra_paths: [])`), `spec/services/kong/git_client_spec.rb`, `spec/services/kong/deck_cli_spec.rb`
+- Modify: `app/services/kong/git_client.rb` (`#diff(path) -> String`, `#remote_head_sha -> String`, `#discard!`; error แยก `Kong::GitClient::Unreachable` (`kind` จาก `Kong::NetworkFailure.classify_text`) และ `Kong::GitClient::AuthFailed` — ทั้งคู่ < `GitClient::Error` เดิม), `app/services/kong/error_explanation.rb` (mapping `GitClient::Unreachable` → `network_*`, `GitClient::AuthFailed` → `git_auth_failed`), `spec/services/kong/error_explanation_spec.rb`, `config/locales/hints.en.yml` (`hints.errors.git_auth_failed.*` ค่า `To Edit: pending`), `app/services/kong/deck_cli.rb` (`validate(file_path, extra_paths: [])`, `diff(file_path, connection:, secret:, extra_paths: [])`), `spec/services/kong/git_client_spec.rb`, `spec/services/kong/deck_cli_spec.rb`
 
 **Interfaces:**
 - `Kong::ChangesetRenderer.new(changeset:, secret:).preview -> Preview` (ไม่ commit ไม่ push; `discard!` working copy เสมอใน `ensure`)
 - `Kong::ChangesetRenderer#render!(git) -> String` (ใช้ร่วมกับ R8.6): `DeckRenderer.assert_supported!` ทุก plan → `require_select_tags!` → `verify_input!` → `parse` → `apply_change` ทีละ plan ตาม `position` ด้วย `ChangesetResolver` → `serialize` → `verify_input!(rendered)`
-- `Preview = Struct.new(:yaml_diff, :deck_diff, :gate, :drift, :error, keyword_init: true)`
+- `Preview = Struct.new(:yaml_diff, :deck_diff, :gate, :drift, :error, :explanation, keyword_init: true)` — `explanation` = `Kong::ErrorExplanation::Result` (พร้อม `network_note` ของ project) เมื่อ git/decK/Kong เข้าไม่ถึง; หน้า changeset ยังแสดงรายการได้ปกติ
 - `deck_extra_paths` ของ env ถูกส่งต่อเป็น positional file เพิ่มให้ `deck file validate` / `deck gateway diff` (อ่านอย่างเดียว ไม่แก้)
 
 - [ ] **Step 1: test**
@@ -315,6 +315,32 @@ RSpec.describe Kong::ChangesetRenderer do
     preview = described_class.new(changeset: changeset, secret: "pw").preview
     expect(preview.error).to match(/no service ghost in this YAML/)
   end
+
+  it "explains a config repo this machine cannot reach, with the project's network note" do
+    project.update!(network_note: "Reachable from the NONPROD VPN only")
+    allow_any_instance_of(Kong::GitClient).to receive(:pull!)
+      .and_raise(Kong::GitClient::Unreachable.new("git fetch failed", kind: :dns))
+    preview = described_class.new(changeset: changeset, secret: "pw").preview
+    expect(preview.explanation.key).to eq("network_dns_failed")
+    expect(preview.explanation.next_step).to include("NONPROD VPN")
+  end
+end
+```
+
+```ruby
+# spec/services/kong/git_client_spec.rb — เพิ่ม
+it "tells an unreachable git host apart from a refused key" do
+  connection = create(:kong_connection, project_env: create(:project_env, apply_mode: "pr", source: "registry",
+    project: create(:project, git_repo: "https://git.example/team/repo.git")))
+  failed = instance_double(Process::Status, success?: false)
+  allow(Open3).to receive(:capture3)
+    .and_return([ "", "fatal: unable to access 'https://git.example/team/repo.git/': Could not resolve host: git.example", failed ])
+  expect { described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir)).pull! }
+    .to raise_error(described_class::Unreachable) { |e| expect(e.kind).to eq(:dns) }
+
+  allow(Open3).to receive(:capture3).and_return([ "", "git@git.example: Permission denied (publickey).", failed ])
+  expect { described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir)).pull! }
+    .to raise_error(described_class::AuthFailed)
 end
 ```
 

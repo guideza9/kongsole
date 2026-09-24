@@ -60,16 +60,15 @@
 
 ---
 
-### Task R7.0: gate — แก้ CLAUDE.md กฎข้อ 2 (เจ้าของงาน)
+### Task R7.0: gate — CLAUDE.md กฎข้อ 2
 
-- [ ] เจ้าของงานแก้ `CLAUDE.md` ตาม `design-amendments.md` §B (หรืออนุมัติเป็นลายลักษณ์อักษรให้ AI แก้)
-- [ ] ยืนยันใน roadmap ว่าผ่าน gate แล้ว
+- [ ] ตรวจว่า T0.0 แก้ `CLAUDE.md` ตาม `design-amendments.md` §B แล้ว (เจ้าของงานอนุมัติข้อความเมื่อ 2026-09-24) — ถ้ายังไม่แก้ หยุดถาม
 
 ---
 
 ### Task R7.1: `DeckCli#dump` (backend)
 
-**ชั้น:** backend · **ต้องเสร็จก่อน:** R7.0, R1 · **ไฟล์ที่แก้ได้:** `app/services/kong/deck_cli.rb`, `spec/services/kong/deck_cli_spec.rb`
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R7.0, R1, R3.2 · **ไฟล์ที่แก้ได้:** `app/services/kong/deck_cli.rb`, `spec/services/kong/deck_cli_spec.rb`, `app/services/kong/error_explanation.rb`, `spec/services/kong/error_explanation_spec.rb`
 
 **Interfaces:** `Kong::DeckCli.dump(connection:, secret:, select_tags:) -> String` (YAML text); raise `Kong::DeckCli::Error` (ข้อความไม่มี header/credential)
 
@@ -98,6 +97,14 @@ describe ".dump" do
       .to raise_error(Kong::DeckCli::Error) { |e| expect(e.message).not_to include("cm8ta29uZ2N0bDpwdw==") }
   end
 
+  it "names the network problem when this project's Kong is out of reach" do
+    status = instance_double(Process::Status, success?: false)
+    allow(Open3).to receive(:capture3).and_return([ "", "Error: dial tcp: lookup kong-a-uat.internal: no such host", status ])
+    expect { described_class.dump(connection: connection, secret: "pw", select_tags: %w[a]) }
+      .to raise_error(Kong::DeckCli::Unreachable) { |e| expect(e.kind).to eq(:dns) }
+    expect(Kong::ErrorExplanation.for(Kong::DeckCli::Unreachable.new("x", kind: :dns)).key).to eq("network_dns_failed")
+  end
+
   it "explains a missing decK binary" do
     allow(Open3).to receive(:capture3).and_raise(Errno::ENOENT)
     expect { described_class.dump(connection: connection, secret: "pw", select_tags: %w[a]) }
@@ -106,7 +113,7 @@ describe ".dump" do
 end
 ```
 
-- [ ] **Step 3:** FAIL → implement (ใช้ `run`/`clean` เดิม; `clean` ต้อง scrub `Basic [A-Za-z0-9+/=]+`) → PASS
+- [ ] **Step 3:** FAIL → implement (ใช้ `run`/`clean` เดิม; `clean` ต้อง scrub `Basic [A-Za-z0-9+/=]+`; `Kong::DeckCli::Unreachable < Error` ที่มี `kind` จาก `Kong::NetworkFailure.classify_text(stderr)` — ใช้กับ `diff` ของ R8 ด้วย; เพิ่ม mapping `DeckCli::Unreachable` → `network_*` ใน `ErrorExplanation`) → PASS
 - [ ] **Step 4:** Commit `feat(R7.1): deck gateway dump by select tags, kept in memory`
 
 ---
