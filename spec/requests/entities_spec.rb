@@ -548,7 +548,8 @@ RSpec.describe "Entities (web)", type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.body).to include("New upstream")
         expect(response.body).to include("&quot;algorithm&quot;: &quot;round-robin&quot;")
-        expect(response.body).not_to include("healthchecks")
+        # The seeded document, not the page: the field guide names every field (R3.6).
+        expect(Nokogiri::HTML(response.body).at_css("textarea[name=payload_json]").text).not_to include("healthchecks")
       end
 
       it "offers a preset that seeds an active HTTP health check" do
@@ -567,7 +568,7 @@ RSpec.describe "Entities (web)", type: :request do
         get new_entity_path(type: "upstream", preset: "nope")
 
         expect(response).to have_http_status(:ok)
-        expect(response.body).not_to include("healthchecks")
+        expect(Nokogiri::HTML(response.body).at_css("textarea[name=payload_json]").text).not_to include("healthchecks")
       end
 
       it "opens a target form scoped to its upstream" do

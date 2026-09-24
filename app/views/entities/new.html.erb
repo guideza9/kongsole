@@ -5,7 +5,7 @@
   <% if @parent %>
     <span class="font-mono"><%= @parent.entity_type %>: <%= @parent.name %></span> ·
   <% end %>
-  This proposes a change, nothing reaches Kong until you review and apply it.
+  <%= t("hints.pages.entities_new.intro") %>
 </p>
 
 <div class="max-w-2xl grid gap-4">
@@ -49,7 +49,7 @@
 
     <section class="panel p-4">
       <h2 id="json-editor-heading" class="section-label mb-3"><%= creatable_type_name(@creatable_type).sub(/\A./, &:upcase) %> document</h2>
-      <p class="text-xs mb-3 text-ink-soft">
+      <p id="json-editor-help" class="text-xs mb-3 text-ink-soft">
         Kong checks this against its own schema when you press Review, and reports any field it rejects.
       </p>
 
@@ -67,7 +67,7 @@
       <div class="json-editor" data-json-editor-target="wrapper">
         <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
         <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
-                  aria-labelledby="json-editor-heading"
+                  aria-labelledby="json-editor-heading" aria-describedby="json-editor-help"
                   class="json-editor__textarea"
                   data-json-editor-target="input"
                   data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>
@@ -82,4 +82,6 @@
       </div>
     </section>
   <% end %>
+
+  <%= render "field_guide", entity_type: @creatable_type, schema_fields: @schema_fields %>
 </div>

@@ -2,7 +2,7 @@
 
 <h1 class="page-title mb-1">Add plugin</h1>
 <p class="text-sm mb-6 text-ink-soft">
-  Scope: <span class="font-mono"><%= @scope_label %></span> · this proposes a change, nothing reaches Kong until you review and apply it.
+  Scope: <span class="font-mono"><%= @scope_label %></span> · <%= t("hints.pages.plugins_new.intro") %>
 </p>
 
 <% if @catalog %>
@@ -10,9 +10,7 @@
       will actually accept -- not the full available_on_server list, most of
       which isn't loaded on this node and would 400 on create. %>
   <% if @catalog.empty? %>
-    <div class="panel p-6 text-sm text-center text-ink-soft">
-      No plugins are enabled on this Kong node yet.
-    </div>
+    <%= empty_state(:plugins_catalog) %>
   <% else %>
     <div class="panel max-w-md">
       <% @catalog.each do |plugin_name| %>
@@ -36,6 +34,14 @@
 
       <section class="panel p-4">
         <h2 id="json-editor-heading" class="section-label mb-3"><%= @plugin_name %> config</h2>
+        <div id="json-editor-help" class="grid gap-2 mb-3">
+          <% %i[scope enabled protocols].each do |field| %>
+            <div>
+              <p class="text-xs font-mono font-semibold text-ink"><%= field %></p>
+              <%= field_hint(:plugin, field, id: nil) %>
+            </div>
+          <% end %>
+        </div>
 
         <% if @payload_error.present? %>
           <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-3 text-xs" } do %>
@@ -46,7 +52,7 @@
         <div class="json-editor" data-json-editor-target="wrapper">
           <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
           <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
-                    aria-labelledby="json-editor-heading"
+                    aria-labelledby="json-editor-heading" aria-describedby="json-editor-help"
                     class="json-editor__textarea"
                     data-json-editor-target="input"
                     data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>

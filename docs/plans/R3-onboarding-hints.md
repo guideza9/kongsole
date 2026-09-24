@@ -456,15 +456,15 @@ end
 
 **คำสั่ง:** `/impeccable onboard app/views` → `/impeccable clarify app/views` → `/impeccable harden app/views`
 
-- [ ] **Step 1:** เพิ่ม assertion (เขียนก่อน) ใน `consistency_spec.rb`:
+- [x] **Step 1:** เพิ่ม assertion (เขียนก่อน) ใน `consistency_spec.rb`:
   - ทุก `<input>`, `<select>`, `<textarea>` ที่มองเห็นในหน้าฟอร์มที่มีอยู่มี `aria-describedby` ที่ชี้ไป element ที่มีข้อความ
   - หน้า entities index ที่ไม่มีข้อมูลเลย (ไม่เคย sync) แสดงข้อความของ `hints.empty_states.entities.never_synced.title` และเมื่อ filter ไม่เจอแสดง `…no_match.title`
   - หน้า login ของ uat แสดง `hints.risks.rank_2_login.title`
-- [ ] **Step 2:** รัน → FAIL
-- [ ] **Step 3:** ใช้ `field_hint` / `empty_state` / `risk_notice` แทนข้อความที่เขียนตรงใน view; JSON editor pages แสดง `shared/_schema_reference` จาก `@schema_fields` + `field_hint` ต่อ field (fallback เป็น hint อย่างเดียวถ้า `@schema_fields` nil)
-- [ ] **Step 4:** PASS · `UI_SNAPSHOTS=1 …` + `npx impeccable detect tmp/ui-snapshots`
-- [ ] **Step 5:** เปิดแอปจริง (`bin/dev` + compose) ถ่าย 390px + 1280px: connections, login uat, entities (ว่าง/มีข้อมูล), new upstream, plugin config, plan review
-- [ ] **Step 6:** Commit `feat(R3.6): every existing page explains its fields, empty states and risks`
+- [x] **Step 2:** รัน → FAIL
+- [x] **Step 3:** ใช้ `field_hint` / `empty_state` / `risk_notice` แทนข้อความที่เขียนตรงใน view; JSON editor pages แสดง `shared/_schema_reference` จาก `@schema_fields` + `field_hint` ต่อ field (fallback เป็น hint อย่างเดียวถ้า `@schema_fields` nil)
+- [x] **Step 4:** PASS · `UI_SNAPSHOTS=1 …` + `npx impeccable detect tmp/ui-snapshots`
+- [x] **Step 5:** เปิดแอปจริง (`bin/dev` + compose) ถ่าย 390px + 1280px: connections, login uat, entities (ว่าง/มีข้อมูล), new upstream, plugin config, plan review
+- [x] **Step 6:** Commit `feat(R3.6): every existing page explains its fields, empty states and risks`
 
 **เกณฑ์ detect:** จำนวน finding หลักบน snapshot ≤ baseline · `/impeccable audit app/views` H10 (Help) ≥ 3
 

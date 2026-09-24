@@ -1,9 +1,7 @@
 <% content_for :title, "Edit #{@entity.name}" %>
 
 <h1 class="page-title mb-1">Edit <%= @entity.name %></h1>
-<p class="text-sm mb-6 text-ink-soft">
-  This proposes a change -- nothing reaches Kong until you review and apply it on the next page.
-</p>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.entities_edit.intro") %></p>
 
 <div class="max-w-2xl grid gap-4">
   <%= form_with url: entity_path(@entity), method: :patch, class: "grid gap-4" do %>
@@ -12,13 +10,17 @@
       <div class="grid gap-4">
         <div>
           <label for="entity-tags" class="block text-sm font-medium mb-1 text-ink">Tags <span class="font-normal text-ink-soft">(comma separated)</span></label>
-          <input type="text" id="entity-tags" name="tags" value="<%= @entity.tags.join(', ') %>" class="field-input font-mono text-sm" />
+          <input type="text" id="entity-tags" name="tags" value="<%= @entity.tags.join(', ') %>" class="field-input font-mono text-sm" aria-describedby="<%= hint_describedby(:entity_edit, :tags) %>" />
+          <%= field_hint(:entity_edit, :tags) %>
         </div>
         <% if @entity.entity_type == "service" %>
-          <div class="flex items-center gap-2">
-            <input type="hidden" name="enabled" value="0" />
-            <input class="accent-accent" type="checkbox" id="enabled" name="enabled" value="1" <%= "checked" if @entity.enabled %> />
-            <label for="enabled" class="text-sm text-ink">Enabled</label>
+          <div>
+            <div class="flex items-center gap-2">
+              <input type="hidden" name="enabled" value="0" />
+              <input class="accent-accent" type="checkbox" id="enabled" name="enabled" value="1" <%= "checked" if @entity.enabled %> aria-describedby="<%= hint_describedby(:entity_edit, :enabled) %>" />
+              <label for="enabled" class="text-sm text-ink">Enabled</label>
+            </div>
+            <%= field_hint(:entity_edit, :enabled) %>
           </div>
         <% end %>
       </div>
@@ -32,7 +34,7 @@
   <%= form_with url: entity_path(@entity), method: :patch, data: { controller: "json-editor" } do %>
     <section class="panel p-4">
       <h2 id="json-editor-heading" class="section-label mb-3">Full JSON</h2>
-      <p class="text-xs mb-3 text-ink-soft">
+      <p id="json-editor-help" class="text-xs mb-3 text-ink-soft">
         Every field on this <%= @entity.entity_type.humanize.downcase %>, straight from Kong.
         Removing a key leaves that field <em>unchanged</em> — set it to <code class="font-mono">null</code> to clear it.
         <% if @entity.entity_type == "certificate" %>
@@ -62,7 +64,7 @@
       <div class="json-editor" data-json-editor-target="wrapper">
         <pre class="json-editor__highlight json-viewer" aria-hidden="true" data-json-editor-target="highlight"></pre>
         <textarea name="payload_json" rows="18" spellcheck="false" autocomplete="off"
-                  aria-labelledby="json-editor-heading"
+                  aria-labelledby="json-editor-heading" aria-describedby="json-editor-help"
                   class="json-editor__textarea"
                   data-json-editor-target="input"
                   data-action="input->json-editor#validate scroll->json-editor#syncScroll"><%= @payload_json %></textarea>
@@ -77,4 +79,6 @@
       </div>
     </section>
   <% end %>
+
+  <%= render "field_guide", entity_type: @entity.entity_type, schema_fields: @schema_fields %>
 </div>

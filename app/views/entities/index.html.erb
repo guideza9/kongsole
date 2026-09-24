@@ -50,7 +50,8 @@
   <div class="flex flex-wrap items-end gap-3">
     <div class="flex-1 min-w-[180px]">
       <label for="entities-q" class="block text-sm font-medium mb-1 text-ink">Search</label>
-      <input type="text" id="entities-q" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" />
+      <input type="text" id="entities-q" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" aria-describedby="<%= hint_describedby(:entity_filter, :q) %>" />
+      <%= field_hint(:entity_filter, :q) %>
     </div>
     <button type="submit" class="btn-secondary btn">Filter</button>
     <% if filtered %>
@@ -63,30 +64,43 @@
     </summary>
     <div class="flex flex-wrap items-end gap-4 mt-3">
       <div class="flex-1 min-w-[180px]">
-        <label for="entities-tags" class="block text-sm font-medium mb-1 text-ink">Tags <span id="entities-tags-hint" class="font-normal text-ink-soft">(comma separated, matches all)</span></label>
+        <label for="entities-tags" class="block text-sm font-medium mb-1 text-ink">Tags</label>
         <input type="text" id="entities-tags" name="tags" value="<%= @filters[:tags] %>" placeholder="payment, core" aria-describedby="entities-tags-hint" class="field-input font-mono text-sm" />
+        <%= field_hint(:entity_filter, :tags, id: "entities-tags-hint") %>
       </div>
       <div>
         <label for="entities-sort" class="block text-sm font-medium mb-1 text-ink">Sort</label>
-        <select id="entities-sort" name="sort" class="field-input">
+        <select id="entities-sort" name="sort" class="field-input" aria-describedby="<%= hint_describedby(:entity_filter, :sort) %>">
           <% [["Updated (newest)", "-updated_at"], ["Updated (oldest)", "updated_at"],
               ["Created (newest)", "-created_at"], ["Created (oldest)", "created_at"],
               ["Name (A–Z)", "name"], ["Name (Z–A)", "-name"]].each do |label, value| %>
             <option value="<%= value %>" <%= "selected" if @filters[:sort] == value %>><%= label %></option>
           <% end %>
         </select>
+        <%= field_hint(:entity_filter, :sort) %>
       </div>
     </div>
   </details>
 <% end %>
 
 <% if @entities.empty? %>
-  <div class="panel p-6 text-sm text-center text-ink-soft">
-    No <%= entity_type_label(@type).downcase %> match this filter yet. Try
-    <%= link_to "clearing the filter", entities_path(type: @type) %>, or
-    <%= button_to "sync now", sync_entities_path(type: @type), method: :post, class: "inline underline bg-transparent border-0 p-0 text-accent" %>
-    if this connection has never been synced.
-  </div>
+  <%# Three different empties: never synced, synced but none of this type,
+      or a filter that matches nothing. Each says what to do next. %>
+  <% type_name = entity_type_label(@type).downcase %>
+  <% if @synced_at.nil? %>
+    <%= empty_state(:"entities.never_synced", type: type_name) do %>
+      <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-sm btn-text" %>
+    <% end %>
+  <% elsif filtered %>
+    <%= empty_state(:"entities.no_match", type: type_name) do %>
+      <%= link_to "Clear the filter", entities_path(type: @type), class: "btn btn-secondary" %>
+      <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-sm btn-text" %>
+    <% end %>
+  <% else %>
+    <%= empty_state(:"entities.none", type: type_name) do %>
+      <%= button_to "Sync now", sync_entities_path(type: @type), method: :post, class: "btn-sm btn-text" %>
+    <% end %>
+  <% end %>
 <% else %>
   <p id="entities-count" role="status" aria-atomic="true" class="text-xs mb-2 text-ink-faint"><%= render "count" %></p>
 

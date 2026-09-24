@@ -1,10 +1,10 @@
 <% content_for :title, "Audit log" %>
 
 <h1 class="page-title mb-1">Audit log</h1>
-<p class="text-sm mb-6 text-ink-soft">Every applied change on <%= current_connection.name %>, newest first.</p>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.audit_events.intro") %> Newest first, on <%= current_connection.name %>.</p>
 
 <% if @audit_events.empty? %>
-  <div class="panel p-6 text-sm text-center text-ink-soft">No changes have been applied on this connection yet.</div>
+  <%= empty_state(:audit_events) %>
 <% else %>
   <div class="overflow-x-auto panel">
     <table class="w-full text-sm min-w-[720px]">

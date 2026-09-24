@@ -4,7 +4,7 @@
   <div>
     <h1 class="page-title">Expiring certificates</h1>
     <p class="text-sm mt-0.5 text-ink-soft">
-      Certificates and CA certificates on <%= current_connection.name %> that expire within <%= @days %> days, expired ones included.
+      <%= t("hints.pages.certificates_expiring.intro") %> Within <%= @days %> days on <%= current_connection.name %>, expired ones included.
       <% if @last_synced_at %>Last synced <%= time_ago_in_words(@last_synced_at) %> ago.<% else %>This connection has never synced.<% end %>
     </p>
   </div>
@@ -18,9 +18,8 @@
 </div>
 
 <% if @entities.empty? %>
-  <div class="panel p-6 text-sm text-center text-ink-soft">
-    Nothing expires within <%= @days %> days<%= @last_synced_at ? "" : " — this connection has never synced, so nothing is known yet" %>.
-  </div>
+  <%# The header above already says when this connection last synced. %>
+  <%= empty_state(:certificates_expiring, days: @days) %>
 <% else %>
   <div class="overflow-x-auto panel">
     <table class="w-full text-sm">

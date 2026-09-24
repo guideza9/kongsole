@@ -731,8 +731,22 @@ input:where([type="submit"]):not(:disabled) { cursor: pointer; }
   gap: 0.5rem;
 }
 
+/* The field guide beside a JSON editor: one field name, its hint below, a
+   hairline between entries like the schema reference it sits above. */
+.field-guide-panel { padding: 1rem; }
+.field-guide {
+  display: grid;
+  gap: 0.75rem;
+}
+.field-guide > div + div {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.field-guide .field-hint { margin-top: 0.15rem; }
+
 /* A risk said before it is confirmed: the banner's weight for the title, the
    body at normal weight so it reads as a sentence, not a shout. */
+.risk-notice { font-size: 0.875rem; }
 .risk-notice__title { font-weight: 600; }
 .risk-notice__body {
   margin-top: 0.2rem;

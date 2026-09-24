@@ -208,6 +208,19 @@
         <% end %>
       </ul>
 
+      <%# R3: what this action does, said before the gates below ask for it. %>
+      <% if plan.status == "pending" %>
+        <% if plan.operation == "delete" %>
+          <%= risk_notice(@protected_entity ? :delete_admin_path : :delete_entity, tone: :danger) %>
+        <% end %>
+        <% if plan.apply_mode == "direct" && current_connection.shared_credential? && current_operator.present? %>
+          <%= risk_notice(:shared_credential_write, operator: current_operator) %>
+        <% end %>
+        <% if @env_vars.present? %>
+          <%= risk_notice(:env_var_certificate) %>
+        <% end %>
+      <% end %>
+
       <% if @requires_env_name %>
         <% if plan.apply_mode == "pr" %>
           <div class="env-notice <%= current_connection.env_tone %>">

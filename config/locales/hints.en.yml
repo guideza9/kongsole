@@ -197,6 +197,9 @@ en:
         no_match:
           title: "No %{type} match this filter"
           body: "Clear the filter to see everything, or sync if something was added in Kong since the last sync."
+        none:
+          title: "No %{type} on this node"
+          body: "Kong had none of these at the last sync. Sync again if someone has added some since."
       plugins_catalog:
         title: "No plugins are loaded on this node"
         body: "The list comes from the plugins this Kong node has loaded. If you expected some, log in again so Kongsole reads the node once more."

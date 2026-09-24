@@ -48,6 +48,11 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("login")
     end
 
+    it "login on uat (R3.6)" do
+      get login_connection_path(create(:kong_connection, name: "uat-1", env: "uat", rank: 2, apply_mode: "pr"))
+      snapshot!("login-uat")
+    end
+
     it "health" do
       create(:kong_connection, name: "sit", last_status: "ok")
       get health_path

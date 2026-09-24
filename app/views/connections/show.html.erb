@@ -1,10 +1,11 @@
 <% content_for :title, @connection.name %>
 
-<div class="flex items-center gap-3 mb-8">
+<div class="flex items-center gap-3 mb-2">
   <h1 class="sr-only">Connection: <%= @connection.name %></h1>
   <%= env_badge(@connection, size: :lg) %>
   <%= status_badge(@connection.last_status) %>
 </div>
+<p class="text-sm mb-8 text-ink-soft"><%= t("hints.pages.connection_show.intro") %></p>
 
 <div class="max-w-xl grid gap-4">
   <section class="panel p-4">

@@ -3,7 +3,7 @@
 <div class="flex flex-wrap items-center justify-between gap-4 mb-8">
   <div>
     <h1 class="page-title">Connections</h1>
-    <p class="text-sm mt-0.5 text-ink-soft">Every registered Kong Admin API connection.</p>
+    <p class="text-sm mt-0.5 text-ink-soft"><%= t("hints.pages.connections.intro") %></p>
   </div>
   <%= link_to "Add connection", new_connection_path, class: "btn btn-primary shrink-0" %>
 </div>
@@ -41,8 +41,6 @@
   <% end %>
 
   <% if @connections.empty? %>
-    <div class="panel p-6 text-sm text-center text-ink-soft">
-      No connections yet. Add one above, or run <code class="font-mono">rails kong:load_connections</code> to load <code class="font-mono">config/connections.yml</code>.
-    </div>
+    <%= empty_state(:connections) %>
   <% end %>
 </div>

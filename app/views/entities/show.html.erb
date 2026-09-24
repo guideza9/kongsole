@@ -74,7 +74,7 @@
         <% end %>
       </div>
       <% if children.empty? %>
-        <p class="text-sm text-ink-soft">None synced yet.</p>
+        <%= empty_state(:"entity_children.#{label.downcase}") %>
       <% else %>
         <div class="grid gap-px bg-border">
           <%= render partial: "entity", collection: children %>

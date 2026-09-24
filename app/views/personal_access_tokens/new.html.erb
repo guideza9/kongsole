@@ -1,6 +1,7 @@
 <% content_for :title, "Issue a token" %>
 
-<h1 class="page-title mb-6">Issue a token</h1>
+<h1 class="page-title mb-1">Issue a token</h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.tokens_new.intro") %></p>
 
 <%= form_with url: personal_access_tokens_path, method: :post, class: "max-w-xl grid gap-4" do %>
   <section class="panel p-4">
@@ -8,12 +9,13 @@
     <div class="grid gap-4">
       <div>
         <%= label_tag :operator, "Operator", class: "block text-sm font-medium text-ink" %>
-        <input type="text" name="operator" id="operator" required class="field-input mt-1" placeholder="your name" />
-        <p class="text-xs mt-1.5 text-ink-soft">Who every change this token makes traces back to in the audit log.</p>
+        <input type="text" name="operator" id="operator" required class="field-input mt-1" placeholder="your name" aria-describedby="<%= hint_describedby(:token, :operator) %>" />
+        <%= field_hint(:token, :operator) %>
       </div>
       <div>
         <%= label_tag :name, "Label ", class: "block text-sm font-medium text-ink" %><span class="font-normal text-sm text-ink-soft">(optional)</span>
-        <input type="text" name="name" id="name" class="field-input mt-1" placeholder="e.g. claude code" />
+        <input type="text" name="name" id="name" class="field-input mt-1" aria-describedby="<%= hint_describedby(:token, :name) %>" />
+        <%= field_hint(:token, :name) %>
       </div>
     </div>
   </section>
@@ -26,10 +28,11 @@
         <%= link_to "edit a connection", connections_path %> to switch it to stored first.
       </p>
     <% else %>
-      <div class="grid gap-2">
+      <%= field_hint(:token, :connection_ids) %>
+      <div class="grid gap-2 mt-3">
         <% @eligible_connections.each do |connection| %>
           <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="connection_ids[]" value="<%= connection.id %>" class="accent-accent" />
+            <input type="checkbox" name="connection_ids[]" value="<%= connection.id %>" class="accent-accent" aria-describedby="<%= hint_describedby(:token, :connection_ids) %>" />
             <%= env_badge(connection) %>
             <span class="text-ink-soft"><%= connection.apply_mode %></span>
           </label>

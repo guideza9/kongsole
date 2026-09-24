@@ -1,10 +1,10 @@
 <% content_for :title, "Pending PRs" %>
 
 <h1 class="page-title mb-1">Pending PRs</h1>
-<p class="text-sm mb-6 text-ink-soft">Every PR-mode change plan on <%= current_connection.name %>, newest first.</p>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.change_plans_index.intro") %> Newest first, on <%= current_connection.name %>.</p>
 
 <% if @change_plans.empty? %>
-  <div class="panel p-6 text-sm text-center text-ink-soft">No PR-mode changes have been proposed on this connection yet.</div>
+  <%= empty_state(:change_plans) %>
 <% else %>
   <div class="overflow-x-auto panel">
     <table class="w-full text-sm min-w-[720px]">

@@ -20,6 +20,83 @@ RSpec.describe "Console consistency", type: :request do
     Nokogiri::HTML(response.body)
   end
 
+  # R3: every field says what it is for, and every empty page how to begin.
+  describe "hints" do
+    # Visible form fields whose aria-describedby is missing or points at no text.
+    def undescribed_fields
+      page.css("main input, main select, main textarea")
+        .reject { |el| %w[hidden submit button].include?(el["type"]) }
+        .reject do |el|
+          ids = el["aria-describedby"].to_s.split
+          ids.any? && ids.all? { |id| page.at_css("[id='#{id}']")&.text.to_s.strip.present? }
+        end
+        .map { |el| el["name"] || el["id"] }
+    end
+
+    it "describes every field on the connection form" do
+      get new_connection_path
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes every field on the login form" do
+      get login_connection_path(connection)
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes every field on the token form" do
+      sign_in
+      create(:kong_connection, name: "dev-stored", credential_mode: "stored")
+      get new_personal_access_token_path
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes every field on the entity edit form and the entity filter" do
+      sign_in
+      entity = create(:kong_entity, kong_connection: connection, name: "payments-api")
+      stub_request(:get, "https://kong-admin.test/services/#{entity.kong_id}")
+        .to_return(status: 200, body: { id: entity.kong_id, name: "payments-api", tags: [] }.to_json)
+
+      get edit_entity_path(entity)
+      expect(undescribed_fields).to eq([])
+
+      get entities_path(type: "service")
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes the JSON editor on a create form and the plugin config step" do
+      sign_in
+      get new_entity_path(type: "upstream")
+      expect(undescribed_fields).to eq([])
+
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/cors")
+        .to_return(status: 200, body: { fields: [ { config: { fields: [] } } ] }.to_json)
+      get new_plugin_path(plugin_name: "cors")
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "tells a connection that has never synced apart from a filter that matches nothing" do
+      sign_in
+      get entities_path(type: "service")
+      expect(response.body).to include(I18n.t("hints.empty_states.entities.never_synced.title"))
+
+      create(:kong_entity, kong_connection: connection, name: "payments-api")
+      get entities_path(type: "service", q: "nothing-like-this")
+      expect(response.body).to include(I18n.t("hints.empty_states.entities.no_match.title", type: "services"))
+    end
+
+    it "explains what a delete does before the review asks to confirm it" do
+      sign_in
+      get change_plan_path(create(:change_plan, :delete, kong_connection: connection))
+      expect(response.body).to include(I18n.t("hints.risks.delete_entity.title"))
+    end
+
+    it "explains what a uat login means before the credential is typed" do
+      uat = create(:kong_connection, name: "uat-1", env: "uat", rank: 2, apply_mode: "pr")
+      get login_connection_path(uat)
+      expect(response.body).to include(I18n.t("hints.risks.rank_2_login.title", env: "UAT"))
+    end
+  end
+
   describe "health" do
     it "gives every connection a Log in and a Details action, and reads its policy in words and badges" do
       other = create(:kong_connection, name: "uat-ro", env: "uat", access_level: "ro", credential_kind: "shared",
