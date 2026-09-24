@@ -42,13 +42,13 @@ class SessionsController < ApplicationController
 
   private
 
-  # R3: a Kong or network failure is explained from hints.errors (cause and
-  # next step), never collapsed into "unreachable"; a login-pipeline refusal
-  # with no exception (operator name missing) keeps its own message.
+  # R3: a Kong or network failure is named by its hints.errors title; the
+  # layout prints the cause and next step under it (flash[:error_explanation]).
+  # A login-pipeline refusal with no exception (operator name missing) keeps
+  # its own message.
   def login_error_message(result)
     return result.error unless result.exception
 
-    explanation = Kong::ErrorExplanation.for(result.exception)
-    [ explanation.title, explanation.cause, explanation.next_step ].join(" ")
+    Kong::ErrorExplanation.for(result.exception).title
   end
 end

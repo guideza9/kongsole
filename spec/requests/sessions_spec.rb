@@ -46,6 +46,9 @@ RSpec.describe "Sessions (connection login)", type: :request do
       body: { message: "Unauthorized" }.to_json)
     post login_connection_path(connection), params: { username: "a", password: "b" }
     expect(response.body).to include(I18n.t("hints.errors.unauthorized.next_step"))
+    # The layout prints cause and next step under the alert (R3.4), so the
+    # alert line itself carries only the title.
+    expect(response.body.scan(I18n.t("hints.errors.unauthorized.next_step")).size).to eq(1)
   end
 
   it "says the connection's network is out of reach instead of 'Admin API down' when DNS fails" do
