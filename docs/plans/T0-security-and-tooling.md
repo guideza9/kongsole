@@ -377,7 +377,7 @@ end
 
 **Interfaces:** Produces helper `snapshot!(name)` ใน request spec: เมื่อ `ENV["UI_SNAPSHOTS"] == "1"` เขียน `response.body` ไป `tmp/ui-snapshots/<name>.html` โดยแทน `<link rel="stylesheet" …>` ด้วย `<style>` ของ `app/assets/builds/tailwind.css` · Later tasks: เพิ่มหน้าใหม่ของตัวเองเข้า `ui_snapshots_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/ui_snapshots_spec.rb
@@ -397,11 +397,11 @@ RSpec.describe "UI snapshots", type: :request do
 end
 ```
 
-- [ ] **Step 2:** FAIL → เขียน `UiSnapshots` (`force:` ใช้ใน test นี้เท่านั้น) → PASS
-- [ ] **Step 3:** เพิ่ม example ต่อหน้าที่มีอยู่ (login, health, entities index ทุก tab, entity show, entities new ทุก type, plugins new ทั้งสองขั้น, change_plans show direct/pr/delete, change_plans index, audit, tokens index/new, certificates expiring, connections new) — sign in ด้วย WebMock stub แบบเดียวกับ `spec/requests/plugins_spec.rb#sign_in`; แต่ละ example เรียก `snapshot!("<page>")`
-- [ ] **Step 4:** `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb` แล้ว `npx impeccable detect --json tmp/ui-snapshots > tmp/detect-baseline.json`
-- [ ] **Step 5:** บันทึกจำนวน finding ต่อหน้าลงตาราง baseline ใน `00-roadmap.md` (แถวใหม่ "detect บน snapshot")
-- [ ] **Step 6:** Commit `test(T0.6): render pages to HTML snapshots so impeccable detect can scan them`
+- [x] **Step 2:** FAIL → เขียน `UiSnapshots` (`force:` ใช้ใน test นี้เท่านั้น) → PASS
+- [x] **Step 3:** เพิ่ม example ต่อหน้าที่มีอยู่ (login, health, entities index ทุก tab, entity show, entities new ทุก type, plugins new ทั้งสองขั้น, change_plans show direct/pr/delete, change_plans index, audit, tokens index/new, certificates expiring, connections new) — sign in ด้วย WebMock stub แบบเดียวกับ `spec/requests/plugins_spec.rb#sign_in`; แต่ละ example เรียก `snapshot!("<page>")`
+- [x] **Step 4:** `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb` แล้ว `npx impeccable detect --json tmp/ui-snapshots > tmp/detect-baseline.json`
+- [x] **Step 5:** บันทึกจำนวน finding ต่อหน้าลงตาราง baseline ใน `00-roadmap.md` (แถวใหม่ "detect บน snapshot")
+- [x] **Step 6:** Commit `test(T0.6): render pages to HTML snapshots so impeccable detect can scan them`
 
 **เกณฑ์ผ่าน:** snapshot ≥ 18 หน้า · detect รันจบ (exit 0 หรือ 2) · ตัวเลข baseline อยู่ใน roadmap
 

@@ -13,6 +13,7 @@
 # Ignore all logfiles and tempfiles.
 /log/*
 /tmp/*
+/tmp/ui-snapshots
 !/log/.keep
 !/tmp/.keep
 
