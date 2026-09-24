@@ -443,10 +443,10 @@ end
 | risks | delete_entity, delete_admin_path, rank_2_login (uat + prod — แทนคำเตือนที่มีแค่ prod), rank_2_apply, shared_credential_write, env_var_certificate |
 | pages.intro | ทุกหน้าที่มี h1 |
 
-- [ ] **Step 1:** เขียนทุก key · ที่ไม่มั่นใจ (ธรรมเนียมทีม, ค่าตัวอย่างของทีม, owner) → `To Edit: <ร่าง>`
-- [ ] **Step 2:** `bin/rails hints:todo` → แนบรายการในรายงาน
-- [ ] **Step 3:** ตรวจ: ไม่มี example ที่เป็น hostname/credential จริง (`grep -nE "password|secret" config/locales/hints.en.yml` ต้องเป็นคำอธิบายเท่านั้น)
-- [ ] **Step 4:** Commit `docs(R3.5): hints for every existing field, empty state, risk and error`
+- [x] **Step 1:** เขียนทุก key · ที่ไม่มั่นใจ (ธรรมเนียมทีม, ค่าตัวอย่างของทีม, owner) → `To Edit: <ร่าง>`
+- [x] **Step 2:** `bin/rails hints:todo` → แนบรายการในรายงาน
+- [x] **Step 3:** ตรวจ: ไม่มี example ที่เป็น hostname/credential จริง (`grep -nE "password|secret" config/locales/hints.en.yml` ต้องเป็นคำอธิบายเท่านั้น)
+- [x] **Step 4:** Commit `docs(R3.5): hints for every existing field, empty state, risk and error`
 
 ---
 

@@ -5,6 +5,10 @@
 # "To Edit: " marks wording the owner still has to check -- list them with
 # `bin/rails hints:todo`. Do not drop the prefix until the owner has.
 #
+# Written for someone who knows HTTP and APIs but not Kong or this team's
+# habits. Examples are made up (example.internal, payments-api); never put a
+# real hostname, tag or credential of the team here.
+#
 # Layout (the top-level groups are fixed):
 #   hints.fields.<form>.<field>.{help,example,detail}
 #   hints.empty_states.<page>.{title,body,action}
@@ -23,70 +27,312 @@ en:
         show: "Show detailed hints"
         hide_short: "Fewer hints"
         show_short: "More hints"
+
     fields:
-      connection: {}
-      login: {}
+      connection:
+        name:
+          help: "A short name you will recognise in the header and in the connection switcher."
+          example: "payments-dev"
+          detail: "To Edit: Follow the team naming habit so everyone sees the same name for the same Kong node."
+        env:
+          help: "Which environment this Kong node belongs to. It sets how careful the console is."
+          example: "dev"
+          detail: "uat and prod turn the header violet and ask for the connection name and your password before anything is applied."
+        admin_url:
+          help: "Where the Admin API answers, through the route Kong itself guards with basic-auth."
+          example: "https://kong-admin.example.internal"
+          detail: "https:// is required unless it points at localhost. Do not point it at port 8001: that listener skips the basic-auth route, so every login looks read-write."
+        verify_ssl:
+          help: "Check the certificate of the Admin API before sending your credential."
+          detail: "Leave this on. Turn it off only for a local test stack; a real endpoint with it off will accept anyone pretending to be Kong."
+        ca_bundle_path:
+          help: "A file of CA certificates to trust when the Admin API uses an internal CA. Leave empty to use the system trust store."
+          example: "/etc/ssl/certs/internal-ca.pem"
+        apply_mode:
+          help: "How a reviewed change reaches Kong: direct writes it now, pr pushes a decK branch for review instead."
+          example: "direct"
+          detail: "pr is for environments where every change needs a CAB-reviewed pull request. With pr, nothing in Kong changes until the pull request is merged and CI runs deck gateway sync."
+        credential_mode:
+          help: "Where your Kong credential is kept after you log in."
+          example: "session"
+          detail: "session keeps it only in this browser session and never in the database, so there is no background sync and MCP cannot use it. stored keeps it encrypted in the database, which sync and MCP need."
+        select_tags_raw:
+          help: "The decK select_tags for this environment, comma separated. Kongsole only renders and syncs entities that carry them."
+          example: "payments, managed-by-kongsole"
+          detail: "To Edit: Use the tags your config repo already uses for this environment. deck gateway sync removes anything carrying these tags that is not in the file."
+      login:
+        username:
+          help: "The Kong consumer name of your Admin API credential."
+          example: "alice"
+        password:
+          help: "The basic-auth password for that consumer. It is kept only for this session unless the connection is set to stored."
+        operator:
+          help: "Your own name, when the credential is shared by the team. Every change is recorded under it."
+          example: "alice.w"
+          detail: "Required when the consumer is tagged shared-credential in Kong. It is how the audit log tells people apart when they log in with the same credential."
+      token:
+        operator:
+          help: "Who every change made with this token traces back to in the audit log."
+          example: "alice.w"
+        name:
+          help: "A label so you can tell your tokens apart later. Optional."
+          example: "claude code"
+        connection_ids:
+          help: "The connections this token may reach. Only connections with a stored credential can be picked, because MCP runs without a browser session."
+      entity_edit:
+        tags:
+          help: "Labels on this entity, comma separated. decK and the filters on the list use them."
+          example: "payment, core"
+          detail: "Keep the select_tags of this connection on the entity, or decK will stop managing it."
+        enabled:
+          help: "Off keeps the entity in Kong but makes Kong ignore it."
+      entity_filter:
+        q:
+          help: "Shows entities whose name contains this text."
+          example: "payments"
+        tags:
+          help: "Shows entities that carry every one of these tags."
+          example: "payment, core"
+        sort:
+          help: "The order of the list. Updated (newest) shows the latest changes first."
       service: {}
       route: {}
-      upstream: {}
-      target: {}
-      certificate: {}
-      ca_certificate: {}
-      sni: {}
-      consumer: {}
-      plugin: {}
-    empty_states: {}
-    risks: {}
-    # Kong::ErrorExplanation. Drafts from the old inline messages; R3.5
-    # rewrites them. network_* and connection_failed get the project's
-    # network note appended to next_step.
+      upstream:
+        name:
+          help: "The virtual hostname a service points at to use this upstream. Services reach it as http://<name>."
+          example: "payments-upstream"
+        algorithm:
+          help: "How Kong picks a target for each request."
+          example: "round-robin"
+          detail: "round-robin spreads requests in turn, least-connections favours the least busy target, consistent-hashing keeps the same client on the same target (set hash_on too)."
+        hash_on:
+          help: "What consistent-hashing groups requests by. Only used with that algorithm."
+          example: "header"
+        hash_fallback:
+          help: "What to hash on when the hash_on value is missing from a request."
+          example: "ip"
+        slots:
+          help: "How many slots the balancer ring has. The default suits most upstreams."
+          example: "10000"
+        healthchecks:
+          help: "Active and passive checks that take unhealthy targets out of rotation."
+          detail: "Active checks call a path on each target on a timer. Passive checks watch real traffic for failures. Start from the Active HTTP preset if you are not sure."
+        host_header:
+          help: "The Host header sent to the targets, when it should differ from the upstream name."
+          example: "payments.example.internal"
+        tags:
+          help: "Labels on this upstream, comma separated in the list, a JSON array here."
+          example: "[\"payment\"]"
+      target:
+        target:
+          help: "The host and port of one backend behind this upstream."
+          example: "10.0.0.12:8080"
+        weight:
+          help: "Its share of traffic compared with the other targets. 0 takes it out of rotation."
+          example: "100"
+        tags:
+          help: "Labels on this target, as a JSON array."
+          example: "[\"payment\"]"
+      certificate:
+        cert:
+          help: "The PEM certificate, including the chain if the server should send one."
+          example: "-----BEGIN CERTIFICATE-----"
+        key:
+          help: "A vault reference to the private key, never the key itself. Kongsole refuses a pasted PEM key."
+          example: "{vault://env/payments-tls-key}"
+          detail: "Kong CE only has the env vault: the key sits in an environment variable of the Kong nodes, and this field names it. The variable must exist on every node before the change is applied."
+        snis:
+          help: "Hostnames this certificate answers for. Each becomes an SNI entity."
+          example: "[\"payments.example.internal\"]"
+        tags:
+          help: "Labels on this certificate, as a JSON array."
+          example: "[\"payment\"]"
+      ca_certificate:
+        cert:
+          help: "A PEM CA certificate Kong trusts when it checks client or upstream certificates."
+          example: "-----BEGIN CERTIFICATE-----"
+        tags:
+          help: "Labels on this CA certificate, as a JSON array."
+          example: "[\"internal-ca\"]"
+      sni:
+        name:
+          help: "A hostname clients send in TLS. Kong answers with the certificate this SNI belongs to."
+          example: "payments.example.internal"
+        certificate:
+          help: "The certificate that answers for this hostname. Set from the certificate page you came from."
+        tags:
+          help: "Labels on this SNI, as a JSON array."
+          example: "[\"payment\"]"
+      consumer:
+        username:
+          help: "The name of an API client, or of a person using the Admin API."
+          example: "reporting-bot"
+        custom_id:
+          help: "An id from another system, used when you need to match this consumer to it."
+          example: "crm-4471"
+        tags:
+          help: "Labels on this consumer, as a JSON array. shared-credential marks a login used by more than one person."
+          example: "[\"shared-credential\"]"
+      plugin:
+        scope:
+          help: "Where the plugin runs: on one service, route or consumer, or on every request when global."
+          detail: "The scope comes from the page you started on. A global plugin touches every request through this Kong, including the admin path."
+        enabled:
+          help: "Off keeps the plugin configured but not running."
+        protocols:
+          help: "The request protocols the plugin runs on."
+          example: "[\"http\", \"https\"]"
+        tags:
+          help: "Labels on this plugin, as a JSON array."
+          example: "[\"payment\"]"
+
+    empty_states:
+      connections:
+        title: "No connections yet"
+        body: "A connection is one Kong node and its Admin API. Add one here, or load the team registry with bin/rails kong:load_connections."
+      entities:
+        never_synced:
+          title: "Nothing synced from this connection yet"
+          body: "Kongsole lists what it has read from Kong. Sync once to see the %{type} on this node."
+        no_match:
+          title: "No %{type} match this filter"
+          body: "Clear the filter to see everything, or sync if something was added in Kong since the last sync."
+      plugins_catalog:
+        title: "No plugins are loaded on this node"
+        body: "The list comes from the plugins this Kong node has loaded. If you expected some, log in again so Kongsole reads the node once more."
+      change_plans:
+        title: "No pull requests proposed yet"
+        body: "On a pr connection, every change you review becomes a branch here for the team to review and merge."
+      audit_events:
+        title: "No changes applied yet"
+        body: "Every change applied through Kongsole, by a person or by an agent, is recorded here with who made it."
+      tokens:
+        title: "No tokens issued yet"
+        body: "A token lets an agent such as Claude Code use Kongsole through MCP, as you. Issue one to get started."
+      certificates_expiring:
+        title: "Nothing expires within %{days} days"
+        body: "Certificates are read at each sync. Pick a longer window to look further ahead."
+      entity_children:
+        routes:
+          title: "No routes yet"
+          body: "A route decides which requests reach this service."
+        plugins:
+          title: "No plugins here yet"
+          body: "Plugins add behaviour such as auth or rate limiting to this entity."
+        targets:
+          title: "No targets yet"
+          body: "Targets are the backends this upstream spreads traffic across. Without one, requests to it fail."
+        snis:
+          title: "No SNIs yet"
+          body: "An SNI names a hostname this certificate answers for."
+        credentials:
+          title: "No credentials yet"
+          body: "Credentials let this consumer log in through key-auth or basic-auth. Their secrets are never shown here."
+
+    risks:
+      delete_entity:
+        title: "Deleting removes it from Kong"
+        body: "Anything that points at it stops working: a deleted service takes its routes with it, a deleted consumer loses its credentials."
+      delete_admin_path:
+        title: "This is the way into the Admin API"
+        body: "Deleting it locks everyone out of the Admin API, including Kongsole and CI. Type the connection name to confirm only if you are rebuilding the admin path on purpose."
+      rank_2_login:
+        title: "This is %{env}"
+        body: "Please take a moment to check you meant to connect here. Changes on this connection go through a reviewed pull request."
+      rank_2_apply:
+        title: "This change is for %{env}"
+        body: "Read the diff once more. Type the connection name and your password to confirm."
+      shared_credential_write:
+        title: "Recorded under %{operator}"
+        body: "This credential is shared, so the audit log names the operator you gave at login, not the Kong consumer."
+      env_var_certificate:
+        title: "The key must already be on every Kong node"
+        body: "This certificate reads its private key from an environment variable. If any node lacks it, TLS on that node fails as soon as the change is applied."
+
+    # Kong::ErrorExplanation. network_* and connection_failed get the network
+    # note of the project appended to next_step (R1).
     errors:
       unauthorized:
-        title: "To Edit: Credential rejected: wrong username or password."
-        cause: "To Edit: The basic-auth plugin in front of the Admin API did not accept this username and password."
-        next_step: "To Edit: Check the username and password for this connection, then sign in again."
+        title: "Credential rejected: wrong username or password."
+        cause: "The basic-auth plugin in front of the Admin API did not accept this username and password."
+        next_step: "Check the username and password for this connection, then log in again."
       forbidden:
-        title: "To Edit: Credential accepted, but not allowed here."
-        cause: "To Edit: The ACL plugin knows this consumer, but it is not in a group allowed to use the Admin API route."
-        next_step: "To Edit: Ask whoever runs this Kong to add the consumer to the allowed ACL group."
+        title: "This credential is not allowed here."
+        cause: "Kong knows the consumer, but the ACL plugin on the Admin API route does not let its group in."
+        next_step: "To Edit: Ask whoever runs this Kong node to add the consumer to the allowed ACL group."
       route_not_matched:
-        title: "To Edit: No Kong route matched this request."
-        cause: "To Edit: The Admin API route did not accept this method or path. A read-only credential sending a write gets this, and so does a wrong admin_url."
-        next_step: "To Edit: If you meant to change something, sign in with a read-write credential. Otherwise check the admin_url of this connection."
+        title: "No Kong route matched this request."
+        cause: "The Admin API route did not accept this method or path. A read-only credential sending a write gets this, and so does a wrong admin URL."
+        next_step: "If you meant to change something, log in with a read-write credential. Otherwise check the admin URL of this connection."
       entity_not_found:
-        title: "To Edit: Kong has no such entity."
-        cause: "To Edit: The Admin API answered, and the entity is not there. It may have been deleted since the last sync."
-        next_step: "To Edit: Run Sync now to refresh the list, then try again."
+        title: "Kong has no such entity."
+        cause: "The Admin API answered, and the entity is not there. Someone may have deleted it since the last sync."
+        next_step: "Sync to refresh the list, then try again."
       rate_limited:
-        title: "To Edit: Too many requests to the Admin API."
-        cause: "To Edit: The rate-limiting plugin on the Admin API route turned this request away."
-        next_step: "To Edit: Wait a minute and try again."
+        title: "Too many requests to the Admin API."
+        cause: "The rate-limiting plugin on the Admin API route turned this request away."
+        next_step: "Wait a minute, then try again."
       upstream_unavailable:
-        title: "To Edit: Kong answered, but its Admin API is down."
-        cause: "To Edit: Kong is reachable, but the loopback service behind the Admin API route did not respond (502 or 503)."
+        title: "Kong answered, but its Admin API is down."
+        cause: "Kong is reachable, but the service behind the Admin API route did not respond."
         next_step: "To Edit: Tell whoever runs this Kong node. Nothing on this machine will fix it."
       unexpected_response:
-        title: "To Edit: Kong gave an answer this tool does not recognise."
-        cause: "To Edit: The Admin API returned a status that none of the known cases cover."
-        next_step: "To Edit: Try again. If it keeps happening, note the time and tell whoever runs this Kong node."
+        title: "Kong gave an answer Kongsole does not recognise."
+        cause: "The Admin API returned a status none of the known cases cover."
+        next_step: "Try again. If it keeps happening, note the time and tell whoever runs this Kong node."
       connection_failed:
-        title: "To Edit: Could not reach this connection."
-        cause: "To Edit: The request never got an answer. This machine may not be on the network of the project."
-        next_step: "To Edit: Check that you are on the right network or VPN, then try again."
+        title: "Could not reach this connection."
+        cause: "The request never got an answer. This machine may not be on the network of the project."
+        next_step: "Check that you are on the right network or VPN, then try again."
       network_dns_failed:
-        title: "To Edit: The Kong hostname does not resolve from this machine."
-        cause: "To Edit: DNS could not find the admin_url host. This machine may not be on the network of the project."
-        next_step: "To Edit: Connect to the network or VPN of the project, then try again."
+        title: "The Kong hostname does not resolve from this machine."
+        cause: "DNS could not find the host in the admin URL. This machine may not be on the network of the project."
+        next_step: "Connect to the network or VPN of the project, then try again."
       network_refused:
-        title: "To Edit: The connection was refused."
-        cause: "To Edit: The host answered but nothing accepted the connection on that port. The admin_url port may be wrong, or this machine may not be on the network of the project."
-        next_step: "To Edit: Check the admin_url port and your network or VPN, then try again."
+        title: "The connection was refused."
+        cause: "The host answered, but nothing accepted the connection on that port. The port may be wrong, or this machine may not be on the network of the project."
+        next_step: "Check the port in the admin URL and your network or VPN, then try again."
       network_timed_out:
-        title: "To Edit: Kong did not answer in time."
-        cause: "To Edit: The request timed out before any answer came back. This machine may not be on the network of the project."
-        next_step: "To Edit: Check your network or VPN, then try again."
+        title: "Kong did not answer in time."
+        cause: "The request timed out before any answer came back. This machine may not be on the network of the project."
+        next_step: "Check your network or VPN, then try again."
       network_tls_failed:
-        title: "To Edit: The TLS handshake with Kong failed."
-        cause: "To Edit: The certificate of the Admin API was not trusted, or TLS could not be set up."
-        next_step: "To Edit: Check the CA bundle setting of this connection, or ask whoever runs this Kong which CA signs it."
-    pages: {}
+        title: "The TLS handshake with Kong failed."
+        cause: "The certificate of the Admin API was not trusted, or TLS could not be set up."
+        next_step: "Check the CA bundle path of this connection, or ask whoever runs this Kong node which CA signs it."
+
+    pages:
+      connections:
+        intro: "Every Kong node you can log in to. Pick one to work on it."
+      connections_new:
+        intro: "Register a Kong node for this machine. A connection made here is not shared with the team."
+      connections_edit:
+        intro: "Changes here apply to this machine only."
+      connection_show:
+        intro: "How Kongsole reaches this Kong node and what it may do there."
+      login:
+        intro: "Log in with the Kong credential for this node. It is the only login Kongsole has."
+      health:
+        intro: "The result of the last login to each connection. Nothing here is checked live."
+      entities_index:
+        intro: "What Kongsole last read from this Kong node. Sync to refresh it."
+      entity_show:
+        intro: "This entity as Kong holds it, with its secrets redacted."
+      entities_new:
+        intro: "Nothing reaches Kong until you review the change on the next page."
+      entities_edit:
+        intro: "This proposes a change. Nothing reaches Kong until you review and apply it on the next page."
+      plugins_new:
+        intro: "Pick a plugin loaded on this node, then set its configuration."
+      change_plans_index:
+        intro: "Changes proposed on this connection and their pull requests."
+      change_plan_show:
+        intro: "Check exactly what will change before it reaches Kong."
+      audit_events:
+        intro: "Every change applied on this connection, and who made it."
+      tokens_index:
+        intro: "Tokens let an agent use Kongsole through MCP, as you."
+      tokens_new:
+        intro: "The token is shown once, right after you issue it. Keep it somewhere safe."
+      certificates_expiring:
+        intro: "Certificates on this connection that expire soon, as of the last sync."
