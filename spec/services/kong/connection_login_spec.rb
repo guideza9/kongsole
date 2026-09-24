@@ -72,4 +72,16 @@ RSpec.describe Kong::ConnectionLogin do
     expect(result.error_class).to eq(Kong::Client::Unauthorized)
     expect(connection.reload.last_status).to eq("unauthorized")
   end
+
+  # R3.2 keeps the stored status as before; R1.11 splits out "unreachable".
+  it "still records an unreachable network as unavailable, and hands back the error for explaining" do
+    stub_request(:get, "https://kong-admin.test/")
+      .to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+
+    result = described_class.new(connection: connection, username: "alice", secret: "pw").call
+
+    expect(result.exception).to be_a(Kong::Client::NetworkUnreachable)
+    expect(result.exception.kind).to eq(:dns)
+    expect(connection.reload.last_status).to eq("unavailable")
+  end
 end

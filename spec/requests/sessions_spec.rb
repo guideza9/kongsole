@@ -40,6 +40,22 @@ RSpec.describe "Sessions (connection login)", type: :request do
     expect(response.body).to include("wrong username or password")
   end
 
+  it "explains a wrong password with a cause and what to do next" do
+    connection = create(:kong_connection, admin_url: "https://kong.test")
+    stub_request(:get, "https://kong.test/").to_return(status: 401, headers: { "WWW-Authenticate" => "Basic" },
+      body: { message: "Unauthorized" }.to_json)
+    post login_connection_path(connection), params: { username: "a", password: "b" }
+    expect(response.body).to include(I18n.t("hints.errors.unauthorized.next_step"))
+  end
+
+  it "says the connection's network is out of reach instead of 'Admin API down' when DNS fails" do
+    connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+    stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+    post login_connection_path(connection), params: { username: "a", password: "b" }
+    expect(response.body).to include(I18n.t("hints.errors.network_dns_failed.title"))
+    expect(response.body).not_to include(I18n.t("hints.errors.upstream_unavailable.title"))
+  end
+
   it "signs out and clears the session" do
     stub_successful_login
     post login_connection_path(connection), params: { username: "alice", password: "pw" }

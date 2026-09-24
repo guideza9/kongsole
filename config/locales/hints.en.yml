@@ -27,5 +27,56 @@ en:
       plugin: {}
     empty_states: {}
     risks: {}
-    errors: {}
+    # Kong::ErrorExplanation. Drafts from the old inline messages; R3.5
+    # rewrites them. network_* and connection_failed get the project's
+    # network note appended to next_step.
+    errors:
+      unauthorized:
+        title: "To Edit: Credential rejected: wrong username or password."
+        cause: "To Edit: The basic-auth plugin in front of the Admin API did not accept this username and password."
+        next_step: "To Edit: Check the username and password for this connection, then sign in again."
+      forbidden:
+        title: "To Edit: Credential accepted, but not allowed here."
+        cause: "To Edit: The ACL plugin knows this consumer, but it is not in a group allowed to use the Admin API route."
+        next_step: "To Edit: Ask whoever runs this Kong to add the consumer to the allowed ACL group."
+      route_not_matched:
+        title: "To Edit: No Kong route matched this request."
+        cause: "To Edit: The Admin API route did not accept this method or path. A read-only credential sending a write gets this, and so does a wrong admin_url."
+        next_step: "To Edit: If you meant to change something, sign in with a read-write credential. Otherwise check the admin_url of this connection."
+      entity_not_found:
+        title: "To Edit: Kong has no such entity."
+        cause: "To Edit: The Admin API answered, and the entity is not there. It may have been deleted since the last sync."
+        next_step: "To Edit: Run Sync now to refresh the list, then try again."
+      rate_limited:
+        title: "To Edit: Too many requests to the Admin API."
+        cause: "To Edit: The rate-limiting plugin on the Admin API route turned this request away."
+        next_step: "To Edit: Wait a minute and try again."
+      upstream_unavailable:
+        title: "To Edit: Kong answered, but its Admin API is down."
+        cause: "To Edit: Kong is reachable, but the loopback service behind the Admin API route did not respond (502 or 503)."
+        next_step: "To Edit: Tell whoever runs this Kong node. Nothing on this machine will fix it."
+      unexpected_response:
+        title: "To Edit: Kong gave an answer this tool does not recognise."
+        cause: "To Edit: The Admin API returned a status that none of the known cases cover."
+        next_step: "To Edit: Try again. If it keeps happening, note the time and tell whoever runs this Kong node."
+      connection_failed:
+        title: "To Edit: Could not reach this connection."
+        cause: "To Edit: The request never got an answer. This machine may not be on the network of the project."
+        next_step: "To Edit: Check that you are on the right network or VPN, then try again."
+      network_dns_failed:
+        title: "To Edit: The Kong hostname does not resolve from this machine."
+        cause: "To Edit: DNS could not find the admin_url host. This machine may not be on the network of the project."
+        next_step: "To Edit: Connect to the network or VPN of the project, then try again."
+      network_refused:
+        title: "To Edit: The connection was refused."
+        cause: "To Edit: The host answered but nothing accepted the connection on that port. The admin_url port may be wrong, or this machine may not be on the network of the project."
+        next_step: "To Edit: Check the admin_url port and your network or VPN, then try again."
+      network_timed_out:
+        title: "To Edit: Kong did not answer in time."
+        cause: "To Edit: The request timed out before any answer came back. This machine may not be on the network of the project."
+        next_step: "To Edit: Check your network or VPN, then try again."
+      network_tls_failed:
+        title: "To Edit: The TLS handshake with Kong failed."
+        cause: "To Edit: The certificate of the Admin API was not trusted, or TLS could not be set up."
+        next_step: "To Edit: Check the CA bundle setting of this connection, or ask whoever runs this Kong which CA signs it."
     pages: {}

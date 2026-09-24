@@ -30,6 +30,7 @@ class SessionsController < ApplicationController
       redirect_to health_path, notice: "Connected to \"#{@connection.name}\" (#{@connection.access_level}, #{@connection.credential_kind} credential)."
     else
       flash.now[:alert] = login_error_message(result)
+      flash.now[:error_explanation] = Kong::ErrorExplanation.for(result.exception).to_flash if result.exception
       render :new, status: :unprocessable_entity
     end
   end
@@ -41,20 +42,13 @@ class SessionsController < ApplicationController
 
   private
 
+  # R3: a Kong or network failure is explained from hints.errors (cause and
+  # next step), never collapsed into "unreachable"; a login-pipeline refusal
+  # with no exception (operator name missing) keeps its own message.
   def login_error_message(result)
-    case result.error_class&.name
-    when "Kong::Client::Unauthorized"
-      "Credential rejected: wrong username or password."
-    when "Kong::Client::Forbidden"
-      "Credential rejected: this consumer is not in an allowed ACL group."
-    when "Kong::Client::RouteNotMatched"
-      "No route matched at this connection's admin_url -- check the host/path, or this credential can't reach this route."
-    when "Kong::Client::RateLimited"
-      "Kong Admin API rate limit exceeded -- try again shortly."
-    when "Kong::Client::UpstreamUnavailable"
-      "Kong Admin API is unreachable (the loopback service may be down)."
-    else
-      result.error
-    end
+    return result.error unless result.exception
+
+    explanation = Kong::ErrorExplanation.for(result.exception)
+    [ explanation.title, explanation.cause, explanation.next_step ].join(" ")
   end
 end

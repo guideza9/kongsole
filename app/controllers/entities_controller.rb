@@ -92,6 +92,7 @@ class EntitiesController < ApplicationController
   rescue JsonPayloadParsing::InvalidPayload, Kong::ChangeGuardrails::Violation => e
     render_new_with_error(e.message)
   rescue Kong::Client::Error => e
+    explain_kong_error(e, now: true)
     render_new_with_error("Kong rejected this request: #{e.message}")
   end
 
@@ -126,6 +127,7 @@ class EntitiesController < ApplicationController
   rescue Kong::ChangeGuardrails::Violation => e
     redirect_to edit_entity_path(@entity), alert: safe_message(e.message)
   rescue Kong::Client::Error => e
+    explain_kong_error(e)
     redirect_to edit_entity_path(@entity), alert: "Couldn't read the current state from Kong: #{e.message}"
   end
 
@@ -139,6 +141,7 @@ class EntitiesController < ApplicationController
   rescue Kong::ChangeGuardrails::Violation => e
     redirect_to entity_path(@entity), alert: e.message
   rescue Kong::Client::Error => e
+    explain_kong_error(e)
     redirect_to entity_path(@entity), alert: "Couldn't read the current state from Kong: #{e.message}"
   end
 
@@ -147,6 +150,7 @@ class EntitiesController < ApplicationController
     redirect_to entities_path(type: sync_return_type), notice: "Synced #{result.synced_count} entity(s)" +
       (result.removed_count.positive? ? ", removed #{result.removed_count} no longer in Kong." : ".")
   rescue Kong::Client::Error => e
+    explain_kong_error(e)
     redirect_to entities_path(type: sync_return_type), alert: "Sync failed: #{e.message}"
   end
 
@@ -270,6 +274,11 @@ class EntitiesController < ApplicationController
     return false unless value.is_a?(String)
 
     value == Kong::Redactor::MARK || Kong::CertificateKeyPolicy.reference?(value) || REFERENCE_SHAPE.match?(value)
+  end
+
+  # R3: the cause and next step behind the alert (Kong::ErrorExplanation).
+  def explain_kong_error(error, now: false)
+    (now ? flash.now : flash)[:error_explanation] = Kong::ErrorExplanation.for(error).to_flash
   end
 
   def render_new_with_error(message)

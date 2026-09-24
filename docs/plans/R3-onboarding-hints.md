@@ -195,7 +195,7 @@ end
 - mapping: `Unauthorized→unauthorized`, `Forbidden→forbidden`, `RouteNotMatched→route_not_matched`, `EntityNotFound→entity_not_found`, `RateLimited→rate_limited`, `NetworkUnreachable(kind)→network_dns_failed | network_refused | network_timed_out | network_tls_failed | connection_failed`, `UpstreamUnavailable→upstream_unavailable`, `UnexpectedResponse→unexpected_response`, `Faraday::Error` อื่น → ผ่าน `NetworkFailure.classify` เหมือนกัน, อื่นๆ → `connection_failed`
 - error อื่นที่ R6/R7/R8 นำมาใช้ (`Kong::PrometheusClient::*`, `Kong::DeckCli::Error`, `Kong::GitClient::Error`) เพิ่ม mapping ใน task ของตัวเอง
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/network_failure_spec.rb
@@ -316,10 +316,10 @@ it "says the connection's network is out of reach instead of 'Admin API down' wh
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement `NetworkFailure` → `Client::NetworkUnreachable` (`def initialize(message, kind:, response: nil)`; ใน `Client#request` rescue ใช้ `NetworkFailure.classify(e)`; ข้อความ = `"Kong Admin API unreachable at #{@connection.admin_url} (#{kind})"` ไม่ต่อ `e.message` ที่อาจมี URL พร้อม userinfo) → `ErrorExplanation` (อ่าน `I18n.t("hints.errors.#{key}.title")` ฯลฯ) → PASS
-- [ ] **Step 3:** `Kong::ConnectionLogin` บันทึก `last_status` ของ `NetworkUnreachable` เป็น `"unavailable"` เหมือนเดิม (R1.11 แยกเป็น `"unreachable"`) — ตรวจว่า spec เดิมของ login ยังผ่าน
-- [ ] **Step 4:** ใน `EntitiesController`/`PluginsController` ทุก `rescue Kong::Client::Error => e` ใส่ `flash[:error_explanation] = Kong::ErrorExplanation.for(e).to_flash` (สำหรับ `render` ใช้ `flash.now`) ข้อความ alert เดิมคงไว้ · request spec: plan create ที่ Kong ตอบ 404 no-route → `flash[:error_explanation]["key"] == "route_not_matched"`
-- [ ] **Step 5:** suite 0 failures · Commit `feat(R3.2): every Kong error names its cause and next step; network trouble is told apart from Kong being down`
+- [x] **Step 2:** FAIL → implement `NetworkFailure` → `Client::NetworkUnreachable` (`def initialize(message, kind:, response: nil)`; ใน `Client#request` rescue ใช้ `NetworkFailure.classify(e)`; ข้อความ = `"Kong Admin API unreachable at #{@connection.admin_url} (#{kind})"` ไม่ต่อ `e.message` ที่อาจมี URL พร้อม userinfo) → `ErrorExplanation` (อ่าน `I18n.t("hints.errors.#{key}.title")` ฯลฯ) → PASS
+- [x] **Step 3:** `Kong::ConnectionLogin` บันทึก `last_status` ของ `NetworkUnreachable` เป็น `"unavailable"` เหมือนเดิม (R1.11 แยกเป็น `"unreachable"`) — ตรวจว่า spec เดิมของ login ยังผ่าน
+- [x] **Step 4:** ใน `EntitiesController`/`PluginsController` ทุก `rescue Kong::Client::Error => e` ใส่ `flash[:error_explanation] = Kong::ErrorExplanation.for(e).to_flash` (สำหรับ `render` ใช้ `flash.now`) ข้อความ alert เดิมคงไว้ · request spec: plan create ที่ Kong ตอบ 404 no-route → `flash[:error_explanation]["key"] == "route_not_matched"`
+- [x] **Step 5:** suite 0 failures · Commit `feat(R3.2): every Kong error names its cause and next step; network trouble is told apart from Kong being down`
 
 **เกณฑ์ผ่าน:** ทุก example ใหม่ผ่าน · ไม่มี controller ใดต่อ `e.message` ของ Faraday เข้าหน้าเว็บโดยไม่ผ่าน explanation · `rescue Kong::Client::UpstreamUnavailable` เดิมยังจับ network failure ได้ (suite เดิมผ่าน)
 

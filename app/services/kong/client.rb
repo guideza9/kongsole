@@ -38,6 +38,18 @@ module Kong
     class RateLimited < Error; end
     # 502/503, or a connection failure -- the loopback service (Admin API listener) is not up.
     class UpstreamUnavailable < Error; end
+    # This machine could not reach the Admin API at all (DNS, refused, timeout,
+    # TLS -- Kong::NetworkFailure): often not on the project's network, not
+    # Kong being down. A subclass so every `rescue UpstreamUnavailable` still
+    # catches it.
+    class NetworkUnreachable < UpstreamUnavailable
+      attr_reader :kind
+
+      def initialize(message, kind:, response: nil)
+        super(message, response: response)
+        @kind = kind
+      end
+    end
     # Anything else: surfaced rather than silently swallowed.
     class UnexpectedResponse < Error; end
 
@@ -81,7 +93,9 @@ module Kong
       end
       handle_response(response)
     rescue Faraday::ConnectionFailed, Faraday::TimeoutError, Faraday::SSLError => e
-      raise UpstreamUnavailable.new("Kong Admin API unreachable at #{@connection.admin_url}: #{e.message}")
+      # e.message is left out: it can carry a URL with userinfo.
+      kind = Kong::NetworkFailure.classify(e)
+      raise NetworkUnreachable.new("Kong Admin API unreachable at #{@connection.admin_url} (#{kind})", kind: kind)
     end
 
     def handle_response(response)

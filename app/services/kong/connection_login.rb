@@ -4,7 +4,7 @@ module Kong
   # locate and mark the admin path, and record the outcome -- never
   # collapsing a rejection into one generic "couldn't connect".
   class ConnectionLogin
-    Result = Struct.new(:success, :error, :error_class, :connection, keyword_init: true) do
+    Result = Struct.new(:success, :error, :error_class, :exception, :connection, keyword_init: true) do
       def success?
         !!success
       end
@@ -48,15 +48,17 @@ module Kong
     rescue Kong::Client::Error => e
       @connection.last_status = status_label(e)
       @connection.save!(validate: false)
-      failure(e.message, error_class: e.class)
+      failure(e.message, error_class: e.class, exception: e)
     end
 
     private
 
-    def failure(message, error_class: nil)
-      Result.new(success: false, error: message, error_class: error_class, connection: @connection)
+    def failure(message, error_class: nil, exception: nil)
+      Result.new(success: false, error: message, error_class: error_class, exception: exception, connection: @connection)
     end
 
+    # By ancestry, so a subclass (NetworkUnreachable < UpstreamUnavailable)
+    # keeps its parent's label.
     def status_label(error)
       {
         Kong::Client::Unauthorized => "unauthorized",
@@ -65,7 +67,7 @@ module Kong
         Kong::Client::EntityNotFound => "not_found",
         Kong::Client::RateLimited => "rate_limited",
         Kong::Client::UpstreamUnavailable => "unavailable"
-      }.fetch(error.class, "error")
+      }.find { |klass, _label| error.is_a?(klass) }&.last || "error"
     end
 
     def persist_secret_if_stored

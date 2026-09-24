@@ -322,6 +322,19 @@ RSpec.describe "Entities (web)", type: :request do
     expect(ChangePlan.last.diff).to include("tags")
   end
 
+  it "explains a Kong refusal behind the alert, by its own cause (R3)" do
+    sign_in
+    entity = create(:kong_entity, kong_connection: connection, kong_id: "46464646-4646-4646-4646-464646464646", name: "payments-api")
+    stub_request(:get, "https://kong-admin.test/services/#{entity.kong_id}")
+      .to_return(status: 404, body: { message: "no Route matched with those values" }.to_json)
+
+    patch entity_path(entity), params: { tags: "payment", enabled: "1" }
+
+    expect(response).to redirect_to(edit_entity_path(entity))
+    expect(flash[:alert]).to be_present
+    expect(flash[:error_explanation]["key"]).to eq("route_not_matched")
+  end
+
   it "proposes a delete and redirects to the change plan for review" do
     sign_in
     entity = create(:kong_entity, kong_connection: connection, kong_id: "55555555-5555-5555-5555-555555555555", name: "payments-webhook")

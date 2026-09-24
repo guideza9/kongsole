@@ -55,6 +55,24 @@ RSpec.describe Kong::Client do
       stub_request(:get, "http://kong-admin.test/").to_raise(Faraday::ConnectionFailed)
       expect { client.get("/") }.to raise_error(Kong::Client::UpstreamUnavailable)
     end
+
+    it "raises NetworkUnreachable with the kind when DNS fails, still catchable as UpstreamUnavailable" do
+      connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+      stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+      expect { described_class.new(connection: connection, secret: "pw").get("/") }.to raise_error(Kong::Client::NetworkUnreachable) { |e|
+        expect(e.kind).to eq(:dns)
+        expect(e).to be_a(Kong::Client::UpstreamUnavailable)
+        expect(e.message).not_to include("pw")
+      }
+    end
+
+    it "keeps a real 502 from the loopback service as plain UpstreamUnavailable" do
+      connection = create(:kong_connection, admin_url: "https://kong.test")
+      stub_request(:get, "https://kong.test/").to_return(status: 502, body: "{}")
+      expect { described_class.new(connection: connection, secret: "pw").get("/") }.to raise_error { |e|
+        expect(e.class).to eq(Kong::Client::UpstreamUnavailable)
+      }
+    end
   end
 
   describe "successful requests" do

@@ -28,6 +28,7 @@ class PluginsController < ApplicationController
       @catalog = current_connection.plugins_available.fetch("available_on_server", {}).keys.sort
     end
   rescue Kong::Client::Error => e
+    explain_kong_error(e)
     redirect_to new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id),
       alert: "Couldn't load the plugin schema from Kong: #{e.message}"
   end
@@ -47,11 +48,17 @@ class PluginsController < ApplicationController
   rescue Kong::ChangeGuardrails::Violation => e
     redirect_to new_plugin_path(scope_type: params[:scope_type], scope_kong_id: params[:scope_kong_id]), alert: e.message
   rescue Kong::Client::Error => e
+    explain_kong_error(e)
     redirect_to new_plugin_path(scope_type: params[:scope_type], scope_kong_id: params[:scope_kong_id]),
       alert: "Kong rejected this request: #{e.message}"
   end
 
   private
+
+  # R3: the cause and next step behind the alert (Kong::ErrorExplanation).
+  def explain_kong_error(error)
+    flash[:error_explanation] = Kong::ErrorExplanation.for(error).to_flash
+  end
 
   # Re-renders the config step (not a redirect) so the operator's edit
   # survives the round trip, same contract as EntitiesController#update's
