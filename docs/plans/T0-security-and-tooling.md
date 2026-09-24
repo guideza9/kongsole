@@ -273,7 +273,7 @@ end
 
 **Interfaces:** Produces `Kong::StoredPluginRedaction.call -> {entities:, plans:, audit_events:}` (จำนวนแถวที่แก้)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -298,10 +298,10 @@ RSpec.describe Kong::StoredPluginRedaction do
 end
 ```
 
-- [ ] **Step 2:** รัน → FAIL
-- [ ] **Step 3:** เขียน service ใช้ `Kong::Redactor.call("plugin", …, secret_paths: nil)` กับ `kong_entities.data`, `change_plans.before/after`, และทุกค่า `from`/`to` ของ `audit_events.diff` กับ `change_plans.diff` เฉพาะแถว `entity_type = "plugin"`; คำนวณ `digest` ใหม่ของ entity; นับเฉพาะแถวที่เปลี่ยน; rake `kong:redact_stored_plugin_secrets` เรียก service แล้ว print จำนวน
-- [ ] **Step 4:** รัน → PASS · รันทั้ง suite → 0 failures
-- [ ] **Step 5:** Commit `fix(T0.3): scrub plugin secrets already stored in the read-model, plans and audit`
+- [x] **Step 2:** รัน → FAIL
+- [x] **Step 3:** เขียน service ใช้ `Kong::Redactor.call("plugin", …, secret_paths: nil)` กับ `kong_entities.data`, `change_plans.before/after`, และทุกค่า `from`/`to` ของ `audit_events.diff` กับ `change_plans.diff` เฉพาะแถว `entity_type = "plugin"`; คำนวณ `digest` ใหม่ของ entity; นับเฉพาะแถวที่เปลี่ยน; rake `kong:redact_stored_plugin_secrets` เรียก service แล้ว print จำนวน
+- [x] **Step 4:** รัน → PASS · รันทั้ง suite → 0 failures
+- [x] **Step 5:** Commit `fix(T0.3): scrub plugin secrets already stored in the read-model, plans and audit`
 
 **เกณฑ์ผ่าน:** test ผ่าน · รัน `bin/rails kong:redact_stored_plugin_secrets` บน DB dev ในเครื่องได้ไม่ error
 
