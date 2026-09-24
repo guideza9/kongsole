@@ -117,6 +117,12 @@ R2, R3, R5, R7, T0 ไม่มี migration
 | R7 export | R7.1 | `DeckCli::Unreachable` (kind จาก stderr ของ decK) → คำอธิบายเครือข่าย |
 | R8 changeset | R8.4 | `GitClient::Unreachable` / `AuthFailed` → preview/submit แสดงคำอธิบาย รายการใน changeset ยังอยู่ครบ |
 
+### งานต่อที่รอ (จากรีวิวปิด T0, ตัดสิน 2026-09-25)
+
+- **Secret ของ plugin ในเส้นทางเขียน** — create/update plugin ยังเก็บค่าลับ plaintext ใน `change_plans.after` / `diff` /
+  `deck_diff`, `audit_events.diff` และคืนผ่าน API (MCP) · rake `kong:redact_stored_plugin_secrets` ล้างได้เฉพาะของที่มีอยู่แล้ว ·
+  เจ้าของงานเลือก "เปิดเป็น task แยกทีหลัง" (ทางเลือก: redact ตอนบันทึก audit + หลัง apply / เข้ารหัส column ระหว่าง pending) — หยุดถามก่อนทำ
+
 ## ข้อความที่จะแก้ในไฟล์ requirement
 
 อยู่ใน `docs/plans/design-amendments.md` §C (อนุมัติแล้ว — แก้ไฟล์จริงเป็น task แรกของช่วงที่ 2: `T0.0` พร้อม `CLAUDE.md` §B) · §A (DESIGN.md) เป็นร่างให้ทีมแก้เอง
@@ -140,7 +146,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 
 ## ความคืบหน้า
 
-- [ ] T0 — `docs/plans/T0-security-and-tooling.md`
+- [x] T0 — `docs/plans/T0-security-and-tooling.md` (ปิด 2026-09-25: rspec 889/0, vitest 28/28, PAT revoke แล้ว — เจ้าของงานยืนยัน)
 - [ ] R3 — `docs/plans/R3-onboarding-hints.md`
 - [ ] R1 — `docs/plans/R1-multi-project-env.md`
 - [ ] R8 — `docs/plans/R8-pr-mode-changeset.md`

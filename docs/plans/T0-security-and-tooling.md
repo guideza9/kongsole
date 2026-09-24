@@ -409,8 +409,8 @@ end
 
 ## เกณฑ์ปิดงาน T0
 
-- [ ] `bundle exec rspec` → 0 failures (≥ 843 + test ใหม่)
-- [ ] `cd mcp && npm test` → ผ่านทั้งหมด
-- [ ] ไม่มี plaintext secret ของ plugin ใน read-model (ตรวจตาม T0.2) · PAT เก่าถูก revoke (เจ้าของงานยืนยัน)
-- [ ] detect baseline บน snapshot บันทึกแล้ว
-- [ ] รายงาน: ผล test, diff baseline, ยืนยัน `spec/requests/log_filtering_spec.rb` ผ่าน
+- [x] `bundle exec rspec` → 0 failures (≥ 843 + test ใหม่)
+- [x] `cd mcp && npm test` → ผ่านทั้งหมด
+- [x] ไม่มี plaintext secret ของ plugin ใน read-model (ตรวจตาม T0.2) · PAT เก่าถูก revoke (เจ้าของงานยืนยัน)
+- [x] detect baseline บน snapshot บันทึกแล้ว
+- [x] รายงาน: ผล test, diff baseline, ยืนยัน `spec/requests/log_filtering_spec.rb` ผ่าน
