@@ -11,8 +11,18 @@
 #   hints.risks.<situation>.{title,body}
 #   hints.errors.<key>.{title,cause,next_step}
 #   hints.pages.<page>.intro
+#   hints.ui.*  -- the few words the hint pieces themselves print
 en:
   hints:
+    ui:
+      example_prefix: "e.g."
+      why: "Why"
+      next_step: "What to do"
+      toggle:
+        hide: "Hide detailed hints"
+        show: "Show detailed hints"
+        hide_short: "Fewer hints"
+        show_short: "More hints"
     fields:
       connection: {}
       login: {}

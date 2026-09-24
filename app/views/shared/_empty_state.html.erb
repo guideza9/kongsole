@@ -1,0 +1,10 @@
+<%# shared/_empty_state — what the page is for and how to begin, in place of
+    an empty list. One hairline panel; the page's own action, if any, below.
+    See HintsHelper#empty_state. %>
+<div class="panel empty-state">
+  <h2 class="empty-state__title"><%= title %></h2>
+  <p class="empty-state__body"><%= body %></p>
+  <% if action.present? %>
+    <div class="empty-state__action"><%= action %></div>
+  <% end %>
+</div>

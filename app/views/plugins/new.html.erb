@@ -65,7 +65,7 @@
     <section class="panel p-4">
       <h2 class="section-label mb-3">Schema reference</h2>
       <% if @schema %>
-        <%= render "schema_reference", fields: plugin_config_fields(@schema) %>
+        <%= render "shared/schema_reference", fields: schema_rows(plugin_config_fields(@schema)) %>
       <% else %>
         <p class="text-sm text-ink-soft">Couldn't load the schema from Kong.</p>
       <% end %>

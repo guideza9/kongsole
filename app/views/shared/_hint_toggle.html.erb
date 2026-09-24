@@ -1,0 +1,12 @@
+<%# shared/_hint_toggle — the topbar switch for detailed hints. A plain form
+    (PATCH hint_preference_path), so it works without JS; the label names what
+    a click will do, which is why it carries no aria-pressed. The choice is a
+    cookie the server reads, so the next page renders in it with no flash.
+    Below 40rem the short label keeps the topbar at three rows; only one label
+    is displayed at a time, so the accessible name is always the visible one. %>
+<% state = detailed_hints? ? "hide" : "show" %>
+<%= button_to hint_preference_path, method: :patch, params: { mode: detailed_hints? ? "compact" : "detailed" },
+      class: "btn-text topbar-action", form_class: "hint-toggle" do %>
+  <span class="hint-toggle__long"><%= t("hints.ui.toggle.#{state}") %></span>
+  <span class="hint-toggle__short"><%= t("hints.ui.toggle.#{state}_short") %></span>
+<% end %>

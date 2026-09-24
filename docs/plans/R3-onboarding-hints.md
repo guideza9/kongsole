@@ -382,7 +382,7 @@ end
 - `empty_state(page, **interpolations)` → render `_empty_state`
 - `risk_notice(situation, **interpolations)` → render `_risk_notice`
 
-- [ ] **Step 1:** helper spec (เขียนก่อน)
+- [x] **Step 1:** helper spec (เขียนก่อน)
 
 ```ruby
 require "rails_helper"
@@ -408,11 +408,11 @@ RSpec.describe HintsHelper, type: :helper do
 end
 ```
 
-- [ ] **Step 2:** รัน `/impeccable shape` → สร้าง partial/CSS ตามผลลัพธ์ที่ยึด `UI-DESIGN.md` (hairline, `text-xs` 13px, ink-soft, ไม่มีไอคอนใหม่, ไม่มีสีใหม่)
-- [ ] **Step 3:** toggle: `<form>` PATCH ไป `hint_preference_path` ทำงานได้ไม่มี JS; `hint_toggle_controller.js` แค่ submit ด้วย `requestSubmit()` และอัปเดต `aria-pressed`
-- [ ] **Step 4:** `bundle exec rspec spec/helpers/hints_helper_spec.rb spec/requests` → PASS
-- [ ] **Step 5:** เพิ่ม snapshot `layout-compact-hints` + `plugins-config` แล้ว `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb && npx impeccable detect tmp/ui-snapshots`
-- [ ] **Step 6:** Commit `feat(R3.4): shared hint, empty-state, risk and error pieces with a remembered hide switch`
+- [x] **Step 2:** รัน `/impeccable shape` → สร้าง partial/CSS ตามผลลัพธ์ที่ยึด `UI-DESIGN.md` (hairline, `text-xs` 13px, ink-soft, ไม่มีไอคอนใหม่, ไม่มีสีใหม่)
+- [x] **Step 3:** toggle: `<form>` PATCH ไป `hint_preference_path` ทำงานได้ไม่มี JS; `hint_toggle_controller.js` แค่ submit ด้วย `requestSubmit()` และอัปเดต `aria-pressed`
+- [x] **Step 4:** `bundle exec rspec spec/helpers/hints_helper_spec.rb spec/requests` → PASS
+- [x] **Step 5:** เพิ่ม snapshot `layout-compact-hints` + `plugins-config` แล้ว `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb && npx impeccable detect tmp/ui-snapshots`
+- [x] **Step 6:** Commit `feat(R3.4): shared hint, empty-state, risk and error pieces with a remembered hide switch`
 
 **เกณฑ์ detect:** ไม่มี finding หลักเพิ่มจาก baseline บน snapshot ที่แตะ · ตรวจ 390px ไม่มี horizontal scroll
 

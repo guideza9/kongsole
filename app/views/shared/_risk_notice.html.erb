@@ -1,0 +1,7 @@
+<%# shared/_risk_notice — what an action will do, said before it is confirmed.
+    A plain banner (no live role): it is there when the page opens, not news.
+    See HintsHelper#risk_notice. %>
+<%= render layout: "shared/notice", locals: { tone: tone, class: "risk-notice" } do %>
+  <p class="risk-notice__title"><%= title %></p>
+  <p class="risk-notice__body"><%= body %></p>
+<% end %>

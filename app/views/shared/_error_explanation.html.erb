@@ -1,0 +1,13 @@
+<%# shared/_error_explanation — the cause and next step behind an alert,
+    inside the same banner so one live region carries the whole message.
+    `explanation` is Kong::ErrorExplanation::Result#to_flash (string keys). %>
+<dl class="error-explanation">
+  <div>
+    <dt><%= t("hints.ui.why") %></dt>
+    <dd><%= explanation["cause"] %></dd>
+  </div>
+  <div>
+    <dt><%= t("hints.ui.next_step") %></dt>
+    <dd><%= explanation["next_step"] %></dd>
+  </div>
+</dl>

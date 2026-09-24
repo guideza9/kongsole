@@ -1,0 +1,34 @@
+<%# shared/_schema_reference — read-only reference beside a JSON editor: one
+    entry per field with its name, type, required, description, default and
+    allowed values, recursing into a record's own fields. `fields` are rows as
+    Kong::EntitySchema returns them (HintsHelper#schema_rows shapes a raw
+    plugin schema the same way). %>
+<div class="grid gap-3 text-xs">
+  <% fields.each do |field| %>
+    <div class="pb-2 border-b border-border">
+      <div class="flex items-center gap-1.5 flex-wrap mb-1">
+        <span class="font-mono font-semibold text-ink break-all"><%= field[:name] %></span>
+        <% if field[:type].present? %>
+          <span class="tag"><%= field[:type] %></span>
+        <% end %>
+        <% if field[:required] %>
+          <span class="tag text-danger! border-danger!">required</span>
+        <% end %>
+      </div>
+      <% if field[:description].present? %>
+        <p class="text-ink-soft"><%= field[:description] %></p>
+      <% end %>
+      <% unless field[:default].nil? %>
+        <p class="font-mono mt-1 text-ink-faint break-all">default: <%= field[:default].inspect %></p>
+      <% end %>
+      <% if field[:one_of].present? %>
+        <p class="mt-1 text-ink-faint">one of: <span class="font-mono break-all"><%= field[:one_of].join(", ") %></span></p>
+      <% end %>
+      <% if field[:nested].present? %>
+        <div class="mt-2 pl-3 border-l border-border">
+          <%= render "shared/schema_reference", fields: field[:nested] %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</div>

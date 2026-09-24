@@ -160,6 +160,25 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("tokens-new")
     end
 
+    it "layout with compact hints (R3.4)" do
+      cookies[:kongsole_hints] = "compact"
+      create(:kong_connection, name: "dev-1")
+      get connections_path
+      expect(response.body).to include(I18n.t("hints.ui.toggle.show"))
+      snapshot!("layout-compact-hints")
+    end
+
+    it "an alert with its cause and next step (R3.4)" do
+      sign_in
+      entity = create(:kong_entity, kong_connection: connection, kong_id: "47474747-4747-4747-4747-474747474747", name: "payments-api")
+      stub_request(:get, "https://kong-admin.test/services/#{entity.kong_id}")
+        .to_return(status: 404, body: { message: "no Route matched with those values" }.to_json)
+      patch entity_path(entity), params: { tags: "payment", enabled: "1" }
+      follow_redirect!
+      expect(response.body).to include(I18n.t("hints.ui.next_step"), CGI.escapeHTML(I18n.t("hints.errors.route_not_matched.next_step")))
+      snapshot!("alert-error-explanation")
+    end
+
     it "certificates expiring" do
       sign_in
       get expiring_certificates_path

@@ -684,6 +684,105 @@ input:where([type="submit"]):not(:disabled) { cursor: pointer; }
 .notice-banner--warning { background: var(--color-warning-tint); border-color: var(--color-warning); color: var(--color-warning); }
 .notice-banner--success { background: var(--color-success-tint); border-color: var(--color-success); color: var(--color-success); }
 
+/* R3 hint pieces (HintsHelper, app/views/shared/_*). They add no colour, icon
+   or size: hints are small ink-soft text, empty states are a plain .panel,
+   risks and errors ride the notice banner they belong to. */
+
+/* A field's help under its input: 13px, ink-soft, the example value in mono
+   because it is data. Long values wrap instead of widening a phone screen. */
+.field-hint {
+  margin-top: 0.35rem;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--color-ink-soft);
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+.field-hint__example code {
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+}
+.field-hint__detail {
+  margin-top: 0.25rem;
+}
+
+/* What an empty page is for and how to start. Left-aligned like the rest of
+   the console; the action sits under the sentence it follows from. */
+.empty-state {
+  padding: 1.5rem 1.25rem;
+}
+.empty-state__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  text-wrap: balance;
+}
+.empty-state__body {
+  margin-top: 0.3rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-soft);
+  max-width: 65ch;
+  overflow-wrap: anywhere;
+}
+.empty-state__action {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* A risk said before it is confirmed: the banner's weight for the title, the
+   body at normal weight so it reads as a sentence, not a shout. */
+.risk-notice__title { font-weight: 600; }
+.risk-notice__body {
+  margin-top: 0.2rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* Why / What to do inside the alert banner: a two-column term list that
+   stacks on a phone. Terms are small labels, values read at body size. */
+.error-explanation {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 400;
+}
+.error-explanation > div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.75rem;
+}
+.error-explanation dt {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.5rem;
+}
+.error-explanation dd {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 40rem) {
+  .error-explanation > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* button_to wraps the topbar switch in a form; keep it inline in the row.
+   The short label is the phone's, so the signed-in topbar stays three rows. */
+.hint-toggle { display: contents; }
+.hint-toggle__short { display: none; }
+@media (max-width: 40rem) {
+  .hint-toggle__long { display: none; }
+  .hint-toggle__short { display: inline; }
+  /* The controls row (env chip, hints, Switch, Sign out) takes the nav's
+     tighter side padding on a phone, so the switch does not add a row. */
+  .topbar .topbar-action { padding-inline: 0.5rem; }
+}
+
 /* Verbatim output from Kong, decK or git inside a notice banner -- monospace
    because it is a machine's exact words, which an operator may need to copy
    or paste into a search. Wraps rather than scrolls: a failure reason is the

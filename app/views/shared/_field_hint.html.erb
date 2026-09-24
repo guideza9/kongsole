@@ -1,0 +1,9 @@
+<%# shared/_field_hint — a field's help, an example value, and (detailed hints
+    only) a longer note. The id is the input's aria-describedby target, so a
+    screen reader hears the help with the label. See HintsHelper#field_hint. %>
+<div id="<%= id %>" class="field-hint">
+  <p><%= help %><% if example %> <span class="field-hint__example"><%= t("hints.ui.example_prefix") %> <code><%= example %></code></span><% end %></p>
+  <% if detail %>
+    <p class="field-hint__detail"><%= detail %></p>
+  <% end %>
+</div>

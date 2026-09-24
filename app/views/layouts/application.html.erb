@@ -44,8 +44,8 @@
           <%= nav_link_to "Health", health_path, current: primary_nav_current?(:health), class: "topbar-action hover:text-ink transition-colors" %>
         </nav>
       </div>
-      <% if signed_in? %>
-        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+      <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+        <% if signed_in? %>
           <%= env_badge(current_connection, size: :lg) %>
           <% if current_connection.read_only? %>
             <span class="tag text-xs uppercase tracking-wide">read-only</span>
@@ -53,10 +53,13 @@
           <% if current_connection.shared_credential? %>
             <span class="text-xs sm:text-sm text-ink-soft">shared credential — as <%= current_operator %></span>
           <% end %>
+        <% end %>
+        <%= render "shared/hint_toggle" %>
+        <% if signed_in? %>
           <%= link_to "Switch", connections_path, class: "btn-text topbar-action" %>
           <%= button_to "Sign out", logout_path, method: :delete, class: "btn-text topbar-action" %>
-        </div>
-      <% end %>
+        <% end %>
+      </div>
     </header>
 
     <main id="main" tabindex="-1" class="w-full max-w-5xl mx-auto mt-8 px-4 sm:px-6 pb-16">
@@ -68,7 +71,10 @@
       <% if notice %>
         <%= render layout: "shared/notice", locals: { tone: :success, role: "status", tag: :p, class: "mb-6", data: { controller: "flash" } } do %><%= notice %><% end %>
       <% end %>
-      <% if alert %>
+      <% if alert && flash[:error_explanation].present? %>
+        <%# R3: why it failed and what to do, in the same banner and live region. %>
+        <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6", data: { controller: "flash" } } do %><p><%= alert %></p><%= render "shared/error_explanation", explanation: flash[:error_explanation] %><% end %>
+      <% elsif alert %>
         <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-6", data: { controller: "flash" } } do %><%= alert %><% end %>
       <% end %>
 
