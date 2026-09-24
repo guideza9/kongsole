@@ -1,0 +1,31 @@
+# Every hint in the UI lives here (R3): field help and examples, empty
+# states, risk notices, error explanations and page intros. Views read these
+# keys only; edit the wording here without touching a view.
+#
+# "To Edit: " marks wording the owner still has to check -- list them with
+# `bin/rails hints:todo`. Do not drop the prefix until the owner has.
+#
+# Layout (the top-level groups are fixed):
+#   hints.fields.<form>.<field>.{help,example,detail}
+#   hints.empty_states.<page>.{title,body,action}
+#   hints.risks.<situation>.{title,body}
+#   hints.errors.<key>.{title,cause,next_step}
+#   hints.pages.<page>.intro
+en:
+  hints:
+    fields:
+      connection: {}
+      login: {}
+      service: {}
+      route: {}
+      upstream: {}
+      target: {}
+      certificate: {}
+      ca_certificate: {}
+      sni: {}
+      consumer: {}
+      plugin: {}
+    empty_states: {}
+    risks: {}
+    errors: {}
+    pages: {}

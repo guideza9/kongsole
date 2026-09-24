@@ -5,9 +5,15 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
-  helper_method :current_connection, :current_operator, :signed_in?
+  helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?
 
   private
+
+  # R3: detailed hints unless this browser chose compact (HintPreferencesController).
+  # Anything but "compact" -- a missing or tampered cookie -- reads as detailed.
+  def detailed_hints?
+    cookies[:kongsole_hints] != "compact"
+  end
 
   # The connection the current browser session is logged into, if any.
   #

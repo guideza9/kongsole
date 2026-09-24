@@ -73,7 +73,7 @@ en:
 
 **Interfaces:** Produces `detailed_hints?`, `hint_preference_path`, rake `hints:todo`
 
-- [ ] **Step 1: test การตั้งค่า**
+- [x] **Step 1: test การตั้งค่า**
 
 ```ruby
 # spec/requests/hint_preferences_spec.rb
@@ -103,7 +103,7 @@ RSpec.describe "Hint preference", type: :request do
 end
 ```
 
-- [ ] **Step 2: test ของ rake `hints:todo`**
+- [x] **Step 2: test ของ rake `hints:todo`**
 
 ```ruby
 # spec/lib/hints_rake_spec.rb
@@ -120,8 +120,8 @@ RSpec.describe "hints:todo" do
 end
 ```
 
-- [ ] **Step 3:** รัน 2 ไฟล์ → FAIL
-- [ ] **Step 4: implement**
+- [x] **Step 3:** รัน 2 ไฟล์ → FAIL
+- [x] **Step 4: implement**
 
 ```ruby
 # app/controllers/hint_preferences_controller.rb
@@ -172,8 +172,8 @@ namespace :hints do
 end
 ```
 
-- [ ] **Step 5:** PASS ทั้ง 2 ไฟล์ · รันทั้ง suite (เปิด `raise_on_missing_translations` แล้ว) → 0 failures (ถ้า view เดิมมี `t()` ที่หาย key ให้หยุดรายงาน)
-- [ ] **Step 6:** Commit `feat(R3.1): one hints file, a server-read hint preference, and hints:todo`
+- [x] **Step 5:** PASS ทั้ง 2 ไฟล์ · รันทั้ง suite (เปิด `raise_on_missing_translations` แล้ว) → 0 failures (ถ้า view เดิมมี `t()` ที่หาย key ให้หยุดรายงาน)
+- [x] **Step 6:** Commit `feat(R3.1): one hints file, a server-read hint preference, and hints:todo`
 
 **เกณฑ์ผ่าน:** 3+1 examples ผ่าน · suite 0 failures
 
