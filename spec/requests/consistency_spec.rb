@@ -90,6 +90,41 @@ RSpec.describe "Console consistency", type: :request do
       expect(response.body).to include(I18n.t("hints.risks.delete_entity.title"))
     end
 
+    it "says Kong refuses to delete a service that still has routes, rather than taking them with it" do
+      sign_in
+      get change_plan_path(create(:change_plan, :delete, kong_connection: connection))
+      expect(response.body).to include(I18n.t("hints.risks.delete_entity.body"))
+      expect(I18n.t("hints.risks.delete_entity.body")).to match(/refuses/i).and(satisfy { |body| !body.include?("takes its routes") })
+    end
+
+    it "keeps the admin-path warning for the admin path, and asks for the entity's own name" do
+      sign_in
+      admin_id = "abababab-abab-abab-abab-abababababab"
+      connection.update!(admin_path_fingerprint: { "service_id" => admin_id })
+      get change_plan_path(create(:change_plan, :delete, kong_connection: connection, target_kong_id: admin_id,
+        before: { "id" => admin_id, "name" => "admin-api", "tags" => [] }))
+      expect(response.body).to include(I18n.t("hints.risks.delete_admin_path.title"))
+      expect(I18n.t("hints.risks.delete_admin_path.body")).not_to include("connection name")
+    end
+
+    it "warns about a protected entity as protected, not as the admin path" do
+      sign_in
+      get change_plan_path(create(:change_plan, :delete, kong_connection: connection,
+        before: { "id" => SecureRandom.uuid, "name" => "payments-api", "tags" => [ "protected" ] }))
+      expect(response.body).to include(I18n.t("hints.risks.delete_protected.title"))
+      expect(response.body).not_to include(I18n.t("hints.risks.delete_admin_path.title"))
+    end
+
+    it "only promises a pull request on a uat login whose connection is in PR mode" do
+      direct = create(:kong_connection, name: "uat-direct", env: "uat", rank: 2, apply_mode: "direct")
+      get login_connection_path(direct)
+      expect(response.body).not_to include(I18n.t("hints.risks.rank_2_login.pr_note"))
+
+      pr = create(:kong_connection, name: "uat-pr", env: "uat", rank: 2, apply_mode: "pr")
+      get login_connection_path(pr)
+      expect(response.body).to include(I18n.t("hints.risks.rank_2_login.pr_note"))
+    end
+
     it "explains what a uat login means before the credential is typed" do
       uat = create(:kong_connection, name: "uat-1", env: "uat", rank: 2, apply_mode: "pr")
       get login_connection_path(uat)

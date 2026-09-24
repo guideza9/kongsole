@@ -50,7 +50,7 @@ class PluginsController < ApplicationController
   rescue Kong::Client::Error => e
     explain_kong_error(e)
     redirect_to new_plugin_path(scope_type: params[:scope_type], scope_kong_id: params[:scope_kong_id]),
-      alert: "Kong rejected this request: #{e.message}"
+      alert: Kong::ErrorExplanation.for(e).title
   end
 
   private

@@ -57,6 +57,11 @@
         <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-3 text-xs" } do %>
           <%= @payload_error %>
         <% end %>
+        <% if flash.now[:error_explanation].present? %>
+          <%= render layout: "shared/notice", locals: { tone: :danger, class: "mb-3 text-xs" } do %>
+            <%= render "shared/error_explanation", explanation: flash.now[:error_explanation] %>
+          <% end %>
+        <% end %>
         <% if @payload_withheld %>
           <p class="text-xs mb-3 text-ink-soft">
             Your text wasn't kept because it may contain key material, so the editor is back at its starting document.

@@ -602,6 +602,19 @@ RSpec.describe "Entities (web)", type: :request do
     end
 
     describe "POST /entities (create)" do
+      it "explains an unreachable network on the form itself, and never calls it a Kong rejection (R3)" do
+        sign_in
+        stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate")
+          .to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+
+        post entities_path, params: { type: "upstream", payload_json: { name: "orders" }.to_json }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include(I18n.t("hints.errors.network_dns_failed.title"))
+        expect(response.body).to include(I18n.t("hints.errors.network_dns_failed.next_step"))
+        expect(response.body).not_to include("Kong rejected")
+      end
+
       it "proposes an upstream, validated against Kong's schema, and redirects to review" do
         sign_in
         validate = stub_request(:post, "https://kong-admin.test/schemas/upstreams/validate").to_return(ok)

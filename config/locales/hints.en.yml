@@ -215,6 +215,9 @@ en:
       certificates_expiring:
         title: "Nothing expires within %{days} days"
         body: "Certificates are read at each sync. Pick a longer window to look further ahead."
+        never_synced:
+          title: "Nothing is known about certificates here yet"
+          body: "This connection has never synced, so Kongsole has not read its certificates. Sync from the Entities page to check them."
       entity_children:
         routes:
           title: "No routes yet"
@@ -235,13 +238,17 @@ en:
     risks:
       delete_entity:
         title: "Deleting removes it from Kong"
-        body: "Anything that points at it stops working: a deleted service takes its routes with it, a deleted consumer loses its credentials."
+        body: "Anything that points at it stops working. Kong refuses to delete a service that still has routes; a deleted consumer loses its credentials, and a deleted upstream its targets."
       delete_admin_path:
         title: "This is the way into the Admin API"
-        body: "Deleting it locks everyone out of the Admin API, including Kongsole and CI. Type the connection name to confirm only if you are rebuilding the admin path on purpose."
+        body: "Deleting it locks everyone out of the Admin API, including Kongsole and CI. Type its name to confirm only if you are rebuilding the admin path on purpose."
+      delete_protected:
+        title: "This entity is tagged protected"
+        body: "The team marked it as something that must not go by accident. Type its name to confirm only if you are sure it should be removed."
       rank_2_login:
         title: "This is %{env}"
-        body: "Please take a moment to check you meant to connect here. Changes on this connection go through a reviewed pull request."
+        body: "Please take a moment to check you meant to connect here."
+        pr_note: "Changes on this connection go through a reviewed pull request."
       rank_2_apply:
         title: "This change is for %{env}"
         body: "Read the diff once more. Type the connection name and your password to confirm."

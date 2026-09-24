@@ -124,13 +124,25 @@ RSpec.describe "Certificates expiring (web)", type: :request do
     expect(response.body).to include(">#{certificate.kong_id}</a>")
   end
 
-  it "says so when nothing is expiring, and how fresh the data is" do
+  # Never synced means nothing is known -- "nothing expires" would be a claim
+  # of safety on the one page about outages (R3 review).
+  it "says nothing is known yet on a connection that has never synced, rather than that nothing expires" do
     sign_in
 
     get expiring_certificates_path
 
-    expect(response.body).to include("Nothing expires within 30 days")
+    expect(response.body).to include(I18n.t("hints.empty_states.certificates_expiring.never_synced.title"))
+    expect(response.body).not_to include("Nothing expires within")
     expect(response.body).to include("never synced")
+  end
+
+  it "says nothing expires once the connection has synced" do
+    sign_in
+    cert("far.example", 400.days.from_now)
+
+    get expiring_certificates_path
+
+    expect(response.body).to include("Nothing expires within 30 days")
   end
 
   it "links each row to its entity page" do

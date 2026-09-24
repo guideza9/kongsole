@@ -18,8 +18,14 @@
 </div>
 
 <% if @entities.empty? %>
-  <%# The header above already says when this connection last synced. %>
-  <%= empty_state(:certificates_expiring, days: @days) %>
+  <%# Never synced is "unknown", not "safe": it must not read as nothing expiring. %>
+  <% if @last_synced_at %>
+    <%= empty_state(:certificates_expiring, days: @days) %>
+  <% else %>
+    <%= empty_state(:"certificates_expiring.never_synced") do %>
+      <%= link_to "Go to Entities", entities_path(type: "certificate"), class: "btn-sm btn-secondary" %>
+    <% end %>
+  <% end %>
 <% else %>
   <div class="overflow-x-auto panel">
     <table class="w-full text-sm">

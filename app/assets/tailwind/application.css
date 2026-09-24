@@ -678,6 +678,9 @@ input:where([type="submit"]):not(:disabled) { cursor: pointer; }
   border: 1px solid;
   padding: 0.6rem 0.9rem;
   font-weight: 500;
+  /* An admin URL or an operator name can be one long word; it wraps in the
+     banner rather than widening a phone screen. */
+  overflow-wrap: anywhere;
 }
 
 .notice-banner--danger  { background: var(--color-danger-tint);  border-color: var(--color-danger);  color: var(--color-danger); }

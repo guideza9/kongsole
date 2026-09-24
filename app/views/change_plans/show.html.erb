@@ -211,7 +211,11 @@
       <%# R3: what this action does, said before the gates below ask for it. %>
       <% if plan.status == "pending" %>
         <% if plan.operation == "delete" %>
-          <%= risk_notice(@protected_entity ? :delete_admin_path : :delete_entity, tone: :danger) %>
+          <% delete_risk = if current_connection.admin_path?(plan.before["id"]) then :delete_admin_path
+                           elsif @protected_entity then :delete_protected
+                           else :delete_entity
+                           end %>
+          <%= risk_notice(delete_risk, tone: :danger) %>
         <% end %>
         <% if plan.apply_mode == "direct" && current_connection.shared_credential? && current_operator.present? %>
           <%= risk_notice(:shared_credential_write, operator: current_operator) %>

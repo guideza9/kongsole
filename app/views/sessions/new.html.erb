@@ -14,7 +14,7 @@
   <% if @connection.protected_env? %>
     <div class="env-notice <%= @connection.env_tone %> mb-6">
       <p class="env-notice__title"><%= t("hints.risks.rank_2_login.title", env: env_display_name(@connection)) %></p>
-      <p class="text-sm mt-0.5"><%= t("hints.risks.rank_2_login.body") %></p>
+      <p class="text-sm mt-0.5"><%= t("hints.risks.rank_2_login.body") %><% if @connection.apply_mode == "pr" %> <%= t("hints.risks.rank_2_login.pr_note") %><% end %></p>
     </div>
   <% end %>
 

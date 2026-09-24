@@ -94,7 +94,9 @@ class EntitiesController < ApplicationController
     render_new_with_error(e.message)
   rescue Kong::Client::Error => e
     explain_kong_error(e, now: true)
-    render_new_with_error("Kong rejected this request: #{e.message}")
+    # Not "Kong rejected": a network failure never reached Kong. The form shows
+    # the explanation's cause and next step under this title (R3).
+    render_new_with_error(Kong::ErrorExplanation.for(e).title)
   end
 
   def edit
