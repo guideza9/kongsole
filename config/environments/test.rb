@@ -50,4 +50,10 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Test-only keys: never real, never used outside RAILS_ENV=test. Lets the
+  # ActiveRecord::Encryption specs run without config/master.key.
+  config.active_record.encryption.primary_key = "test-primary-key-kongsole-000000"
+  config.active_record.encryption.deterministic_key = "test-deterministic-key-kongsole-0"
+  config.active_record.encryption.key_derivation_salt = "test-key-derivation-salt-kongsole"
 end

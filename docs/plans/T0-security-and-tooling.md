@@ -311,8 +311,8 @@ end
 
 **ชั้น:** backend (config) · **ต้องเสร็จก่อน:** — (ทำเป็นอันดับแรกของ T0 ต่อจาก T0.0) · **ไฟล์ที่แก้ได้:** `config/environments/test.rb`, `config/database.yml` (เฉพาะ block `test:`)
 
-- [ ] **Step 1:** รัน `bundle exec rspec` (ไม่ตั้ง `DATABASE_URL`) → คาดว่าเชื่อม DB ไม่ได้; รันด้วย `DATABASE_URL` → 843/49 (บันทึกเป็นหลักฐาน RED)
-- [ ] **Step 2: แก้**
+- [x] **Step 1:** รัน `bundle exec rspec` (ไม่ตั้ง `DATABASE_URL`) → คาดว่าเชื่อม DB ไม่ได้; รันด้วย `DATABASE_URL` → 843/49 (บันทึกเป็นหลักฐาน RED)
+- [x] **Step 2: แก้**
 
 ```yaml
 # config/database.yml
@@ -334,9 +334,9 @@ config.active_record.encryption.deterministic_key = "test-deterministic-key-kong
 config.active_record.encryption.key_derivation_salt = "test-key-derivation-salt-kongsole"
 ```
 
-- [ ] **Step 3:** `bundle exec rspec` → **843 examples, 0 failures**
-- [ ] **Step 4:** `bundle exec rubocop config/environments/test.rb` สะอาด
-- [ ] **Step 5:** Commit `chore(T0.4): test env runs the whole suite without master.key`
+- [x] **Step 3:** `bundle exec rspec` → **843 examples, 0 failures**
+- [x] **Step 4:** `bundle exec rubocop config/environments/test.rb` สะอาด
+- [x] **Step 5:** Commit `chore(T0.4): test env runs the whole suite without master.key`
 
 **เกณฑ์ผ่าน:** 0 failures · ค่าใน `test.rb` ไม่ถูกอ่านใน development/production (`grep -rn "test-primary-key" config` เจอไฟล์เดียว)
 
