@@ -333,7 +333,7 @@ end
 
 **Interfaces:** Produces `Kong::EntitySchema.fields(client:, entity_type:) -> Array<Hash> | nil` — flatten `GET /schemas/<Kong::EntityTypes.fetch(type).schema_name || type+"s">` เป็น `{name:, type:, required:, default:, one_of:, nested:}` · ตัด `Kong::EntityTypes::KONG_MANAGED_FIELDS` · nil เมื่อ `Kong::Client::Error`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -361,9 +361,9 @@ RSpec.describe Kong::EntitySchema do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · ตั้ง `@schema_fields` ใน controller + request spec ว่า `entities#new?type=upstream` ตอบ 200 เมื่อ schema 503
-- [ ] **Step 3:** ยืนยัน path schema ของแต่ละ type กับ compose (GET เท่านั้น): `/schemas/upstreams`, `/schemas/targets`, `/schemas/certificates`, `/schemas/ca_certificates`, `/schemas/snis`, `/schemas/consumers` → ถ้า path ใดไม่ใช่ ให้ใช้ `schema_name` จาก registry
-- [ ] **Step 4:** suite 0 failures · Commit `feat(R3.3): entity forms get Kong's own schema as reference rows`
+- [x] **Step 2:** FAIL → implement → PASS · ตั้ง `@schema_fields` ใน controller + request spec ว่า `entities#new?type=upstream` ตอบ 200 เมื่อ schema 503
+- [x] **Step 3:** ยืนยัน path schema ของแต่ละ type กับ compose (GET เท่านั้น): `/schemas/upstreams`, `/schemas/targets`, `/schemas/certificates`, `/schemas/ca_certificates`, `/schemas/snis`, `/schemas/consumers` → ถ้า path ใดไม่ใช่ ให้ใช้ `schema_name` จาก registry
+- [x] **Step 4:** suite 0 failures · Commit `feat(R3.3): entity forms get Kong's own schema as reference rows`
 
 ---
 

@@ -13,6 +13,9 @@ RSpec.describe "Entities (web)", type: :request do
       .to_return(status: 200, body: { tags: [] }.to_json)
     stub_request(:get, "https://kong-admin.test/routes")
       .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    # Entity forms read Kong's schema for reference rows (R3.3); a 404 means hints only.
+    stub_request(:get, %r{\Ahttps://kong-admin\.test/schemas/[a-z_]+\z})
+      .to_return(status: 404, body: { message: "Not found" }.to_json)
     post login_connection_path(connection), params: { username: "alice", password: "pw" }
   end
 
@@ -515,6 +518,28 @@ RSpec.describe "Entities (web)", type: :request do
     end
 
     describe "GET /entities/new" do
+      it "reads Kong's upstream schema for the form's reference rows (R3)" do
+        sign_in
+        stub_request(:get, "https://kong-admin.test/schemas/upstreams")
+          .to_return(status: 200, body: { fields: [ { name: { type: "string", required: true } } ] }.to_json)
+
+        get new_entity_path(type: "upstream")
+
+        expect(controller.instance_variable_get(:@schema_fields)).to eq(
+          [ { name: "name", type: "string", required: true, default: nil, one_of: nil, nested: [] } ]
+        )
+      end
+
+      it "still opens the form when Kong's schema can't be read, with hints alone" do
+        sign_in
+        stub_request(:get, "https://kong-admin.test/schemas/upstreams").to_return(status: 503, body: "{}")
+
+        get new_entity_path(type: "upstream")
+
+        expect(response).to have_http_status(:ok)
+        expect(controller.instance_variable_get(:@schema_fields)).to be_nil
+      end
+
       it "opens an upstream form seeded with sensible defaults" do
         sign_in
 

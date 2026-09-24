@@ -74,6 +74,7 @@ class EntitiesController < ApplicationController
 
   def new
     @payload_json = JSON.pretty_generate(seed_payload)
+    @schema_fields = schema_fields_for(@creatable_type)
   end
 
   # Same document editor and review pipeline as an edit: the parsed JSON goes
@@ -98,6 +99,7 @@ class EntitiesController < ApplicationController
 
   def edit
     @payload_json = JSON.pretty_generate(editable_payload)
+    @schema_fields = schema_fields_for(@entity.entity_type)
   end
 
   def update
@@ -284,7 +286,14 @@ class EntitiesController < ApplicationController
   def render_new_with_error(message)
     @payload_json = echoed_payload(@creatable_type) { seed_payload }
     @payload_error = safe_message(message)
+    @schema_fields = schema_fields_for(@creatable_type)
     render :new, status: :unprocessable_entity
+  end
+
+  # R3: Kong's own schema as reference rows beside the JSON editor; nil
+  # (hints alone) when Kong can't be read.
+  def schema_fields_for(entity_type)
+    Kong::EntitySchema.fields(client: current_client, entity_type: entity_type)
   end
 
   # "Load more" (see _pagination.html.erb) is the only request that wants

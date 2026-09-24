@@ -38,6 +38,8 @@ RSpec.describe "UI snapshots", type: :request do
         .to_return(status: 404, body: { message: "Not found" }.to_json)
       stub_request(:get, "#{base}/consumers/alice").to_return(status: 200, body: { tags: [] }.to_json)
       stub_request(:get, "#{base}/routes").to_return(status: 200, body: { data: [], offset: nil }.to_json)
+      # Entity forms read Kong's schema for reference rows (R3.3); a 404 means hints only.
+      stub_request(:get, %r{\A#{Regexp.escape(base)}/schemas/[a-z_]+\z}).to_return(status: 404, body: { message: "Not found" }.to_json)
       post login_connection_path(conn), params: { username: "alice", password: "pw" }
     end
 

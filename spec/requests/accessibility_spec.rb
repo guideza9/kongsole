@@ -14,6 +14,9 @@ RSpec.describe "Accessibility semantics", type: :request do
       .to_return(status: 200, body: { tags: [] }.to_json)
     stub_request(:get, "https://kong-admin.test/routes")
       .to_return(status: 200, body: { data: [], offset: nil }.to_json)
+    # Entity forms read Kong's schema for reference rows (R3.3); a 404 means hints only.
+    stub_request(:get, %r{\Ahttps://kong-admin\.test/schemas/[a-z_]+\z})
+      .to_return(status: 404, body: { message: "Not found" }.to_json)
     post login_connection_path(connection), params: { username: "alice", password: "pw" }
   end
 
