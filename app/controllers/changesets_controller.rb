@@ -41,7 +41,7 @@ class ChangesetsController < ApplicationController
   rescue Kong::ChangeGuardrails::Violation, NotImplementedError => e
     redirect_to changeset_path(@changeset), alert: e.message
   rescue Kong::GitClient::Error, Kong::DeckCli::Error, Kong::Client::Error => e
-    flash[:error_explanation] = explain_error(e).to_flash unless e.is_a?(Kong::DeckCli::Error) && !network_failure?(e)
+    flash[:error_explanation] = explain_error(e).to_flash if Kong::ChangesetRenderer.explainable?(e)
     redirect_to changeset_path(@changeset), alert: Kong::ChangesetRenderer.scrub(e.message)
   end
 
@@ -96,9 +96,5 @@ class ChangesetsController < ApplicationController
   def pr_url_refusal
     host = git_web_host
     host ? "That is not a pull request on #{host} -- paste the link from the project's git host." : "Paste an http(s) link to the pull request."
-  end
-
-  def network_failure?(error)
-    Kong::GitClient::NETWORK_KINDS.include?(Kong::NetworkFailure.classify_text(error.message))
   end
 end

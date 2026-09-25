@@ -85,6 +85,19 @@ module Kong
       Kong::CertificateKeyPolicy.scrub(text.to_s).gsub(URL_CREDENTIAL, "://").truncate(MESSAGE_LIMIT)
     end
 
+    # Which failures get the console's cause-and-next-step: Kong's own errors,
+    # and git or decK only when the host could not be reached (or git's key
+    # was refused). Any other git or decK failure is shown in its own words --
+    # "could not reach this connection" would send the operator to the VPN
+    # for a branch that does not exist.
+    def self.explainable?(error)
+      case error
+      when Kong::GitClient::Unreachable, Kong::GitClient::AuthFailed, Kong::Client::Error then true
+      when Kong::DeckCli::Error then Kong::GitClient::NETWORK_KINDS.include?(Kong::NetworkFailure.classify_text(error.message))
+      else false
+      end
+    end
+
     private
 
     def admin_path_names
@@ -96,13 +109,9 @@ module Kong
     # network note. A decK failure that is not about the network (a file decK
     # rejects) is shown as decK's own words only.
     def explanation_for(error)
-      return nil if error.is_a?(Kong::DeckCli::Error) && !network_failure?(error.message)
+      return nil unless self.class.explainable?(error)
 
       Kong::ErrorExplanation.for(error, network_note: @connection.project&.network_note)
-    end
-
-    def network_failure?(text)
-      Kong::GitClient::NETWORK_KINDS.include?(Kong::NetworkFailure.classify_text(text))
     end
 
     public

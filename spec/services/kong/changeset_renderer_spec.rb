@@ -87,4 +87,13 @@ RSpec.describe Kong::ChangesetRenderer do
     preview = described_class.new(changeset: changeset, secret: "pw").preview
     expect(preview.drift.commits_behind).to eq(1)
   end
+  # Found in R8.10: a git failure that is not about the network must not be
+  # explained as "could not reach this connection".
+  it "gives a git failure that is not a network one no network explanation" do
+    allow_any_instance_of(Kong::GitClient).to receive(:pull!)
+      .and_raise(Kong::GitClient::Error, "git clone --branch main /repo.git /cache failed: fatal: Remote branch main not found")
+    preview = described_class.new(changeset: changeset, secret: "pw").preview
+    expect(preview.error).to include("Remote branch main not found")
+    expect(preview.explanation).to be_nil
+  end
 end

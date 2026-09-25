@@ -116,4 +116,11 @@ RSpec.describe "Changesets", type: :request do
     expect(response).to redirect_to(changeset_path(changeset))
     expect(flash[:alert]).to include("changeset")
   end
+  it "does not call a git failure that is not a network one a network problem on submit (R8.10)" do
+    add_item("billing", 1)
+    allow_any_instance_of(Kong::GitClient).to receive(:push!).and_raise(Kong::GitClient::Error, "git push failed: remote rejected")
+    post submit_changeset_path(changeset), params: { confirm_env_name: connection.name, password: "pw", acknowledge_drift: "1" }
+    expect(flash[:alert]).to include("remote rejected")
+    expect(flash[:error_explanation]).to be_nil
+  end
 end
