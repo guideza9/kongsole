@@ -1,0 +1,57 @@
+<%# One env of a project: which env and how careful it is, whether it can be
+    written and how, then what this machine knows of its Kong node. Only rows
+    Kongsole owns (local) can be edited or removed here. %>
+<% connection = env.kong_connection %>
+<li class="row-card env-row<%= " env-row--empty" unless connection %>" data-env-name="<%= env.name %>">
+  <div class="env-row__body">
+    <div class="env-row__id">
+      <%= env_name_chip(env) %>
+      <%# A dev/sit/uat/prod chip already says how careful it is; only a chosen rank needs saying. %>
+      <% if env.rank_kind == "other" %>
+        <span class="env-row__rank"><%= rank_label(env) %></span>
+      <% end %>
+      <% if connection %>
+        <%= status_badge(connection.last_status) %>
+      <% end %>
+    </div>
+
+    <% if connection %>
+      <div class="env-row__url font-mono"><%= connection.admin_url %></div>
+    <% else %>
+      <p class="env-row__note"><%= t("hints.pages.connections.env_without_connection") %></p>
+    <% end %>
+
+    <div class="env-row__tags">
+      <%= write_policy_tag(env) %>
+      <% if connection %>
+        <% [ access_level_label(connection.access_level), credential_kind_label(connection.credential_kind) ].compact.each do |label| %>
+          <span class="tag"><%= label %></span>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="env-row__actions">
+    <% if connection %>
+      <%= link_to "Log in", login_connection_path(connection), class: "btn-sm btn-secondary" %>
+      <% if connection.editable_in_ui? %>
+        <%= link_to "Edit", edit_connection_path(connection), class: "btn-sm btn-text", aria: { label: "Edit #{connection.name}" } %>
+        <%# Remove is the only destructive action on the row: it gets its own
+            side of a hairline, so a slip aimed at Log in or Edit cannot land on it. %>
+        <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
+          <%= button_to "Remove", connection_path(connection), method: :delete,
+                form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from this machine? This does not touch anything in Kong itself." } },
+                class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove #{connection.name}" } %>
+        </div>
+      <% end %>
+    <% elsif env.source == "local" %>
+      <%= link_to "Connect", new_connection_path(project_env_id: env.id), class: "btn-sm btn-secondary", aria: { label: "Connect #{env.qualified_name} to its Kong node" } %>
+      <%= link_to "Edit", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit #{env.qualified_name}" } %>
+      <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
+        <%= button_to "Remove", project_env_path(env), method: :delete,
+              form: { data: { turbo_confirm: "Remove the environment \"#{env.qualified_name}\"? It has no connection, and nothing in Kong changes." } },
+              class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove #{env.qualified_name}" } %>
+      </div>
+    <% end %>
+  </div>
+</li>

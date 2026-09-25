@@ -59,6 +59,54 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("health")
     end
 
+    it "connections index" do
+      create(:kong_connection, name: "dev-1")
+      get connections_path
+      snapshot!("connections-index")
+    end
+
+    it "connections index grouped by project (R1.8)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      KongConnection.find_by!(name: "project-a/dev").update!(last_status: "ok", access_level: "rw", credential_kind: "personal")
+      KongConnection.find_by!(name: "project-a/uat").update!(last_status: "ok", access_level: "ro", credential_kind: "shared")
+      KongConnection.find_by!(name: "project-x/nonprod").update!(last_status: "unreachable")
+      local = create(:project, key: "payments", name: "Payments", source: "local", network_note: "Reachable from the office network")
+      create(:kong_connection, project_env: create(:project_env, project: local, name: "dev", position: 1), admin_url: "http://localhost:8101")
+      create(:project_env, project: local, name: "sit", position: 2, apply_mode: nil)
+      create(:project, key: "onboarding", name: "Onboarding", source: "local")
+      get connections_path
+      snapshot!("connections-index-projects")
+    end
+
+    it "project and env forms (R1.9)" do
+      project = create(:project, key: "payments", name: "Payments", source: "local")
+      get new_project_path
+      snapshot!("projects-new")
+      get new_project_env_path(project_id: project.id)
+      snapshot!("project-envs-new")
+      env = create(:project_env, project: project, name: "uat", position: 3, apply_mode: nil)
+      get edit_project_env_path(env)
+      snapshot!("project-envs-edit-known")
+    end
+
+    it "a registry connection's page (R1.9)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      get connection_path(KongConnection.find_by!(name: "project-a/uat"))
+      snapshot!("connection-show-registry")
+    end
+
+    it "header with the env switcher (R1.10)" do
+      project = create(:project, key: "payments", name: "Payments")
+      create(:kong_connection, project_env: create(:project_env, project: project, name: "dev", position: 1), admin_url: "http://localhost:8101")
+      create(:project_env, project: project, name: "sit", position: 2)
+      create(:kong_connection, project_env: create(:project_env, project: project, name: "pt", position: 3, rank: 1), admin_url: "http://localhost:8103")
+      uat = create(:kong_connection, project_env: create(:project_env, project: project, name: "uat", position: 4, apply_mode: "pr", source: "registry"),
+        admin_url: "https://kong-uat.test")
+      sign_in(uat)
+      get health_path
+      snapshot!("header-switcher")
+    end
+
     it "connections new" do
       get new_connection_path
       snapshot!("connections-new")

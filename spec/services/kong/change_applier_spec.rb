@@ -902,4 +902,32 @@ RSpec.describe Kong::ChangeApplier do
       end
     end
   end
+
+  describe "an env whose apply_mode changed after the plan was proposed (R1.3)" do
+    it "refuses a pending plan whose env lost its apply_mode after it was proposed" do
+      plan = create(:change_plan, status: "pending", apply_mode: "direct")
+      plan.kong_connection.project_env.update!(apply_mode: nil)
+      plan.kong_connection.save!
+      expect { described_class.new(change_plan: plan.reload, client: nil, actor_username: "a").call }
+        .to raise_error(Kong::ChangeGuardrails::Violation, /apply mode is not set/i)
+    end
+
+    # CLAUDE.md rule 1: once an env is PR mode nothing writes its Admin API,
+    # not even a direct plan proposed before the switch.
+    it "refuses a direct plan once its env has moved to PR mode, and writes nothing to Kong" do
+      plan = create(:change_plan, status: "pending", apply_mode: "direct")
+      set_env_policy(plan.kong_connection, apply_mode: "pr")
+      expect { described_class.new(change_plan: plan.reload, client: nil, actor_username: "a").call }
+        .to raise_error(Kong::ChangeGuardrails::Violation, /re-propose/i)
+      expect(plan.reload.status).to eq("pending")
+    end
+
+    it "refuses a PR plan once its env has moved to direct" do
+      connection = create(:kong_connection, apply_mode: "pr", access_level: "rw")
+      plan = create(:change_plan, kong_connection: connection, status: "pending", apply_mode: "pr")
+      set_env_policy(connection, apply_mode: "direct", source: "local")
+      expect { described_class.new(change_plan: plan.reload, client: nil, actor_username: "a").call }
+        .to raise_error(Kong::ChangeGuardrails::Violation, /re-propose/i)
+    end
+  end
 end

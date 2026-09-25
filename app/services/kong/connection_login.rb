@@ -57,10 +57,12 @@ module Kong
       Result.new(success: false, error: message, error_class: error_class, exception: exception, connection: @connection)
     end
 
-    # By ancestry, so a subclass (NetworkUnreachable < UpstreamUnavailable)
-    # keeps its parent's label.
+    # By ancestry, first match wins: NetworkUnreachable is checked before its
+    # parent UpstreamUnavailable, so "this machine cannot reach Kong" is told
+    # apart from "Kong answered 502/503" (R1.11).
     def status_label(error)
       {
+        Kong::Client::NetworkUnreachable => "unreachable",
         Kong::Client::Unauthorized => "unauthorized",
         Kong::Client::Forbidden => "forbidden",
         Kong::Client::RouteNotMatched => "route_not_matched",

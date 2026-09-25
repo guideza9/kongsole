@@ -69,4 +69,12 @@ RSpec.describe "Sessions (connection login)", type: :request do
     get health_path
     expect(response.body).not_to include("Sign out")
   end
+
+  it "adds the project's network note when the login cannot reach Kong (R1.11)" do
+    project = create(:project, network_note: "Reachable from the NONPROD VPN only")
+    connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal", project_env: create(:project_env, project: project))
+    stub_request(:get, "https://kong-a-uat.internal/").to_raise(Faraday::TimeoutError.new("execution expired"))
+    post login_connection_path(connection), params: { username: "a", password: "b" }
+    expect(response.body).to include(I18n.t("hints.errors.network_timed_out.title"), "Reachable from the NONPROD VPN only")
+  end
 end

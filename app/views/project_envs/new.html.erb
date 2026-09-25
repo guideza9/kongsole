@@ -1,0 +1,4 @@
+<% content_for :title, "New environment" %>
+<h1 class="page-title mb-1">New environment in <%= @project_env.project.name %></h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.project_envs_new.intro") %></p>
+<%= render "form", project_env: @project_env %>

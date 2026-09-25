@@ -11,6 +11,8 @@ Rails.application.routes.draw do
 
   get "health" => "health#show", as: :health
 
+  resources :projects, param: :key, only: %i[new create edit update]
+  resources :project_envs, only: %i[new create edit update destroy]
   resources :connections do
     member do
       get "login", to: "sessions#new"

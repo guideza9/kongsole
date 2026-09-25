@@ -30,7 +30,7 @@ class SessionsController < ApplicationController
       redirect_to health_path, notice: "Connected to \"#{@connection.name}\" (#{@connection.access_level}, #{@connection.credential_kind} credential)."
     else
       flash.now[:alert] = login_error_message(result)
-      flash.now[:error_explanation] = Kong::ErrorExplanation.for(result.exception).to_flash if result.exception
+      flash.now[:error_explanation] = explain_error(result.exception, connection: @connection).to_flash if result.exception
       render :new, status: :unprocessable_entity
     end
   end
@@ -49,6 +49,6 @@ class SessionsController < ApplicationController
   def login_error_message(result)
     return result.error unless result.exception
 
-    Kong::ErrorExplanation.for(result.exception).title
+    explain_error(result.exception, connection: @connection).title
   end
 end

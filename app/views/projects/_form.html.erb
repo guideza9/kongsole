@@ -1,0 +1,69 @@
+<%# R1.9: a local project. Its key names every connection in it (key/env), so
+    it is set once, here, and shown read only afterwards. %>
+<%= form_with model: project, scope: :project,
+      url: (project.persisted? ? project_path(project) : projects_path), class: "max-w-xl" do |f| %>
+  <% if project.errors.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
+      <ul><% project.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    <% end %>
+  <% end %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Project</h2>
+    <div class="grid gap-4">
+      <div>
+        <% if project.persisted? %>
+          <p class="block text-sm font-medium text-ink">Key</p>
+          <p class="mt-1 font-mono text-sm text-ink"><%= project.key %></p>
+        <% else %>
+          <%= f.label :key, class: "block text-sm font-medium text-ink" %>
+          <%= f.text_field :key, required: true, autocapitalize: "off", spellcheck: false, pattern: "[a-z0-9][a-z0-9-]{0,39}",
+                class: "field-input mt-1 font-mono", aria: { describedby: hint_describedby(:project, :key) } %>
+          <%= field_hint(:project, :key) %>
+        <% end %>
+      </div>
+
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :name, required: true, class: "field-input mt-1", aria: { describedby: hint_describedby(:project, :name) } %>
+        <%= field_hint(:project, :name) %>
+      </div>
+
+      <div>
+        <%= f.label :network_note, "Network", class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :network_note, maxlength: Project::NETWORK_NOTE_MAX, class: "field-input mt-1",
+              aria: { describedby: hint_describedby(:project, :network_note) } %>
+        <%= field_hint(:project, :network_note) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Config repo</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :git_repo, "Repository", class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :git_repo, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono text-sm",
+              aria: { describedby: hint_describedby(:project, :git_repo) } %>
+        <%= field_hint(:project, :git_repo) %>
+      </div>
+      <div>
+        <%= f.label :git_branch, "Branch", class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :git_branch, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono text-sm",
+              aria: { describedby: hint_describedby(:project, :git_branch) } %>
+        <%= field_hint(:project, :git_branch) %>
+      </div>
+      <div>
+        <%= f.label :git_web_url, "Branch link", class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :git_web_url, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono text-sm",
+              aria: { describedby: hint_describedby(:project, :git_web_url) } %>
+        <%= field_hint(:project, :git_web_url) %>
+      </div>
+    </div>
+  </section>
+
+  <div class="mt-6 flex items-center gap-2">
+    <%= f.submit project.persisted? ? "Save project" : "Create project", class: "btn btn-primary" %>
+    <%= link_to "Cancel", connections_path, class: "btn btn-text" %>
+  </div>
+<% end %>

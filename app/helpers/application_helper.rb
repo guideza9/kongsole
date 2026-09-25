@@ -53,10 +53,55 @@ module ApplicationHelper
   # connection shows fewer tags rather than "unknown" ones.
   def connection_policy_labels(connection)
     [
-      apply_mode_label(connection.apply_mode),
+      connection.apply_mode && apply_mode_label(connection.apply_mode),
       access_level_label(connection.access_level),
       credential_kind_label(connection.credential_kind)
     ].compact
+  end
+
+  # R1.8: how careful an env is, in words. A dev/sit/uat/prod name fixes its
+  # rank, so the name says it; any other name had its rank chosen, so the
+  # label shows both ("Other · rank 1").
+  KNOWN_ENV_LABELS = { "dev" => "Dev", "sit" => "SIT", "uat" => "UAT", "prod" => "Prod" }.freeze
+
+  def rank_label(env)
+    KNOWN_ENV_LABELS.fetch(env.name) { "Other \u00b7 rank #{env.rank}" }
+  end
+
+  # ProjectEnv#write_policy in words. :unset is the one that stops work, so it
+  # says what it means rather than naming a missing setting.
+  WRITE_POLICY_LABELS = {
+    pr: "PR mode",
+    direct: "Direct apply",
+    unset: "Apply mode not set \u2014 nothing can be written"
+  }.freeze
+
+  def write_policy_label(policy)
+    WRITE_POLICY_LABELS.fetch(policy.to_sym)
+  end
+
+  def write_policy_tag(env)
+    policy = env.write_policy
+    content_tag :span, write_policy_label(policy), class: policy == :unset ? "tag tag-caution" : "tag"
+  end
+
+  # Where a project or env is changed: the team registry file, or this
+  # machine's Kongsole.
+  def source_badge(source)
+    content_tag :span, source.to_s == "local" ? "Local only" : "From connections.yml", class: "tag"
+  end
+
+  # The env's own name as a chip, for a list already headed by its project.
+  # Loud (solid --env) at rank >= 2 exactly like env_badge, by rank alone.
+  def env_name_chip(env)
+    if env.rank.to_i >= KongConnection::PROTECTED_RANK
+      tone = env.rank.to_i >= KongConnection::PROD_RANK ? "env-prod" : "env-uat"
+      label = content_tag(:span, env.name, class: "chip-env__label")
+      return content_tag(:span, safe_join([ content_tag(:span, "", class: "chip-dot"), label ]), class: "chip chip-lg chip-env #{tone}")
+    end
+
+    tone = COLOR_TAG_TONES.fetch(env.color_tag.to_s, "neutral")
+    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), env.name ]), class: "chip chip-lg chip-#{tone}"
   end
 
   def env_display_name(connection)
@@ -67,26 +112,29 @@ module ApplicationHelper
   # A solid, bordered env badge -- the primary "which environment am I
   # looking at" signal, sized to be read at a glance, not squinted at.
   #
-  # At uat/prod it spells the environment out ("PROD · kong-prod-admin"), so
-  # the word is on every page and not only on the review strip; the name is
-  # dropped when it is only the environment again. Below rank 2 the chip stays
-  # the quiet dot + name: dev and sit are not where a wrong click is costly.
+  # R1.10: it names the project and the env. At uat/prod the env is spelled
+  # out first ("PROD · Payments"), so the word is on every page and not only on
+  # the review strip; below rank 2 the chip stays the quiet dot + "Payments ·
+  # dev": dev and sit are not where a wrong click is costly. The connection's
+  # own project/env name is the title.
   def env_badge(connection, size: :md)
     classes = size == :lg ? "chip chip-lg" : "chip"
+    project_name = connection.project&.name
 
     # uat/prod: a solid chip chosen by rank, never by color_tag (and never
     # red -- red is reserved for errors). See KongConnection#env_tone.
     if connection.protected_env?
       parts = [ content_tag(:span, "", class: "chip-dot"), content_tag(:span, connection.env.upcase, class: "chip-env__label") ]
-      unless connection.name.to_s.casecmp?(connection.env)
+      if project_name.present?
         parts << content_tag(:span, "\u00b7", "aria-hidden": "true")
-        parts << content_tag(:span, connection.name, class: "chip-env__name")
+        parts << content_tag(:span, project_name, class: "chip-env__name")
       end
       return content_tag :span, safe_join(parts), class: "#{classes} chip-env #{connection.env_tone}", title: connection.name
     end
 
     tone = COLOR_TAG_TONES.fetch(connection.color_tag.to_s, "neutral")
-    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), connection.name ]), class: "#{classes} chip-#{tone}"
+    label = [ project_name, connection.env ].compact_blank.join(" \u00b7 ")
+    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), label ]), class: "#{classes} chip-#{tone}", title: connection.name
   end
 
   STATUS_TONES = {
@@ -106,13 +154,17 @@ module ApplicationHelper
     "failed" => "danger",
     "pending" => "neutral",
     "revoked" => "danger",
+    # R1.11: this machine cannot reach the node (VPN, DNS) -- not Kong's fault.
+    "unreachable" => "warning",
     # Whether the admin path has been found on a connection.
     "guarded" => "ok",
     "unknown" => "neutral"
   }.freeze
 
+  STATUS_LABELS = { "unreachable" => "Unreachable from this machine" }.freeze
+
   def status_label(status)
-    (status || "never connected").to_s.humanize
+    STATUS_LABELS.fetch(status.to_s) { (status || "never connected").to_s.humanize }
   end
 
   ENTITY_TYPE_LABELS = {

@@ -19,12 +19,21 @@ function fail(error: unknown) {
   return { content: [{ type: "text" as const, text: message }], isError: true };
 }
 
+// R1.6: a connection is named "project/env" -- a bare env name is ambiguous
+// across projects and the API refuses it. Required, with no default, on every
+// tool that acts on one (docs/DESIGN.md section 12, guardrail #1).
+const CONNECTION = z
+  .string()
+  .describe('Connection as "project/env", e.g. "project-a/uat" (required, no default; kong_connections lists them)');
+
 export function registerTools(server: McpServer, client: KongctlClient): void {
   server.registerTool(
     "kong_connections",
     {
       title: "List Kong connections",
-      description: "List every Kong connection this token can reach, with its env, apply_mode, and access_level."
+      description:
+        "List every Kong connection this token can reach by its project/env name -- the name every other tool " +
+        "takes as `connection` -- with its project, env, rank, apply_mode (null = not set, nothing can be written) and access_level."
     },
     async () => {
       try {
@@ -43,7 +52,7 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "Filter/sort/paginate synced Kong entities for one connection (docs/DESIGN.md section 9). " +
         "Pass fields= to narrow the response and save tokens.",
       inputSchema: {
-        connection: z.string().describe("Connection name (required, no default -- see section 12's guardrail #1)"),
+        connection: CONNECTION,
         type: z
           .string()
           .describe(
@@ -83,7 +92,10 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "and sync first if it might be stale. Never returns a key or a PEM.",
       inputSchema: {
         days: z.number().int().positive().max(3650).optional().describe("Window in days, 1-3650 (default 30)"),
-        connection: z.string().optional().describe("Limit to one connection this token is bound to")
+        connection: z
+          .string()
+          .optional()
+          .describe('Limit to one connection this token is bound to, as "project/env", e.g. "project-a/uat"')
       }
     },
     async (params) => {
@@ -104,7 +116,7 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "plan_id for kong_apply to execute. Deleting an admin-path or protected entity is always rejected here, " +
         "with no override. A certificate's key must be a {vault://env/NAME} reference -- a private key is never accepted.",
       inputSchema: {
-        connection: z.string(),
+        connection: CONNECTION,
         type: z
           .string()
           .describe(
@@ -140,7 +152,7 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
         "Execute a pending plan from kong_plan against Kong. Rejected outright, before touching Kong, if the " +
         "connection is rank >= 2 and still on apply_mode direct (agent writes to those need PR mode).",
       inputSchema: {
-        connection: z.string(),
+        connection: CONNECTION,
         plan_id: z.number().int().describe("The id kong_plan returned"),
         acknowledge_env_vars: z
           .boolean()

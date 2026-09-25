@@ -50,14 +50,14 @@ class PluginsController < ApplicationController
   rescue Kong::Client::Error => e
     explain_kong_error(e)
     redirect_to new_plugin_path(scope_type: params[:scope_type], scope_kong_id: params[:scope_kong_id]),
-      alert: Kong::ErrorExplanation.for(e).title
+      alert: explain_error(e).title
   end
 
   private
 
   # R3: the cause and next step behind the alert (Kong::ErrorExplanation).
   def explain_kong_error(error)
-    flash[:error_explanation] = Kong::ErrorExplanation.for(error).to_flash
+    flash[:error_explanation] = explain_error(error).to_flash
   end
 
   # Re-renders the config step (not a redirect) so the operator's edit

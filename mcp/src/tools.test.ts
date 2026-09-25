@@ -206,4 +206,31 @@ describe("registerTools", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toBe("unexpected");
   });
+
+  // R1.6: connections are named project/env; a bare env name is ambiguous
+  // across projects and the API refuses it, so every tool says so up front.
+  describe("connection naming", () => {
+    it("tells the agent, on every tool that takes a connection, to name it project/env", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+
+      const withConnection = [...configs.entries()].filter(([, c]) => c.inputSchema?.connection);
+      expect(withConnection.map(([name]) => name).sort()).toEqual(
+        ["kong_apply", "kong_certs_expiring", "kong_plan", "kong_search"]
+      );
+      for (const [name, config] of withConnection) {
+        expect(config.inputSchema!.connection.description, name).toContain("project/env");
+      }
+    });
+
+    it("keeps connection required, with no default, wherever it was required", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+
+      for (const name of ["kong_search", "kong_plan", "kong_apply"]) {
+        expect(configs.get(name)!.inputSchema!.connection.isOptional(), name).toBe(false);
+      }
+    });
+  });
 });
+

@@ -1,0 +1,93 @@
+<%# R1.9: a local env. A dev/sit/uat/prod name fixes the rank; any other name
+    must choose one -- there is no default (env_rank_controller swaps the two
+    as the name is typed; without JS the server fixes or refuses the rank).
+    Apply mode is not set or direct: PR mode lives in config/connections.yml. %>
+<% known = ProjectEnv::KNOWN_RANKS.fetch(project_env.name.to_s) { nil } %>
+<%= form_with model: project_env, scope: :project_env,
+      url: (project_env.persisted? ? project_env_path(project_env) : project_envs_path), class: "max-w-xl",
+      data: { controller: "env-rank", env_rank_known_value: ProjectEnv::KNOWN_RANKS.to_json,
+              env_rank_fixed_template_value: t("hints.fields.project_env.rank_fixed", rank: "%{rank}") } do |f| %>
+  <% if project_env.errors.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
+      <ul><% project_env.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    <% end %>
+  <% end %>
+
+  <%= f.hidden_field :project_id unless project_env.persisted? %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Environment</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-ink" %>
+        <div class="mt-1 flex items-center gap-1 font-mono text-sm">
+          <span class="text-ink-soft"><%= project_env.project.key %>/</span>
+          <%= f.text_field :name, required: true, autocapitalize: "off", spellcheck: false, pattern: "[A-Za-z0-9][A-Za-z0-9-]{0,39}",
+                class: "field-input", data: { env_rank_target: "name", action: "input->env-rank#update" },
+                aria: { describedby: hint_describedby(:project_env, :name) } %>
+        </div>
+        <%= field_hint(:project_env, :name) %>
+      </div>
+
+      <div>
+        <%= f.label :position, class: "block text-sm font-medium text-ink" %>
+        <%= f.number_field :position, min: 1, class: "field-input mt-1 w-28", aria: { describedby: hint_describedby(:project_env, :position) } %>
+        <%= field_hint(:project_env, :position) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">How careful to be</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :rank, class: "block text-sm font-medium text-ink" %>
+        <p class="mt-1 text-sm font-medium text-ink" data-env-rank-target="fixed" <%= "hidden" unless known %>>
+          <%= t("hints.fields.project_env.rank_fixed", rank: known) if known %>
+        </p>
+        <div data-env-rank-target="choose" <%= "hidden" if known %>>
+          <%= f.select :rank, [ [ "0 — like dev: quiet, direct", 0 ], [ "1 — like sit", 1 ], [ "2 — like uat: loud, retype and re-enter password", 2 ], [ "3 — like prod: loudest", 3 ] ],
+                { include_blank: "Choose how careful to be…", selected: (project_env.rank unless known) },
+                required: true, disabled: known.present?, class: "field-input mt-1",
+                data: { env_rank_target: "select" }, aria: { describedby: hint_describedby(:project_env, :rank) } %>
+          <%# Only a chosen rank needs explaining; a fixed one says it all. %>
+          <%= field_hint(:project_env, :rank) %>
+        </div>
+      </div>
+
+      <div>
+        <%= f.label :color_tag, "Chip colour", class: "block text-sm font-medium text-ink" %>
+        <%= f.select :color_tag, ApplicationHelper::COLOR_TAG_TONES.keys, { include_blank: "From the rank" },
+              class: "field-input mt-1", aria: { describedby: hint_describedby(:project_env, :color_tag) } %>
+        <%= field_hint(:project_env, :color_tag) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Writing</h2>
+    <div>
+      <%= f.label :apply_mode, class: "block text-sm font-medium text-ink" %>
+      <%= f.select :apply_mode, [ [ "Not set (read only)", "" ], [ "Direct apply", "direct" ] ], {},
+            class: "field-input mt-1", aria: { describedby: hint_describedby(:project_env, :apply_mode) } %>
+      <%= field_hint(:project_env, :apply_mode) %>
+      <details class="mt-3 text-sm">
+        <summary class="text-ink-soft cursor-pointer">Setting up PR mode</summary>
+        <p class="mt-2 text-ink-soft">The team adds the environment to <span class="font-mono">config/connections.yml</span> and runs <span class="font-mono">bin/rails kong:load_connections</span>:</p>
+        <pre class="code-sample mt-2"><code>projects:
+  - key: <%= project_env.project.key %>
+    envs:
+      - name: uat
+        apply_mode: pr
+        admin_url: https://kong-uat-admin-ro.example.internal
+        git_path: uat/kong.yaml
+        select_tags: [managed-by-kongsole]</code></pre>
+      </details>
+    </div>
+  </section>
+
+  <div class="mt-6 flex items-center gap-2">
+    <%= f.submit project_env.persisted? ? "Save environment" : "Add environment", class: "btn btn-primary" %>
+    <%= link_to "Cancel", connections_path, class: "btn btn-text" %>
+  </div>
+<% end %>

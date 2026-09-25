@@ -63,6 +63,39 @@ RSpec.describe "Console consistency", type: :request do
       expect(undescribed_fields).to eq([])
     end
 
+    it "describes every field on the project form (R1.9)" do
+      get new_project_path
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes every field on the env form, fixing a known name's rank and asking for any other (R1.9)" do
+      project = create(:project, source: "local")
+      get new_project_env_path(project_id: project.id)
+      expect(undescribed_fields).to eq([])
+      rank = page.at_css("select[name='project_env[rank]']")
+      expect(rank["required"]).to be_present
+      expect(rank.at_css("option[selected]")).to be_nil
+      expect(page.css("select[name='project_env[apply_mode]'] option").map { |o| o["value"] }).to eq([ "", "direct" ])
+
+      env = create(:project_env, project: project, name: "uat", apply_mode: nil)
+      get edit_project_env_path(env)
+      expect(page.text).to include(I18n.t("hints.fields.project_env.rank_fixed", rank: 2))
+      expect(page.at_css("select[name='project_env[rank]']")&.[]("disabled")).to be_present
+    end
+
+    it "shows a registry connection read-only, pointing at connections.yml (R1.9)" do
+      connection = create(:kong_connection, project_env: create(:project_env, source: "registry", apply_mode: "pr"))
+      get connection_path(connection)
+      expect(page.text).to include("config/connections.yml")
+      expect(page.css("a").map { |a| a.text.strip }).not_to include("Edit")
+    end
+
+    it "preselects the env a Connect link came from (R1.9)" do
+      env = create(:project_env, source: "local", project: create(:project, source: "local"))
+      get new_connection_path(project_env_id: env.id)
+      expect(page.at_css("select[name='kong_connection[project_env_id]'] option[selected]")&.[]("value")).to eq(env.id.to_s)
+    end
+
     it "describes the JSON editor on a create form and the plugin config step" do
       sign_in
       get new_entity_path(type: "upstream")
@@ -139,7 +172,7 @@ RSpec.describe "Console consistency", type: :request do
 
       get health_path
 
-      row = page.css("tbody tr").find { |tr| tr.text.include?("uat-ro") }
+      row = page.css("tbody tr").find { |tr| tr.at_css("[title='#{other.name}']") } # R1.10: the badge names project · env; its title is project/env
       expect(row.css("a").map { |a| [ a.text.strip, a["href"] ] }).to eq([ [ "Log in", login_connection_path(other) ], [ "Details", connection_path(other) ] ])
       expect(row.text).to include("Read-only").and include("Shared")
       expect(row.at_css(".chip-ok").text).to include("Guarded")
@@ -148,11 +181,11 @@ RSpec.describe "Console consistency", type: :request do
     end
 
     it "says a connection with no admin path found is Unknown, in a badge" do
-      create(:kong_connection, name: "fresh")
+      fresh = create(:kong_connection, name: "fresh")
 
       get health_path
 
-      expect(page.css("tbody tr").find { |tr| tr.text.include?("fresh") }.css(".chip-neutral").map(&:text).join).to include("Unknown")
+      expect(page.css("tbody tr").find { |tr| tr.at_css("[title='#{fresh.name}']") }.css(".chip-neutral").map(&:text).join).to include("Unknown")
     end
   end
 
@@ -208,6 +241,70 @@ RSpec.describe "Console consistency", type: :request do
 
       current = page.css("nav[aria-label='Window'] a[aria-current]")
       expect(current.map { |a| a.text.strip }).to eq([ "30 days" ])
+    end
+  end
+
+  # R1.8: the Connections page reads as projects, each with its envs in the
+  # project's own order.
+  describe "connections by project" do
+    let!(:project_a) { create(:project, key: "project-a", name: "Project A", source: "registry", network_note: "Reachable from the NONPROD VPN only") }
+    let!(:project_x) { create(:project, key: "project-x", name: "Project X", source: "local") }
+
+    before do
+      create(:kong_connection, project_env: create(:project_env, project: project_a, name: "uat", position: 2, apply_mode: "pr", source: "registry"))
+      create(:kong_connection, project_env: create(:project_env, project: project_a, name: "dev", position: 1, apply_mode: "direct", source: "registry"))
+      create(:kong_connection, project_env: create(:project_env, project: project_x, name: "pt", position: 1, rank: 1, apply_mode: nil),
+        last_status: "unreachable")
+      create(:project, key: "empty", name: "Empty Project", source: "local")
+    end
+
+    def section(name)
+      page.css("section").find { |s| s.at_css("h2")&.text&.strip == name }
+    end
+
+    it "gives each project a heading and lists its envs in the project's order" do
+      get connections_path
+      expect(page.css("section h2").map { |h| h.text.strip }).to include("Project A", "Project X")
+      envs = section("Project A").css("[data-env-name]").map { |row| row["data-env-name"] }
+      expect(envs).to eq(%w[dev uat])
+    end
+
+    it "says where each project and env is edited" do
+      get connections_path
+      expect(section("Project A").text).to include("From connections.yml")
+      expect(section("Project X").text).to include("Local only")
+    end
+
+    it "names the project's network, and says when this machine cannot reach an env" do
+      get connections_path
+      expect(section("Project A").text).to include("Reachable from the NONPROD VPN only")
+      expect(section("Project X").text).to include("Unreachable from this machine")
+    end
+
+    it "says an env without an apply mode cannot be written, and gives an other env's rank" do
+      get connections_path
+      text = section("Project X").text
+      expect(text).to include(helper_label(:unset)).and include("Other · rank 1")
+    end
+
+    it "offers Edit and Remove only on rows Kongsole owns" do
+      get connections_path
+      expect(section("Project A").css("a, button").map { |n| n.text.strip }).not_to include("Edit", "Remove")
+      expect(section("Project X").css("a, button").map { |n| n.text.strip }).to include("Edit", "Remove")
+    end
+
+    it "explains a project with no envs yet" do
+      get connections_path
+      expect(section("Empty Project").text).to include(I18n.t("hints.empty_states.project_envs.title"))
+    end
+
+    it "has one primary action: New project" do
+      get connections_path
+      expect(page.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
+    end
+
+    def helper_label(policy)
+      ApplicationController.helpers.write_policy_label(policy)
     end
   end
 end

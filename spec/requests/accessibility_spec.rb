@@ -326,4 +326,40 @@ RSpec.describe "Accessibility semantics", type: :request do
       expect(page.css(".notice-banner[role='alert'] li")).not_to be_empty
     end
   end
+
+  # R1.10: the header names the project and env, and the switcher lists the
+  # project's envs -- the current one marked, the ones with no connection shown
+  # but not offered.
+  describe "env switcher" do
+    let(:project) { create(:project, key: "project-a", name: "Project A") }
+    let(:dev) { create(:project_env, project: project, name: "dev", position: 1) }
+    let!(:current) { create(:kong_connection, project_env: dev, admin_url: "https://kong-a-dev.test") }
+    let!(:uat_connection) { create(:kong_connection, project_env: create(:project_env, project: project, name: "uat", position: 3)) }
+
+    before do
+      create(:project_env, project: project, name: "sit", position: 2)
+      sign_in_to(current)
+      get health_path
+    end
+
+    it "names the project and the env in the header" do
+      expect(page.at_css("header").text).to include("Project A").and include("dev")
+    end
+
+    it "lists the project's envs in order, linking each one with a connection to its login" do
+      nav = page.at_css("header nav[aria-label='Environments of Project A']")
+      expect(nav).to be_present
+      items = nav.css("li").map { |li| li.text.squish }
+      expect(items.map { |t| t[/\A\S+/] }).to eq(%w[dev sit uat])
+      expect(nav.at_css("a[aria-current='page']")["href"]).to eq(login_connection_path(current))
+      expect(nav.css("a").map { |a| a["href"] }).to include(login_connection_path(uat_connection))
+    end
+
+    it "shows an env with no connection without offering it" do
+      nav = page.at_css("header nav[aria-label='Environments of Project A']")
+      sit = nav.css("li").find { |li| li.text.include?("sit") }
+      expect(sit.at_css("a")).to be_nil
+      expect(sit.at_css("[aria-disabled='true']")).to be_present
+    end
+  end
 end

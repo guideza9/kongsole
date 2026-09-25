@@ -55,26 +55,26 @@ RSpec.describe ApplicationHelper, type: :helper do
       expect(helper.env_badge(prod)).not_to include("chip-ok", "chip-danger")
     end
 
-    it "spells the environment out ahead of the connection name at uat/prod" do
-      prod = build(:kong_connection, :prod, name: "kong-prod-admin")
-      uat = build(:kong_connection, name: "kong-uat", env: "uat", rank: 2)
+    # R1.10: the badge names the project and the env; the connection's own
+    # project/env name is its title.
+    it "spells the environment out ahead of the project name at uat/prod" do
+      project = create(:project, key: "payments", name: "Payments")
+      prod = create(:kong_connection, project_env: create(:project_env, project: project, name: "prod", apply_mode: "pr", source: "registry"))
+      uat = create(:kong_connection, project_env: create(:project_env, project: project, name: "uat", apply_mode: "pr", source: "registry"))
 
-      expect(Nokogiri::HTML.fragment(helper.env_badge(prod)).text).to eq("PROD·kong-prod-admin")
-      expect(Nokogiri::HTML.fragment(helper.env_badge(uat)).text).to eq("UAT·kong-uat")
+      expect(Nokogiri::HTML.fragment(helper.env_badge(prod)).text).to eq("PROD·Payments")
+      expect(Nokogiri::HTML.fragment(helper.env_badge(uat)).text).to eq("UAT·Payments")
+      expect(Nokogiri::HTML.fragment(helper.env_badge(prod)).at_css("span")["title"]).to eq("payments/prod")
     end
 
-    it "does not say the environment twice when the connection is named for it" do
-      prod = build(:kong_connection, :prod, name: "prod")
-
-      expect(Nokogiri::HTML.fragment(helper.env_badge(prod)).text).to eq("PROD")
-    end
-
-    it "keeps the quiet dot + name chip below rank 2, toned by color_tag" do
-      html = helper.env_badge(build(:kong_connection, name: "dev-1", color_tag: "green"))
+    it "keeps the quiet dot + project · env chip below rank 2, toned by color_tag" do
+      connection = create(:kong_connection, color_tag: "green",
+        project_env: create(:project_env, name: "dev", color_tag: "green", project: create(:project, key: "payments", name: "Payments")))
+      html = helper.env_badge(connection)
 
       expect(html).not_to include("chip-env")
       expect(html).to include("chip-ok")
-      expect(Nokogiri::HTML.fragment(html).text).to eq("dev-1")
+      expect(Nokogiri::HTML.fragment(html).text).to eq("Payments · dev")
     end
 
     it "falls back to the neutral tone for an unknown color_tag" do

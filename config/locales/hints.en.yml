@@ -30,14 +30,10 @@ en:
 
     fields:
       connection:
-        name:
-          help: "A short name you will recognise in the header and in the connection switcher."
-          example: "payments-dev"
-          detail: "To Edit: Follow the team naming habit so everyone sees the same name for the same Kong node."
-        env:
-          help: "Which environment this Kong node belongs to. It sets how careful the console is."
-          example: "dev"
-          detail: "uat and prod turn the header violet and ask for the connection name and your password before anything is applied."
+        project_env_id:
+          help: "The environment this Kong node serves. The connection takes its name, rank and apply mode from it."
+          example: "payments/dev"
+          detail: "Only environments made in Kongsole with no Kong node yet are listed. Environments from config/connections.yml get theirs from that file."
         admin_url:
           help: "Where the Admin API answers, through the route Kong itself guards with basic-auth."
           example: "https://kong-admin.example.internal"
@@ -48,18 +44,46 @@ en:
         ca_bundle_path:
           help: "A file of CA certificates to trust when the Admin API uses an internal CA. Leave empty to use the system trust store."
           example: "/etc/ssl/certs/internal-ca.pem"
-        apply_mode:
-          help: "How a reviewed change reaches Kong: direct writes it now, pr pushes a decK branch for review instead."
-          example: "direct"
-          detail: "pr is for environments where every change needs a CAB-reviewed pull request. With pr, nothing in Kong changes until the pull request is merged and CI runs deck gateway sync."
         credential_mode:
           help: "Where your Kong credential is kept after you log in."
           example: "session"
           detail: "session keeps it only in this browser session and never in the database, so there is no background sync and MCP cannot use it. stored keeps it encrypted in the database, which sync and MCP need."
-        select_tags_raw:
-          help: "The decK select_tags for this environment, comma separated. Kongsole only renders and syncs entities that carry them."
-          example: "payments, managed-by-kongsole"
-          detail: "To Edit: Use the tags your config repo already uses for this environment. deck gateway sync removes anything carrying these tags that is not in the file."
+      project:
+        key:
+          help: "The short name every connection in the project starts with, as in payments/uat. Lower-case letters, digits and dashes; it cannot change later."
+          example: "payments"
+        name:
+          help: "The name people see on the Connections page and in the header."
+          example: "Payments"
+        network_note:
+          help: "Which network reaches this project's Kong nodes. It is shown under every network error, so say what to join."
+          example: "Reachable from the NONPROD VPN only"
+        git_repo:
+          help: "The decK config repo this project's environments render into. Only PR-mode environments push to it."
+          example: "git@git.example.internal:team/payments-kong.git"
+        git_branch:
+          help: "The branch pull requests are opened against."
+          example: "main"
+        git_web_url:
+          help: "Where a pushed branch can be read in a browser. Optional; {branch} is replaced by the branch name."
+          example: "https://git.example.internal/team/payments-kong/tree/{branch}"
+      project_env:
+        name:
+          help: "The environment's name, second half of project/env. dev, sit, uat and prod fix how careful Kongsole is; any other name asks you."
+          example: "nonprod"
+        position:
+          help: "Where it sits in the project's list and in the header switcher. Lower comes first."
+          example: "2"
+        rank:
+          help: "How careful Kongsole is here. 2 and 3 turn the header violet and ask for the connection name and your password before a change is applied."
+          detail: "There is no default on purpose: pick the rank of the environment this one behaves like."
+        rank_fixed: "Rank %{rank}, fixed for this name."
+        apply_mode:
+          help: "Whether Kongsole may write to this environment's Kong node. Not set keeps it read only."
+          detail: "PR mode, where every change is a reviewed pull request, is set in config/connections.yml by the team, never here."
+        color_tag:
+          help: "The colour of the environment's chip below rank 2. Leave empty to take it from the rank."
+          example: "green"
       login:
         username:
           help: "The Kong consumer name of your Admin API credential."
@@ -188,8 +212,11 @@ en:
 
     empty_states:
       connections:
-        title: "No connections yet"
-        body: "A connection is one Kong node and its Admin API. Add one here, or load the team registry with bin/rails kong:load_connections."
+        title: "No projects yet"
+        body: "A project groups the environments of one Kong estate, each with its own Kong node. Load the team's projects with bin/rails kong:load_connections, or start a project on this machine."
+      project_envs:
+        title: "No environments in this project yet"
+        body: "An environment is one stage of the project, like dev or uat, served by one Kong node. Add the first one, then connect it to its Kong node."
       entities:
         never_synced:
           title: "Nothing synced from this connection yet"
@@ -249,9 +276,6 @@ en:
         title: "This is %{env}"
         body: "Please take a moment to check you meant to connect here."
         pr_note: "Changes on this connection go through a reviewed pull request."
-      rank_2_apply:
-        title: "This change is for %{env}"
-        body: "Read the diff once more. Type the connection name and your password to confirm."
       shared_credential_write:
         title: "Recorded under %{operator}"
         body: "This credential is shared, so the audit log names the operator you gave at login, not the Kong consumer."
@@ -313,7 +337,16 @@ en:
 
     pages:
       connections:
-        intro: "Every Kong node you can log in to. Pick one to work on it."
+        intro: "Every project and its environments, in the project's own order. Log in to an environment to work on it."
+        env_without_connection: "No Kong node connected yet."
+      projects_new:
+        intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
+      projects_edit:
+        intro: "Changes here apply to this machine only. The key stays: every connection in the project is named after it."
+      project_envs_new:
+        intro: "One stage of the project, served by one Kong node. Connect the node once the environment exists."
+      project_envs_edit:
+        intro: "The connection takes its rank and apply mode from here, on its next save and on every login."
       connections_new:
         intro: "Register a Kong node for this machine. A connection made here is not shared with the team."
       connections_edit:

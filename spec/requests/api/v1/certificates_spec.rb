@@ -33,8 +33,8 @@ RSpec.describe "API::V1::Certificates", type: :request do
     expect(response).to have_http_status(:ok)
     json = JSON.parse(response.body)
     expect(json["data"].map { |c| c["name"] }).to eq(%w[sit.example dev.example])
-    expect(json["data"].map { |c| c["connection"] }).to eq(%w[sit dev])
-    expect(json["meta"]).to include("days" => 30, "connections" => %w[dev sit])
+    expect(json["data"].map { |c| c["connection"] }).to eq(%w[sit/sit dev/dev])
+    expect(json["meta"]).to include("days" => 30, "connections" => %w[dev/dev sit/sit])
   end
 
   it "reports type, snis, expiry, days left and status, and never a key or a PEM" do
@@ -59,10 +59,10 @@ RSpec.describe "API::V1::Certificates", type: :request do
     cert(sit, "sit.example", 5.days.from_now)
     token = token_for(dev, sit)
 
-    get expiring_api_v1_certificates_path(connection: "sit"), headers: auth(token)
+    get expiring_api_v1_certificates_path(connection: "sit/sit"), headers: auth(token)
     expect(JSON.parse(response.body)["data"].map { |c| c["name"] }).to eq([ "sit.example" ])
 
-    get expiring_api_v1_certificates_path(connection: "prod"), headers: auth(token)
+    get expiring_api_v1_certificates_path(connection: "prod/prod"), headers: auth(token)
     expect(response).to have_http_status(:unauthorized)
   end
 

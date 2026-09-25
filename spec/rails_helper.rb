@@ -35,6 +35,9 @@ begin
 rescue ActiveRecord::PendingMigrationError => e
   abort e.to_s.strip
 end
+require Rails.root.join("spec/support/env_policy_helper")
+require Rails.root.join("spec/support/sign_in_helper")
+
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
@@ -67,6 +70,8 @@ RSpec.configure do |config|
   # config.infer_spec_type_from_file_location!
 
   config.include FactoryBot::Syntax::Methods
+  config.include EnvPolicyHelper
+  config.include SignInHelper, type: :request
 
   # Filter lines from Rails gems in backtraces.
   config.filter_rails_from_backtrace!

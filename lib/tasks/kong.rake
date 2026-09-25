@@ -1,9 +1,16 @@
 namespace :kong do
   desc "Upsert KongConnection registry rows from config/connections.yml"
   task load_connections: :environment do
-    connections = Kong::ConnectionsConfigLoader.call
-    connections.each { |c| puts "#{c.persisted? ? 'ok' : 'FAILED'}  #{c.name} (#{c.env}, rank #{c.rank})" }
+    loader = Kong::ConnectionsConfigLoader.new
+    connections = loader.call
+    connections.each do |c|
+      policy = c.apply_mode || "apply mode not set -- read only"
+      puts "#{c.persisted? ? 'ok' : 'FAILED'}  #{c.name} (rank #{c.rank}, #{policy})"
+    end
+    loader.warnings.each { |w| puts "warning  #{w}" }
     puts "#{connections.size} connection(s) loaded from #{Kong::ConnectionsConfigLoader::DEFAULT_PATH}"
+  rescue Kong::ConnectionsConfigLoader::InvalidRegistry => e
+    abort "connections.yml refused, nothing loaded: #{e.message}"
   end
 
   desc "Seed a local bare decK config repo for the uat connection (M2, local dev only -- no real git host yet)"

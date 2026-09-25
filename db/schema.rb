@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -67,7 +67,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
     t.jsonb "admin_path_fingerprint", default: {}, null: false
     t.string "admin_url", null: false
     t.boolean "allow_insecure_http", default: false, null: false
-    t.string "apply_mode", default: "direct", null: false
+    t.string "apply_mode"
     t.text "auth_secret"
     t.string "auth_type", default: "basic", null: false
     t.string "auth_username"
@@ -89,6 +89,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
     t.string "mode"
     t.string "name", null: false
     t.jsonb "plugins_available", default: {}, null: false
+    t.bigint "project_env_id", null: false
     t.integer "rank", null: false
     t.text "select_tags", default: [], array: true
     t.text "shared_usernames", default: [], array: true
@@ -98,6 +99,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
     t.boolean "writable", default: true, null: false
     t.index ["env"], name: "index_kong_connections_on_env"
     t.index ["name"], name: "index_kong_connections_on_name", unique: true
+    t.index ["project_env_id"], name: "index_kong_connections_on_project_env_id", unique: true
     t.index ["rank"], name: "index_kong_connections_on_rank"
   end
 
@@ -156,10 +158,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_140000) do
     t.index ["token_digest"], name: "index_personal_access_tokens_on_token_digest", unique: true
   end
 
+  create_table "project_envs", force: :cascade do |t|
+    t.string "apply_mode"
+    t.string "color_tag"
+    t.datetime "created_at", null: false
+    t.text "deck_extra_paths", default: [], null: false, array: true
+    t.string "git_path"
+    t.string "name", null: false
+    t.integer "position", null: false
+    t.bigint "project_id", null: false
+    t.integer "rank", null: false
+    t.text "select_tags", default: [], null: false, array: true
+    t.string "source", default: "local", null: false
+    t.datetime "updated_at", null: false
+    t.index ["project_id", "name"], name: "index_project_envs_on_project_id_and_name", unique: true
+    t.index ["project_id", "position"], name: "index_project_envs_on_project_id_and_position", unique: true
+    t.index ["project_id"], name: "index_project_envs_on_project_id"
+  end
+
+  create_table "projects", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "delete_threshold", default: 3, null: false
+    t.string "git_branch"
+    t.string "git_repo"
+    t.string "git_web_url"
+    t.citext "key", null: false
+    t.string "name", null: false
+    t.string "network_note"
+    t.string "source", default: "local", null: false
+    t.datetime "updated_at", null: false
+    t.index ["key"], name: "index_projects_on_key", unique: true
+  end
+
   add_foreign_key "audit_events", "change_plans"
   add_foreign_key "audit_events", "kong_connections"
   add_foreign_key "change_plans", "kong_connections"
+  add_foreign_key "kong_connections", "project_envs"
   add_foreign_key "kong_entities", "kong_connections"
   add_foreign_key "personal_access_token_connections", "kong_connections"
   add_foreign_key "personal_access_token_connections", "personal_access_tokens"
+  add_foreign_key "project_envs", "projects"
 end

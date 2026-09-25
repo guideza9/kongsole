@@ -1,0 +1,4 @@
+<% content_for :title, "Edit #{@project.name}" %>
+<h1 class="page-title mb-1">Edit project: <%= @project.name %></h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.projects_edit.intro") %></p>
+<%= render "form", project: @project %>

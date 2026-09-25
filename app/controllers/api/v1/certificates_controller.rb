@@ -37,7 +37,7 @@ module Api
         connection = raw.is_a?(String) ? current_pat.kong_connections.find_by(name: raw) : nil
         return [ connection ] if connection
 
-        render json: { error: "connection must be the name of one this token is bound to" }, status: :unauthorized
+        render json: { error: connection_error_message }, status: :unauthorized
         nil
       end
 

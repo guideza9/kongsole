@@ -95,7 +95,7 @@ projects:
 - `Project` — `has_many :project_envs, -> { order(:position) }, dependent: :restrict_with_error`; `SOURCES = %w[registry local]`; `KEY_FORMAT`
 - `ProjectEnv` — `belongs_to :project`; `has_one :kong_connection`; `KNOWN_RANKS = {"dev"=>0,"sit"=>1,"uat"=>2,"prod"=>3}`; `#rank_kind`, `#write_policy`, `#qualified_name`
 
-- [ ] **Step 1: test (เขียนก่อน)**
+- [x] **Step 1: test (เขียนก่อน)**
 
 ```ruby
 # spec/models/project_env_spec.rb
@@ -175,8 +175,8 @@ RSpec.describe Project do
 end
 ```
 
-- [ ] **Step 2:** รัน → FAIL (uninitialized constant)
-- [ ] **Step 3: migrations**
+- [x] **Step 2:** รัน → FAIL (uninitialized constant)
+- [x] **Step 3: migrations**
 
 ```ruby
 class CreateProjects < ActiveRecord::Migration[8.1]
@@ -217,9 +217,9 @@ class CreateProjectEnvs < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 4:** models ตาม test (`before_validation :normalize_name` (`strip.downcase`) แล้ว `:force_known_rank` ใช้ `KNOWN_RANKS[name]`; `validates :rank, presence: true, inclusion: { in: 0..3 }`; `validate :pr_only_from_registry`; `color_tag` default จาก rank เหมือน `KongConnection#default_color_tag_from_env` เดิม)
-- [ ] **Step 5:** `bin/rails db:migrate && bin/rails db:rollback STEP=2 && bin/rails db:migrate` สะอาด · PASS · suite 0 failures
-- [ ] **Step 6:** Commit `feat(R1.1): projects and their ordered envs own rank and apply_mode`
+- [x] **Step 4:** models ตาม test (`before_validation :normalize_name` (`strip.downcase`) แล้ว `:force_known_rank` ใช้ `KNOWN_RANKS[name]`; `validates :rank, presence: true, inclusion: { in: 0..3 }`; `validate :pr_only_from_registry`; `color_tag` default จาก rank เหมือน `KongConnection#default_color_tag_from_env` เดิม)
+- [x] **Step 5:** `bin/rails db:migrate && bin/rails db:rollback STEP=2 && bin/rails db:migrate` สะอาด · PASS · suite 0 failures
+- [x] **Step 6:** Commit `feat(R1.1): projects and their ordered envs own rank and apply_mode`
 
 ---
 
@@ -236,7 +236,7 @@ end
 - ลบ `ENVS`, `RANKS`, `derive_rank_from_env`, `validates :env, inclusion`
 - `Kong::LegacyProjectBackfill.call` → สร้าง project `default` (source ตาม: ถ้ามีแถวไหนมาจาก registry ไม่รู้ได้ → `local`) และ env ต่อ connection: `name = parameterize(connection.name)`, `position` เรียงตาม rank แล้วชื่อ, `rank`/`apply_mode`/`color_tag`/git/select_tags จาก connection
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/legacy_project_backfill_spec.rb
@@ -284,7 +284,7 @@ it "allows one connection per env" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → migration:
+- [x] **Step 2:** FAIL → migration:
 
 ```ruby
 class AddProjectEnvToKongConnections < ActiveRecord::Migration[8.1]
@@ -301,10 +301,10 @@ end
 ```
 (ตอน `up` เรียก `KongConnection.reset_column_information` ก่อน backfill)
 
-- [ ] **Step 3:** implement model + backfill → PASS
-- [ ] **Step 4:** ทดสอบ migration บนสำเนา DB dev: `pg_dump` → restore เป็น `kong_integration_r1check` → `DATABASE_URL=… bin/rails db:migrate` → ตรวจ connection ครบ + `auth_secret` decrypt ได้ → `db:rollback STEP=1` → `db:migrate` อีกรอบ
-- [ ] **Step 5:** suite 0 failures (factory ใหม่ทำให้ spec เดิมผ่าน; ถ้า spec เดิมตั้ง `env:`/`rank:` ตรงๆ ให้แก้เป็นผ่าน `project_env` — แก้เฉพาะ setup ไม่แก้ expectation; ถ้าต้องแก้ expectation หยุดถาม)
-- [ ] **Step 6:** Commit `feat(R1.2): every connection belongs to one project env; legacy rows backfilled into project default`
+- [x] **Step 3:** implement model + backfill → PASS
+- [x] **Step 4:** ทดสอบ migration บนสำเนา DB dev: `pg_dump` → restore เป็น `kong_integration_r1check` → `DATABASE_URL=… bin/rails db:migrate` → ตรวจ connection ครบ + `auth_secret` decrypt ได้ → `db:rollback STEP=1` → `db:migrate` อีกรอบ
+- [x] **Step 5:** suite 0 failures (factory ใหม่ทำให้ spec เดิมผ่าน; ถ้า spec เดิมตั้ง `env:`/`rank:` ตรงๆ ให้แก้เป็นผ่าน `project_env` — แก้เฉพาะ setup ไม่แก้ expectation; ถ้าต้องแก้ expectation หยุดถาม)
+- [x] **Step 6:** Commit `feat(R1.2): every connection belongs to one project env; legacy rows backfilled into project default`
 
 ---
 
@@ -314,7 +314,7 @@ end
 - Create: `db/migrate/<ts>_make_kong_connection_apply_mode_nullable.rb`
 - Modify: `app/services/kong/change_guardrails.rb`, `app/controllers/api/v1/change_plans_controller.rb`, `app/models/kong_connection.rb` (`validates :apply_mode, inclusion:, allow_nil: true`), `app/controllers/connections_controller.rb` (`new` ไม่ตั้ง `apply_mode: "direct"`), `app/services/kong/connections_config_loader.rb` (ลบ `|| "direct"`), `spec/services/kong/change_guardrails_spec.rb`, `spec/services/kong/change_applier_spec.rb`, `spec/requests/api/v1/change_plans_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/change_guardrails_spec.rb — เพิ่ม
@@ -354,7 +354,7 @@ it "answers 403 and creates no plan on a connection whose apply_mode is not set"
 end
 ```
 
-- [ ] **Step 2:** FAIL → แก้ `check_write_access!`:
+- [x] **Step 2:** FAIL → แก้ `check_write_access!`:
 
 ```ruby
 def self.check_write_access!(connection:)
@@ -369,7 +369,7 @@ def self.check_write_access!(connection:)
 end
 ```
 
-- [ ] **Step 3:** migration
+- [x] **Step 3:** migration
 
 ```ruby
 class MakeKongConnectionApplyModeNullable < ActiveRecord::Migration[8.1]
@@ -390,8 +390,8 @@ class MakeKongConnectionApplyModeNullable < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 4:** PASS · migrate/rollback/migrate สะอาด · suite 0 failures
-- [ ] **Step 5:** Commit `feat(R1.3): an env with no apply_mode cannot be written through any path`
+- [x] **Step 4:** PASS · migrate/rollback/migrate สะอาด · suite 0 failures
+- [x] **Step 5:** Commit `feat(R1.3): an env with no apply_mode cannot be written through any path`
 
 ---
 
@@ -401,7 +401,7 @@ end
 
 **Interfaces:** `Kong::ConnectionsConfigLoader.call(path:) -> Array<KongConnection>`; raise `Kong::ConnectionsConfigLoader::InvalidRegistry` (ข้อความระบุ `project/env` ที่ผิด) — ไม่บันทึกอะไรเลยถ้ามีข้อผิด (transaction)
 
-- [ ] **Step 1: fixtures + test**
+- [x] **Step 1: fixtures + test**
 
 ```yaml
 # spec/fixtures/connections/two_projects.yml
@@ -467,10 +467,10 @@ it "still loads the legacy flat list into project default" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (detect `Hash` with `projects:` vs `Array` legacy; ทุกแถวที่ load → `source: "registry"`; upsert project by key, env by (project, name), connection by env; position = index ใน list + 1; env/connection ที่เคยเป็น registry แต่หายไปจากไฟล์ → **ไม่ลบ** ให้พิมพ์เตือนใน rake output)
-- [ ] **Step 3:** แปลง `config/connections.yml` ของ compose เป็นรูปแบบใหม่: project `local` — env `dev` (rw route), `dev-ro` (`rank: 0`, ro route), `sit`, `uat` (pr) — คงคอมเมนต์อธิบายเดิมทั้งหมด
-- [ ] **Step 4:** PASS · `bin/rails kong:load_connections` กับ compose พิมพ์ `local/dev`, `local/dev-ro`, `local/sit`, `local/uat`
-- [ ] **Step 5:** Commit `feat(R1.4): connections.yml groups envs under projects; pr envs live only here`
+- [x] **Step 2:** FAIL → implement (detect `Hash` with `projects:` vs `Array` legacy; ทุกแถวที่ load → `source: "registry"`; upsert project by key, env by (project, name), connection by env; position = index ใน list + 1; env/connection ที่เคยเป็น registry แต่หายไปจากไฟล์ → **ไม่ลบ** ให้พิมพ์เตือนใน rake output)
+- [x] **Step 3:** แปลง `config/connections.yml` ของ compose เป็นรูปแบบใหม่: project `local` — env `dev` (rw route), `dev-ro` (`rank: 0`, ro route), `sit`, `uat` (pr) — คงคอมเมนต์อธิบายเดิมทั้งหมด
+- [x] **Step 4:** PASS · `bin/rails kong:load_connections` กับ compose พิมพ์ `local/dev`, `local/dev-ro`, `local/sit`, `local/uat`
+- [x] **Step 5:** Commit `feat(R1.4): connections.yml groups envs under projects; pr envs live only here`
 
 ---
 
@@ -480,7 +480,7 @@ end
 - Create: `app/controllers/projects_controller.rb`, `app/controllers/project_envs_controller.rb`, `app/views/projects/{new,edit,_form}.html.erb`, `app/views/project_envs/{new,edit,_form}.html.erb` (view ตั้งต้นขั้นต่ำ: field + label + error list เท่านั้น), `spec/requests/projects_spec.rb`, `spec/requests/project_envs_spec.rb`
 - Modify: `config/routes.rb`, `app/controllers/connections_controller.rb`, `app/views/connections/_form.html.erb` (render field ใหม่ตาม contract เท่านั้น), `app/views/connections/index.html.erb` (loop `@projects` ขั้นต่ำ), `spec/requests/connections_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/project_envs_spec.rb
@@ -533,9 +533,9 @@ it "refuses to edit a registry connection" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement ตาม contract (strong params ไม่มี `apply_mode: "pr"`: ถ้าค่าเป็น `"pr"` → 422 พร้อม error "PR mode is set in config/connections.yml"; registry → 403 + flash)
-- [ ] **Step 3:** PASS · suite 0 failures
-- [ ] **Step 4:** Commit `feat(R1.5): create and edit local projects, direct envs and their connection in the UI`
+- [x] **Step 2:** FAIL → implement ตาม contract (strong params ไม่มี `apply_mode: "pr"`: ถ้าค่าเป็น `"pr"` → 422 พร้อม error "PR mode is set in config/connections.yml"; registry → 403 + flash)
+- [x] **Step 3:** PASS · suite 0 failures
+- [x] **Step 4:** Commit `feat(R1.5): create and edit local projects, direct envs and their connection in the UI`
 
 ---
 
@@ -543,7 +543,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R1.2 · **ไฟล์ที่แก้ได้:** `app/controllers/api/v1/base_controller.rb`, `app/controllers/api/v1/connections_controller.rb`, `mcp/src/tools.ts` (description), `mcp/src/tools.test.ts`, `mcp/README.md`, `spec/requests/api/v1/connections_spec.rb` (create ถ้าไม่มี), `spec/requests/api/v1/entities_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/api/v1/connections_spec.rb
@@ -586,9 +586,9 @@ RSpec.describe "API connections", type: :request do
 end
 ```
 
-- [ ] **Step 2:** FAIL → `current_pat_connection` ใช้ `find_by(name: params[:connection])` ต่อไปได้ เพราะ `name` = qualified name แล้ว (R1.2) — เพิ่มการปฏิเสธชื่อที่ไม่มี `/` ด้วยข้อความ "use project/env"
-- [ ] **Step 3:** MCP: ทุก `connection: z.string()` → `.describe('Connection as "project/env", e.g. "project-a/uat" (required, no default)')` · test ใน `tools.test.ts` ตรวจว่า description มี `project/env`
-- [ ] **Step 4:** PASS (rspec + vitest) · Commit `feat(R1.6): API and MCP name connections project/env`
+- [x] **Step 2:** FAIL → `current_pat_connection` ใช้ `find_by(name: params[:connection])` ต่อไปได้ เพราะ `name` = qualified name แล้ว (R1.2) — เพิ่มการปฏิเสธชื่อที่ไม่มี `/` ด้วยข้อความ "use project/env"
+- [x] **Step 3:** MCP: ทุก `connection: z.string()` → `.describe('Connection as "project/env", e.g. "project-a/uat" (required, no default)')` · test ใน `tools.test.ts` ตรวจว่า description มี `project/env`
+- [x] **Step 4:** PASS (rspec + vitest) · Commit `feat(R1.6): API and MCP name connections project/env`
 
 ---
 
@@ -596,7 +596,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R1.2 · **ไฟล์ที่แก้ได้:** `app/controllers/application_controller.rb`, `spec/requests/connection_switcher_spec.rb` (create)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -620,7 +620,7 @@ end
 ```
 (สร้าง `spec/support/sign_in_helper.rb` — `module SignInHelper; def sign_in_to(connection, access: :rw, username: "alice")` — stub `GET /`, probe `PATCH #{Kong::AccessProbe::PROBE_PATH}` (404 `Not found` = rw, 404 `no Route matched` = ro), `GET /consumers/<username>`, `GET /routes` แบบเดียวกับ `plugins_spec.rb#sign_in` แล้ว `post login_connection_path`; include ใน `rails_helper` สำหรับ `type: :request`)
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R1.7): the header knows the current project's envs`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R1.7): the header knows the current project's envs`
 
 ---
 
@@ -630,10 +630,10 @@ end
 
 **คำสั่ง:** `/impeccable layout app/views/connections/index.html.erb` → `/impeccable onboard` (empty state: ไม่มี project / project ไม่มี env) → `/impeccable clarify`
 
-- [ ] **Step 1:** assertion (ก่อน): หน้า index แสดงชื่อ project เป็น heading, env ตาม `position`, env ที่ `apply_mode` nil แสดง `write_policy_label(:unset)`, badge `Local only` / `From connections.yml`
-- [ ] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono + `network_note` ถ้ามี), สถานะ `unreachable` แสดงเป็น "Unreachable from this machine" ต่างจาก `unavailable`, แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
-- [ ] **Step 3:** PASS · snapshot `connections-index-projects` · detect
-- [ ] **Step 4:** Commit `feat(R1.8): connections are grouped by project, envs in each project's own order`
+- [x] **Step 1:** assertion (ก่อน): หน้า index แสดงชื่อ project เป็น heading, env ตาม `position`, env ที่ `apply_mode` nil แสดง `write_policy_label(:unset)`, badge `Local only` / `From connections.yml`
+- [x] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono + `network_note` ถ้ามี), สถานะ `unreachable` แสดงเป็น "Unreachable from this machine" ต่างจาก `unavailable`, แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
+- [x] **Step 3:** PASS · snapshot `connections-index-projects` · detect
+- [x] **Step 4:** Commit `feat(R1.8): connections are grouped by project, envs in each project's own order`
 
 **เกณฑ์ detect:** ไม่มี finding หลักเพิ่มจาก baseline · 390px ไม่มี horizontal scroll
 
@@ -645,11 +645,11 @@ end
 
 **คำสั่ง:** `/impeccable shape project and env forms` → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** env form: ช่อง name; ถ้าชื่อเป็น dev/sit/uat/prod แสดง "Rank N (fixed for this name)" ไม่มี select; ชื่ออื่นแสดง select rank ที่ **ไม่มีค่าเลือกไว้** (`include_blank: "Choose how careful to be…"`, `required`) — `env_rank_controller.js` สลับทันทีที่พิมพ์ (fallback no-JS: server validation แสดง error); apply_mode select: `Not set (read only)` / `Direct apply`; คำอธิบายว่า PR mode ตั้งใน `connections.yml` พร้อมตัวอย่าง YAML
-- [ ] **Step 1b:** project form: ช่อง `network_note` พร้อม hint และตัวอย่าง "Reachable from the NONPROD VPN only" (registry แสดงอ่านอย่างเดียว)
-- [ ] **Step 2:** connection form: เลือก env (grouped by project), admin_url, TLS, credential_mode — hint ทุก field
-- [ ] **Step 3:** registry rows: หน้า show แสดงค่าแบบอ่านอย่างเดียว + "Edit this in config/connections.yml"
-- [ ] **Step 4:** snapshot + detect · Commit `feat(R1.9): forms for local projects, envs and connections with hints`
+- [x] **Step 1:** env form: ช่อง name; ถ้าชื่อเป็น dev/sit/uat/prod แสดง "Rank N (fixed for this name)" ไม่มี select; ชื่ออื่นแสดง select rank ที่ **ไม่มีค่าเลือกไว้** (`include_blank: "Choose how careful to be…"`, `required`) — `env_rank_controller.js` สลับทันทีที่พิมพ์ (fallback no-JS: server validation แสดง error); apply_mode select: `Not set (read only)` / `Direct apply`; คำอธิบายว่า PR mode ตั้งใน `connections.yml` พร้อมตัวอย่าง YAML
+- [x] **Step 1b:** project form: ช่อง `network_note` พร้อม hint และตัวอย่าง "Reachable from the NONPROD VPN only" (registry แสดงอ่านอย่างเดียว)
+- [x] **Step 2:** connection form: เลือก env (grouped by project), admin_url, TLS, credential_mode — hint ทุก field
+- [x] **Step 3:** registry rows: หน้า show แสดงค่าแบบอ่านอย่างเดียว + "Edit this in config/connections.yml"
+- [x] **Step 4:** snapshot + detect · Commit `feat(R1.9): forms for local projects, envs and connections with hints`
 
 ---
 
@@ -659,10 +659,10 @@ end
 
 **คำสั่ง:** `/impeccable shape header env switcher` → `/impeccable adapt` (390px: 3 แถวสูงสุดตาม `UI-DESIGN.md` §Topbar targets) → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): header มีชื่อ project + env ของ connection ปัจจุบัน; switcher เป็น `<nav aria-label="Environments of <project>">` มี link ต่อ env ที่มี connection → `login_connection_path`, env ปัจจุบัน `aria-current="page"`, env ไม่มี connection เป็น `<span aria-disabled="true">`
-- [ ] **Step 2:** FAIL → ทำ UI (native `<details>` disclosure หรือแถว chip; ต้องใช้คีย์บอร์ดได้; ความดังตาม rank เดิม)
-- [ ] **Step 3:** PASS · snapshot 390x844 + 1280 · detect
-- [ ] **Step 4:** Commit `feat(R1.10): header shows project and env; the switcher lists the project's envs`
+- [x] **Step 1:** assertion (ก่อน): header มีชื่อ project + env ของ connection ปัจจุบัน; switcher เป็น `<nav aria-label="Environments of <project>">` มี link ต่อ env ที่มี connection → `login_connection_path`, env ปัจจุบัน `aria-current="page"`, env ไม่มี connection เป็น `<span aria-disabled="true">`
+- [x] **Step 2:** FAIL → ทำ UI (native `<details>` disclosure หรือแถว chip; ต้องใช้คีย์บอร์ดได้; ความดังตาม rank เดิม)
+- [x] **Step 3:** PASS · snapshot 390x844 + 1280 · detect
+- [x] **Step 4:** Commit `feat(R1.10): header shows project and env; the switcher lists the project's envs`
 
 ---
 
@@ -672,7 +672,7 @@ end
 
 **ทำไม:** แต่ละ project ใช้คนละ network (ตัดสินรอบ 2 ข้อ 4) — ผู้ใช้ต้องรู้ทันทีว่า "เข้าไม่ถึงเพราะยังไม่ต่อ VPN ของ project นี้" ไม่ใช่ "Kong ล่ม"
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/connection_login_spec.rb — เพิ่ม
@@ -711,8 +711,8 @@ it "reads network_note per project" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → เพิ่ม `network_note: Reachable from the NONPROD VPN only` ให้ project-a ใน fixture → implement → PASS
-- [ ] **Step 3:** suite 0 failures · Commit `feat(R1.11): each project says which network reaches it; unreachable is told apart from Kong being down`
+- [x] **Step 2:** FAIL → เพิ่ม `network_note: Reachable from the NONPROD VPN only` ให้ project-a ใน fixture → implement → PASS
+- [x] **Step 3:** suite 0 failures · Commit `feat(R1.11): each project says which network reaches it; unreachable is told apart from Kong being down`
 
 ---
 
@@ -727,6 +727,18 @@ end
 - [ ] MCP: `kong_connections` คืน `local/dev`; `kong_search` ด้วย `connection: "dev"` → error บอกให้ใช้ `project/env`
 - [ ] เครือข่าย: สร้าง connection local ชี้ `https://kong.nonexistent.invalid` ใน project ที่มี `network_note` → login แสดง `network_dns_failed` + note, หน้า Connections แสดง "Unreachable from this machine"; `docker compose stop kong-1 kong-2` แล้ว login `local/dev` → `network_refused` (ไม่ใช่ "Admin API down"); start กลับ
 - [ ] ภาพหน้าจอ 390/1280 ของ connections, env form, header
+
+### ผลตรวจ R1.12 (2026-09-25, cloud session — ไม่มี Docker/compose)
+
+- [x] โหลด `two_projects.yml` → หน้า Connections แสดง Project A 6 env, Project X 3 env ตามลำดับ (snapshot `connections-index-projects`, consistency_spec)
+- [x] migration 4 ตัว: up → rollback STEP=4 → up บน DB scratch (test env) ที่มีแถว legacy — สำเร็จ, credential อยู่ครบ, ชื่อคงเป็น `default/<ชื่อเดิม>`
+  (เจอบั๊ก 2 จุดระหว่างตรวจและแก้แล้ว: env ซ้ำเมื่อ rollback 1 ขั้นแล้ว migrate ใหม่ · ชื่อกลายเป็น `default/default-…` หลัง rollback ทั้ง 4)
+- [x] rollback ปฏิเสธพร้อมรายชื่อเมื่อมี connection ที่ apply_mode ว่าง
+- [x] API/MCP: `kong_connections` คืน `project/env`; ชื่อไม่มี `/` → 401 บอกให้ใช้ `project/env` (request spec + vitest)
+- [x] credential: `log_filtering_spec` ผ่าน · `grep "Basic " log/test.log` เจอเฉพาะ fixture `"Basic abc"` · API connections ไม่มี `auth_secret` (spec เทียบ hash ตรงตัว)
+- [ ] **ต้องทำบนเครื่องที่มี compose:** login `local/dev` + switcher → uat; สร้าง project/env `nonprod` + connection แล้ว login;
+  ตั้ง apply_mode = Not set แล้ว `kong_plan` ต้อง 403; `https://kong.nonexistent.invalid` → `network_dns_failed` + note;
+  `docker compose stop kong-1 kong-2` → `network_refused`; ภาพหน้าจอจากแอปจริง (ตอนนี้มีจาก snapshot)
 
 ## เกณฑ์ปิดงาน R1
 

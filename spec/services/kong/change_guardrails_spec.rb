@@ -102,4 +102,12 @@ RSpec.describe Kong::ChangeGuardrails do
       }.not_to raise_error
     end
   end
+
+  describe ".check_write_access! (R1.3)" do
+    it "refuses any write while the env has no apply_mode, even with a read-write credential" do
+      connection = create(:kong_connection, project_env: create(:project_env, apply_mode: nil), access_level: "rw")
+      expect { described_class.check_write_access!(connection: connection) }
+        .to raise_error(Kong::ChangeGuardrails::Violation, /apply mode is not set/i)
+    end
+  end
 end

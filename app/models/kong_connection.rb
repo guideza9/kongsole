@@ -6,42 +6,71 @@
 # transparently encrypted at rest; it is never exposed through `to_json`,
 # `inspect`, or any serializer.
 class KongConnection < ApplicationRecord
-  RANKS = { "dev" => 0, "sit" => 1, "uat" => 2, "prod" => 3 }.freeze
-  ENVS = RANKS.keys.freeze
   CREDENTIAL_KINDS = %w[personal shared].freeze
   CREDENTIAL_MODES = %w[session stored].freeze
   ACCESS_LEVELS = %w[rw ro].freeze
   APPLY_MODES = %w[direct pr].freeze
   AUTH_TYPES = %w[basic none header].freeze
-  STATUSES = %w[ok unauthorized forbidden route_not_matched not_found rate_limited unavailable error].freeze
+  # "unreachable" = this machine cannot reach Kong at all (DNS, refused, timeout,
+  # TLS -- usually the project's network is not joined); "unavailable" = Kong
+  # answered 502/503 (R1.11).
+  STATUSES = %w[ok unauthorized forbidden route_not_matched not_found rate_limited unavailable unreachable error].freeze
 
   encrypts :auth_secret
 
+  # R1: the env owns rank, apply_mode and git settings; the connection keeps a
+  # copy (copy_policy_from_env) so every existing reader of `rank` and
+  # `apply_mode` stays as it was.
+  belongs_to :project_env, optional: true
+
+  validates :project_env, presence: true
+  validates :project_env_id, uniqueness: true, allow_nil: true
   validates :name, presence: true, uniqueness: true
-  validates :env, inclusion: { in: ENVS }
   validates :rank, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :admin_url, presence: true
   validates :auth_type, inclusion: { in: AUTH_TYPES }
   validates :credential_kind, inclusion: { in: CREDENTIAL_KINDS }, allow_nil: true
   validates :credential_mode, inclusion: { in: CREDENTIAL_MODES }
   validates :access_level, inclusion: { in: ACCESS_LEVELS }, allow_nil: true
-  validates :apply_mode, inclusion: { in: APPLY_MODES }
+  # nil = not set: nothing can be written (R1.3, Kong::ChangeGuardrails).
+  validates :apply_mode, inclusion: { in: APPLY_MODES }, allow_nil: true
   validates :last_status, inclusion: { in: STATUSES }, allow_nil: true
   validate :admin_url_must_be_https_unless_localhost
   validate :git_web_url_must_be_a_web_url
 
-  before_validation :default_color_tag_from_env, on: :create
-  before_validation :derive_rank_from_env
+  before_validation :copy_policy_from_env
 
   def prod?
     env == "prod"
   end
 
+  # Through the env, never cached apart from it: git settings are copied
+  # from this project on save.
+  def project
+    project_env&.project
+  end
+
+  # R1.11: which network reaches this connection's project, or nil.
+  def network_note
+    project&.network_note
+  end
+
+  # "project-a/uat" -- how the API, MCP and the UI name a connection.
+  def qualified_name
+    project_env&.qualified_name
+  end
+
+  # Registry rows come from config/connections.yml and are edited there.
+  def editable_in_ui?
+    project_env&.source == "local"
+  end
+
   # uat and prod (rank >= 2): where the UI turns loud -- solid env chrome,
   # a retyped name before applying. Decided by rank, never by `color_tag`, so
   # a mis-tagged prod connection cannot quietly lose the guardrail. Rank is
-  # not an input: it is always `RANKS[env]` (see derive_rank_from_env), so an
-  # env=prod row cannot be saved with a quiet rank.
+  # not an input: it is copied from the env (see copy_policy_from_env), and
+  # ProjectEnv forces the rank of a dev/sit/uat/prod name, so a prod row
+  # cannot be saved with a quiet rank.
   PROTECTED_RANK = 2
   PROD_RANK = 3
 
@@ -127,23 +156,23 @@ class KongConnection < ApplicationRecord
     branch.to_s.split("/", -1).map { |segment| ERB::Util.url_encode(segment) }.join("/")
   end
 
-  # Overwrites whatever rank was assigned, on create and on every update: the
-  # guardrails key off rank, so it must never disagree with env. An env
-  # outside ENVS keeps its rank untouched -- the env inclusion validation
-  # rejects the row on its own.
-  def derive_rank_from_env
-    self.rank = RANKS.fetch(env) if RANKS.key?(env)
-  end
+  # Overwrites whatever was assigned, on create and on every update: the
+  # guardrails key off rank and apply_mode, so the connection must never
+  # disagree with its env.
+  def copy_policy_from_env
+    return if project_env.nil?
 
-  def default_color_tag_from_env
-    return if color_tag.present?
-
-    self.color_tag = case env
-    when "prod" then "red"
-    when "uat" then "orange"
-    when "sit" then "yellow"
-    else "green"
-    end
+    self.env = project_env.name
+    self.rank = project_env.rank
+    self.apply_mode = project_env.apply_mode
+    self.color_tag = project_env.color_tag.presence || ProjectEnv.color_tag_for(project_env.rank)
+    self.git_path = project_env.git_path
+    self.select_tags = project_env.select_tags
+    project = project_env.project
+    self.git_repo = project&.git_repo
+    self.git_branch = project&.git_branch
+    self.git_web_url = project&.git_web_url
+    self.name = project_env.qualified_name
   end
 
   def admin_url_must_be_https_unless_localhost

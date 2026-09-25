@@ -15,6 +15,12 @@ apply) lives server-side and this just relays its exact error messages.
 | `kong_plan` | `POST /change_plans` |
 | `kong_apply` | `POST /change_plans/:id/apply` |
 
+Every tool that acts on a connection takes it as `project/env` (for example
+`project-a/uat`), with no default — a bare env name like `uat` is ambiguous
+across projects and is refused. `kong_connections` lists the names a token
+can use. Tokens issued before projects existed keep working under
+`default/<old name>`.
+
 ## Setup
 
 ```bash

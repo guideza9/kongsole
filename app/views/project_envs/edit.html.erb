@@ -1,0 +1,4 @@
+<% content_for :title, "Edit #{@project_env.qualified_name}" %>
+<h1 class="page-title mb-1">Edit environment: <span class="font-mono"><%= @project_env.qualified_name %></span></h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.project_envs_edit.intro") %></p>
+<%= render "form", project_env: @project_env %>
