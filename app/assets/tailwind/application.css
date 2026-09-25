@@ -493,6 +493,26 @@ a.entity-row-compact.entity-row--admin:hover {
   font-size: 0.85rem;
 }
 
+/* A chip never outgrows its container. In the env chip the project name is
+   what gives way (ellipsis; the chip's title has the full name); the env
+   keeps its width unless it alone is wider than the chip. */
+.chip {
+  max-width: 100%;
+}
+
+.chip__project {
+  min-width: 1.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip__env {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chip-dot {
   width: 0.45rem;
   height: 0.45rem;
@@ -1578,6 +1598,7 @@ html:has(.action-bar) {
    so the grouping reads before any rule or box does. */
 .project-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* a one-line admin URL must not size the column */
   gap: 2.5rem;
 }
 
@@ -1638,6 +1659,7 @@ html:has(.action-bar) {
 
 .env-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
 }
 
@@ -1702,6 +1724,15 @@ html:has(.action-bar) {
   gap: 0.5rem;
   font-size: 0.875rem;
   flex-shrink: 0;
+}
+
+/* Side by side, the actions take at most half the row and wrap inside it, so
+   the env's own facts (URL, policy) keep room to be read. */
+@media (min-width: 40rem) {
+  .env-row__actions {
+    max-width: 50%;
+    justify-content: flex-end;
+  }
 }
 
 /* An env waiting for its Kong node: the same card, drawn as a placeholder. */

@@ -133,8 +133,13 @@ module ApplicationHelper
     end
 
     tone = COLOR_TAG_TONES.fetch(connection.color_tag.to_s, "neutral")
-    label = [ project_name, connection.env ].compact_blank.join(" \u00b7 ")
-    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), label ]), class: "#{classes} chip-#{tone}", title: connection.name
+    # Where the chip runs out of room, the project name gives way (ellipsis;
+    # the full name is the title) and the env stays whole: the env is the
+    # part that must never be misread.
+    parts = [ content_tag(:span, "", class: "chip-dot") ]
+    parts += [ content_tag(:span, project_name, class: "chip__project"), " \u00b7 " ] if project_name.present?
+    parts << content_tag(:span, connection.env, class: "chip__env")
+    content_tag :span, safe_join(parts), class: "#{classes} chip-#{tone}", title: connection.name
   end
 
   STATUS_TONES = {

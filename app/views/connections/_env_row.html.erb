@@ -16,7 +16,8 @@
     </div>
 
     <% if connection %>
-      <div class="env-row__url font-mono"><%= connection.admin_url %></div>
+      <%# One line, cut at the end: the host leads, and the full URL is in the title. %>
+      <div class="env-row__url font-mono" title="<%= connection.admin_url %>"><%= connection.admin_url %></div>
     <% else %>
       <p class="env-row__note"><%= t("hints.pages.connections.env_without_connection") %></p>
     <% end %>
@@ -41,20 +42,21 @@
         <%= link_to "Edit environment", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit environment #{env.qualified_name}" } %>
         <%= link_to "Edit connection", edit_connection_path(connection), class: "btn-sm btn-text", aria: { label: "Edit connection #{env.qualified_name}" } %>
         <%# Remove is the only destructive action on the row: it gets its own
-            side of a hairline, so a slip aimed at Log in or Edit cannot land on it. %>
+            side of a hairline, so a slip aimed at Log in or Edit cannot land on it.
+            It names the connection, since the environment stays behind. %>
         <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
-          <%= button_to "Remove", connection_path(connection), method: :delete,
-                form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from this machine? This does not touch anything in Kong itself." } },
-                class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove #{connection.name}" } %>
+          <%= button_to "Remove connection", connection_path(connection), method: :delete,
+                form: { data: { turbo_confirm: t("hints.risks.remove_connection.confirm", env: env.qualified_name) } },
+                class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove connection #{env.qualified_name}" } %>
         </div>
       <% end %>
     <% elsif env.source == "local" %>
       <%= link_to "Connect", new_connection_path(project_env_id: env.id), class: "btn-sm btn-secondary", aria: { label: "Connect #{env.qualified_name} to its Kong node" } %>
-      <%= link_to "Edit", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit #{env.qualified_name}" } %>
+      <%= link_to "Edit environment", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit environment #{env.qualified_name}" } %>
       <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
-        <%= button_to "Remove", project_env_path(env), method: :delete,
-              form: { data: { turbo_confirm: "Remove the environment \"#{env.qualified_name}\"? It has no connection, and nothing in Kong changes." } },
-              class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove #{env.qualified_name}" } %>
+        <%= button_to "Remove environment", project_env_path(env), method: :delete,
+              form: { data: { turbo_confirm: t("hints.risks.remove_environment.confirm", env: env.qualified_name) } },
+              class: "btn-sm btn-text-danger bg-transparent", aria: { label: "Remove environment #{env.qualified_name}" } %>
       </div>
     <% end %>
   </div>

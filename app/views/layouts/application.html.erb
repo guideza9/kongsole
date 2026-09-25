@@ -44,7 +44,9 @@
           <%= nav_link_to "Health", health_path, current: primary_nav_current?(:health), class: "topbar-action hover:text-ink transition-colors" %>
         </nav>
       </div>
-      <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+      <%# min-w-0 max-w-full: a long project name gives way inside the env chip
+          instead of widening the header past a phone screen. %>
+      <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm min-w-0 max-w-full">
         <% if signed_in? %>
           <%= env_badge(current_connection, size: :lg) %>
           <% if current_connection.read_only? %>

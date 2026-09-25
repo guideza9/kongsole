@@ -1,12 +1,22 @@
 <%# shared/_write_blocked -- R1.14: why nothing can be written from this page,
     and how to change that. Shown instead of the write controls it replaces,
     once per page, when ApplicationController#write_block_reason is set.
-    A plain banner (no live role): it is there when the page opens, not news. %>
+    A plain banner (no live role): it is there when the page opens, not news.
+    The way out depends on where the env is defined: a local env is edited
+    here, a registry env only in config/connections.yml, so it gets no link. %>
 <% reason = write_block_reason %>
+<% env = current_connection.project_env %>
+<% env_name = current_connection.qualified_name || current_connection.name %>
+<% local_env = env&.source == "local" %>
 <%= render layout: "shared/notice", locals: { tone: :warning, class: ["risk-notice", "write-blocked", local_assigns[:class]].compact.join(" ") } do %>
-  <p class="risk-notice__title"><%= t("hints.risks.write_blocked.#{reason}.title", env: current_connection.qualified_name || current_connection.name) %></p>
-  <p class="risk-notice__body"><%= t("hints.risks.write_blocked.#{reason}.body") %></p>
+  <p class="risk-notice__title"><%= t("hints.risks.write_blocked.#{reason}.title", env: env_name) %></p>
   <% if reason == :apply_mode_unset %>
-    <p class="risk-notice__body"><%= link_to t("hints.risks.write_blocked.apply_mode_unset.action"), connections_path, class: "underline underline-offset-2" %></p>
+    <p class="risk-notice__body"><%= t("hints.risks.write_blocked.apply_mode_unset.#{local_env ? "body_local" : "body_registry"}") %></p>
+    <% if local_env %>
+      <p class="risk-notice__body"><%= link_to t("hints.risks.write_blocked.apply_mode_unset.action", env: env_name), edit_project_env_path(env), class: "underline underline-offset-2" %></p>
+    <% end %>
+  <% else %>
+    <p class="risk-notice__body"><%= t("hints.risks.write_blocked.#{reason}.body") %></p>
+    <p class="risk-notice__body"><%= link_to t("hints.risks.write_blocked.read_only.action", env: env_name), login_connection_path(current_connection), class: "underline underline-offset-2" %></p>
   <% end %>
 <% end %>

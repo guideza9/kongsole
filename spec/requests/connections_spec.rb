@@ -66,7 +66,7 @@ RSpec.describe "Connections", type: :request do
     get connections_path
 
     row = Nokogiri::HTML(response.body).at_css(".row-card")
-    remove = row.at_xpath(".//button[normalize-space()='Remove']")
+    remove = row.at_xpath(".//button[normalize-space()='Remove connection']")
     expect(remove.ancestors("div").first["class"]).to include("border-l")
     expect(row.css("a").map { |a| a.text.strip }).to eq([ "Log in", "Edit environment", "Edit connection" ])
   end

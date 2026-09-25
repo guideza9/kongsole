@@ -289,8 +289,9 @@ RSpec.describe "Console consistency", type: :request do
 
     it "offers Edit and Remove only on rows Kongsole owns" do
       get connections_path
-      expect(section("Project A").css("a, button").map { |n| n.text.strip }).not_to include("Edit", "Remove")
-      expect(section("Project X").css("a, button").map { |n| n.text.strip }).to include("Edit", "Remove")
+      edit_or_remove = ->(name) { section(name).css("a, button").map { |n| n.text.strip }.grep(/\A(Edit|Remove)\b/) }
+      expect(edit_or_remove.call("Project A")).to be_empty
+      expect(edit_or_remove.call("Project X")).to include("Edit", a_string_starting_with("Remove "))
     end
 
     # R1.15: a connected env's rank, apply mode and colour stay editable.
@@ -365,6 +366,31 @@ RSpec.describe "Console consistency", type: :request do
       end
     end
 
+    # The way out depends on where the env is defined: only a local env can be
+    # changed in the UI, so only it gets a link; a registry env names the file.
+    it "links a local env with no apply mode to its own edit page" do
+      unset = create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil)
+      sign_in_to(unset)
+
+      get entities_path(type: "upstream")
+      notice = page.at_css("main .write-blocked")
+      expect(notice.text.squish).to include(I18n.t("hints.risks.write_blocked.apply_mode_unset.body_local"))
+      expect(notice.at_css("a[href='#{edit_project_env_path(unset.project_env)}']").text.squish)
+        .to eq(I18n.t("hints.risks.write_blocked.apply_mode_unset.action", env: unset.qualified_name))
+    end
+
+    it "sends a registry env with no apply mode to config/connections.yml, with no link it could not use" do
+      unset = create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil)
+      unset.project_env.update_columns(source: "registry")
+      sign_in_to(unset)
+
+      get entities_path(type: "upstream")
+      notice = page.at_css("main .write-blocked")
+      expect(notice.text.squish).to include(I18n.t("hints.risks.write_blocked.apply_mode_unset.body_registry"))
+      expect(notice.text).not_to include("Direct apply")
+      expect(notice.css("a")).to be_empty
+    end
+
     it "says a read-only credential on a direct env is why, with its own words" do
       ro = create(:kong_connection, admin_url: "https://kong-ro.test", apply_mode: "direct")
       sign_in_to(ro, access: :ro)
@@ -372,6 +398,7 @@ RSpec.describe "Console consistency", type: :request do
       get entities_path(type: "upstream")
       expect(offered_controls).to be_empty
       expect(notices.text.squish).to include(I18n.t("hints.risks.write_blocked.read_only.title", env: ro.qualified_name))
+      expect(page.at_css("main .write-blocked a[href='#{login_connection_path(ro)}']")).to be_present
     end
 
     it "keeps every one of them, and no notice, where the env can be written" do
