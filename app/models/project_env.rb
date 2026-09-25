@@ -21,6 +21,10 @@ class ProjectEnv < ApplicationRecord
   before_validation :force_known_rank
   before_validation :default_color_tag_from_rank
 
+  def self.color_tag_for(rank)
+    %w[green yellow orange red].fetch(rank.to_i, "green")
+  end
+
   # "known" when the name fixes the rank (dev/sit/uat/prod), "other" when
   # someone had to choose it.
   def rank_kind
@@ -51,7 +55,7 @@ class ProjectEnv < ApplicationRecord
   def default_color_tag_from_rank
     return if color_tag.present? || rank.nil?
 
-    self.color_tag = %w[green yellow orange red].fetch(rank, "green")
+    self.color_tag = self.class.color_tag_for(rank)
   end
 
   # PR mode is what makes a change reviewable by the CAB (CLAUDE.md rule 1);

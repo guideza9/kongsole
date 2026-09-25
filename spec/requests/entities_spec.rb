@@ -1087,7 +1087,7 @@ RSpec.describe "Entities (web)", type: :request do
         get new_entity_path(type: "certificate")
         expect(response.body).not_to include("DECK_")
 
-        connection.update!(apply_mode: "pr")
+        set_env_policy(connection, apply_mode: "pr")
         get new_entity_path(type: "certificate")
         expect(response.body).to include("DECK_")
       end

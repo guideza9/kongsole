@@ -30,7 +30,10 @@ module Kong
 
     def upsert(entry)
       attrs = entry.symbolize_keys
-      connection = KongConnection.find_or_initialize_by(name: attrs.fetch(:name))
+      name = attrs.fetch(:name)
+      # R1.2: a flat entry lives in project `default` as default/<name>.
+      connection = KongConnection.find_by(name: "#{LegacyProjectBackfill::PROJECT_KEY}/#{name}") ||
+        KongConnection.find_or_initialize_by(name: name)
       connection.assign_attributes(
         env: attrs[:env],
         admin_url: attrs[:admin_url],

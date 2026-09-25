@@ -20,15 +20,15 @@ RSpec.describe Kong::ConnectionsConfigLoader do
 
       connections = described_class.call(path: file.path)
 
-      expect(connections.map(&:name)).to contain_exactly("dev", "prod")
+      expect(connections.map(&:name)).to contain_exactly("default/dev", "default/prod")
 
-      dev = connections.find { |c| c.name == "dev" }
+      dev = connections.find { |c| c.name == "default/dev" }
       expect(dev.rank).to eq(0)
       expect(dev.color_tag).to eq("green")
       expect(dev.auth_username).to be_nil
       expect(dev.auth_secret).to be_nil
 
-      prod = connections.find { |c| c.name == "prod" }
+      prod = connections.find { |c| c.name == "default/prod" }
       expect(prod.rank).to eq(3)
       expect(prod.apply_mode).to eq("pr")
       expect(prod.select_tags).to eq([ "managed-by-kongctl" ])

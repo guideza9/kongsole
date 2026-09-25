@@ -236,7 +236,7 @@ end
 - ลบ `ENVS`, `RANKS`, `derive_rank_from_env`, `validates :env, inclusion`
 - `Kong::LegacyProjectBackfill.call` → สร้าง project `default` (source ตาม: ถ้ามีแถวไหนมาจาก registry ไม่รู้ได้ → `local`) และ env ต่อ connection: `name = parameterize(connection.name)`, `position` เรียงตาม rank แล้วชื่อ, `rank`/`apply_mode`/`color_tag`/git/select_tags จาก connection
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/legacy_project_backfill_spec.rb
@@ -284,7 +284,7 @@ it "allows one connection per env" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → migration:
+- [x] **Step 2:** FAIL → migration:
 
 ```ruby
 class AddProjectEnvToKongConnections < ActiveRecord::Migration[8.1]
@@ -301,10 +301,10 @@ end
 ```
 (ตอน `up` เรียก `KongConnection.reset_column_information` ก่อน backfill)
 
-- [ ] **Step 3:** implement model + backfill → PASS
-- [ ] **Step 4:** ทดสอบ migration บนสำเนา DB dev: `pg_dump` → restore เป็น `kong_integration_r1check` → `DATABASE_URL=… bin/rails db:migrate` → ตรวจ connection ครบ + `auth_secret` decrypt ได้ → `db:rollback STEP=1` → `db:migrate` อีกรอบ
-- [ ] **Step 5:** suite 0 failures (factory ใหม่ทำให้ spec เดิมผ่าน; ถ้า spec เดิมตั้ง `env:`/`rank:` ตรงๆ ให้แก้เป็นผ่าน `project_env` — แก้เฉพาะ setup ไม่แก้ expectation; ถ้าต้องแก้ expectation หยุดถาม)
-- [ ] **Step 6:** Commit `feat(R1.2): every connection belongs to one project env; legacy rows backfilled into project default`
+- [x] **Step 3:** implement model + backfill → PASS
+- [x] **Step 4:** ทดสอบ migration บนสำเนา DB dev: `pg_dump` → restore เป็น `kong_integration_r1check` → `DATABASE_URL=… bin/rails db:migrate` → ตรวจ connection ครบ + `auth_secret` decrypt ได้ → `db:rollback STEP=1` → `db:migrate` อีกรอบ
+- [x] **Step 5:** suite 0 failures (factory ใหม่ทำให้ spec เดิมผ่าน; ถ้า spec เดิมตั้ง `env:`/`rank:` ตรงๆ ให้แก้เป็นผ่าน `project_env` — แก้เฉพาะ setup ไม่แก้ expectation; ถ้าต้องแก้ expectation หยุดถาม)
+- [x] **Step 6:** Commit `feat(R1.2): every connection belongs to one project env; legacy rows backfilled into project default`
 
 ---
 

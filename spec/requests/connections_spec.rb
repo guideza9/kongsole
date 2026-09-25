@@ -16,7 +16,7 @@ RSpec.describe "Connections", type: :request do
       }
     }
     expect(response).to redirect_to(connections_path)
-    expect(KongConnection.find_by(name: "sit")).to be_present
+    expect(KongConnection.find_by(name: "default/sit")).to be_present
   end
 
   it "shows policy in words on the connection card, not as raw tokens" do
@@ -50,7 +50,7 @@ RSpec.describe "Connections", type: :request do
         apply_mode: "pr", credential_mode: "session", auth_type: "basic"
       }
     }
-    expect(KongConnection.find_by(name: "prod-sneaky").rank).to eq(3)
+    expect(KongConnection.find_by(name: "default/prod-sneaky").rank).to eq(3)
   end
 
   it "rejects a non-https, non-localhost admin_url" do

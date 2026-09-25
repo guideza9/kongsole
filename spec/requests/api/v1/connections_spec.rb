@@ -19,7 +19,7 @@ RSpec.describe "API::V1::Connections", type: :request do
 
     expect(response).to have_http_status(:ok)
     json = JSON.parse(response.body)
-    expect(json["data"].map { |c| c["name"] }).to eq([ "bound" ])
+    expect(json["data"].map { |c| c["name"] }).to eq([ "bound/dev" ])
     expect(json["data"].first).to include("env" => "dev", "rank" => 0, "apply_mode" => "direct")
   end
 end

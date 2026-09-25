@@ -465,7 +465,7 @@ RSpec.describe Kong::ChangePlanner do
 
     describe "a private key nested under another field" do
       it "is rejected on a PR-mode connection (where Kong's schema check is skipped), with no plan created" do
-        connection.update!(apply_mode: "pr", access_level: "ro")
+        set_env_policy(connection, apply_mode: "pr").update!(access_level: "ro")
         pem_key = PemFixtures.self_signed[:key_pem]
 
         expect {
@@ -481,7 +481,7 @@ RSpec.describe Kong::ChangePlanner do
 
     describe "PR-mode connections" do
       it "accepts a decK placeholder and makes no schema POST (a read-only route would 404 it)" do
-        connection.update!(apply_mode: "pr", access_level: "ro")
+        set_env_policy(connection, apply_mode: "pr").update!(access_level: "ro")
 
         plan = cert_planner(operation: "create", attributes: { "cert" => pem, "key" => '${{ env "DECK_CERT_A" }}' }).call
 
@@ -491,7 +491,7 @@ RSpec.describe Kong::ChangePlanner do
       end
 
       it "skips the schema POST for the M5a types too -- upstreams and targets in PR mode" do
-        connection.update!(apply_mode: "pr", access_level: "ro")
+        set_env_policy(connection, apply_mode: "pr").update!(access_level: "ro")
 
         plan = planner(entity_type: "upstream", operation: "create", attributes: { "name" => "orders" }).call
 

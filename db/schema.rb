@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_100100) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_100200) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -89,6 +89,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100100) do
     t.string "mode"
     t.string "name", null: false
     t.jsonb "plugins_available", default: {}, null: false
+    t.bigint "project_env_id", null: false
     t.integer "rank", null: false
     t.text "select_tags", default: [], array: true
     t.text "shared_usernames", default: [], array: true
@@ -98,6 +99,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100100) do
     t.boolean "writable", default: true, null: false
     t.index ["env"], name: "index_kong_connections_on_env"
     t.index ["name"], name: "index_kong_connections_on_name", unique: true
+    t.index ["project_env_id"], name: "index_kong_connections_on_project_env_id", unique: true
     t.index ["rank"], name: "index_kong_connections_on_rank"
   end
 
@@ -191,6 +193,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100100) do
   add_foreign_key "audit_events", "change_plans"
   add_foreign_key "audit_events", "kong_connections"
   add_foreign_key "change_plans", "kong_connections"
+  add_foreign_key "kong_connections", "project_envs"
   add_foreign_key "kong_entities", "kong_connections"
   add_foreign_key "personal_access_token_connections", "kong_connections"
   add_foreign_key "personal_access_token_connections", "personal_access_tokens"

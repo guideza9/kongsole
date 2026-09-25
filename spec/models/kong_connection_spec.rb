@@ -5,38 +5,58 @@ RSpec.describe KongConnection, type: :model do
     expect(build(:kong_connection)).to be_valid
   end
 
-  it "requires env to be one of the four ranked environments" do
-    connection = build(:kong_connection, env: "staging")
-    expect(connection).not_to be_valid
-    expect(connection.errors[:env]).to be_present
+  it "puts a connection saved without an env into project default, as the backfill did" do
+    connection = build(:kong_connection, name: "dev-readonly", env: "dev")
+    connection.project_env = nil
+    connection.save!
+    expect(connection.reload).to have_attributes(name: "default/dev-readonly", rank: 0)
+    expect(connection.project_env.source).to eq("local")
   end
 
+  # R1: rank lives on the env (ProjectEnv forces dev/sit/uat/prod ranks); the
+  # connection only ever carries a copy, so a prod connection still cannot be
+  # saved with a quiet rank.
   describe "rank" do
-    it "is derived from env, so a prod connection can never be saved with a quiet rank" do
+    it "is taken from its env, so a prod connection can never be saved with a quiet rank" do
       connection = create(:kong_connection, env: "prod", rank: 0)
 
       expect(connection.rank).to eq(3)
       expect(connection).to be_protected_env
     end
 
-    it "is re-derived when env changes on an existing connection" do
+    it "follows the env when the env changes" do
       connection = create(:kong_connection, env: "dev")
 
-      connection.update!(env: "prod")
+      connection.project_env.update!(name: "prod")
+      connection.save!
 
       expect(connection.reload.rank).to eq(3)
     end
 
-    it "follows KongConnection::RANKS for every env" do
-      KongConnection::RANKS.each do |env, rank|
+    it "follows ProjectEnv::KNOWN_RANKS for every known env name" do
+      ProjectEnv::KNOWN_RANKS.each do |env, rank|
         expect(create(:kong_connection, env: env).rank).to eq(rank)
       end
     end
   end
 
-  it "requires a unique name" do
-    create(:kong_connection, name: "dev")
-    expect(build(:kong_connection, name: "dev")).not_to be_valid
+  it "takes env, rank, apply_mode and its name from its env, overriding whatever was assigned" do
+    env = create(:project_env, name: "ps", rank: 3, apply_mode: "direct", project: create(:project, key: "project-x"))
+    connection = create(:kong_connection, project_env: env, rank: 0, apply_mode: "pr", env: "dev")
+    expect(connection).to have_attributes(env: "ps", rank: 3, apply_mode: "direct", name: "project-x/ps")
+    expect(connection.protected_env?).to be(true)
+  end
+
+  it "allows one connection per env" do
+    env = create(:project_env)
+    create(:kong_connection, project_env: env)
+    expect(build(:kong_connection, project_env: env)).not_to be_valid
+  end
+
+  it "names itself project/env" do
+    connection = create(:kong_connection, project_env: create(:project_env, name: "sit", project: create(:project, key: "project-a")))
+    expect(connection.name).to eq("project-a/sit")
+    expect(connection.qualified_name).to eq("project-a/sit")
   end
 
   it "rejects a non-localhost admin_url that isn't https" do

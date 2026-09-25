@@ -282,7 +282,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
     stub_request(:patch, "https://kong-uat.test/services/#{kong_id}")
       .to_return(status: 200, body: { id: kong_id, name: "svc", tags: [ "x" ], updated_at: 1_700_000_500 }.to_json)
 
-    post apply_change_plan_path(plan), params: { password: "correct", confirm_env_name: "UAT-Direct" }
+    post apply_change_plan_path(plan), params: { password: "correct", confirm_env_name: "UAT-Direct/UAT" }
     expect(plan.reload.status).to eq("applied")
   end
 
@@ -382,7 +382,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
       it "refuses to apply the delete without the entity name" do
         sign_in(prod)
 
-        post apply_change_plan_path(delete_plan), params: { password: "correct", confirm_env_name: "prod" }
+        post apply_change_plan_path(delete_plan), params: { password: "correct", confirm_env_name: "prod/prod" }
 
         expect(response).to redirect_to(change_plan_path(delete_plan))
         expect(flash[:alert]).to include("requires typing")
@@ -477,7 +477,7 @@ RSpec.describe "ChangePlans (web)", type: :request do
 
   it "says a pushed plan's state in words and links its branch when the connection has a git URL" do
     sign_in
-    connection.update!(git_web_url: "https://github.com/acme/kong-config/tree/{branch}")
+    set_env_policy(connection, git_web_url: "https://github.com/acme/kong-config/tree/{branch}")
     plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", status: "applied", pr_state: "branch_pushed",
       commit_sha: "abcdef1234567890", before: { "name" => "svc" }, after: { "name" => "svc" })
 
