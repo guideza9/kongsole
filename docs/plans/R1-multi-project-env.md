@@ -95,7 +95,7 @@ projects:
 - `Project` — `has_many :project_envs, -> { order(:position) }, dependent: :restrict_with_error`; `SOURCES = %w[registry local]`; `KEY_FORMAT`
 - `ProjectEnv` — `belongs_to :project`; `has_one :kong_connection`; `KNOWN_RANKS = {"dev"=>0,"sit"=>1,"uat"=>2,"prod"=>3}`; `#rank_kind`, `#write_policy`, `#qualified_name`
 
-- [ ] **Step 1: test (เขียนก่อน)**
+- [x] **Step 1: test (เขียนก่อน)**
 
 ```ruby
 # spec/models/project_env_spec.rb
@@ -175,8 +175,8 @@ RSpec.describe Project do
 end
 ```
 
-- [ ] **Step 2:** รัน → FAIL (uninitialized constant)
-- [ ] **Step 3: migrations**
+- [x] **Step 2:** รัน → FAIL (uninitialized constant)
+- [x] **Step 3: migrations**
 
 ```ruby
 class CreateProjects < ActiveRecord::Migration[8.1]
@@ -217,9 +217,9 @@ class CreateProjectEnvs < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 4:** models ตาม test (`before_validation :normalize_name` (`strip.downcase`) แล้ว `:force_known_rank` ใช้ `KNOWN_RANKS[name]`; `validates :rank, presence: true, inclusion: { in: 0..3 }`; `validate :pr_only_from_registry`; `color_tag` default จาก rank เหมือน `KongConnection#default_color_tag_from_env` เดิม)
-- [ ] **Step 5:** `bin/rails db:migrate && bin/rails db:rollback STEP=2 && bin/rails db:migrate` สะอาด · PASS · suite 0 failures
-- [ ] **Step 6:** Commit `feat(R1.1): projects and their ordered envs own rank and apply_mode`
+- [x] **Step 4:** models ตาม test (`before_validation :normalize_name` (`strip.downcase`) แล้ว `:force_known_rank` ใช้ `KNOWN_RANKS[name]`; `validates :rank, presence: true, inclusion: { in: 0..3 }`; `validate :pr_only_from_registry`; `color_tag` default จาก rank เหมือน `KongConnection#default_color_tag_from_env` เดิม)
+- [x] **Step 5:** `bin/rails db:migrate && bin/rails db:rollback STEP=2 && bin/rails db:migrate` สะอาด · PASS · suite 0 failures
+- [x] **Step 6:** Commit `feat(R1.1): projects and their ordered envs own rank and apply_mode`
 
 ---
 
