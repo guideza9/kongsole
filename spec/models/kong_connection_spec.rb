@@ -165,4 +165,33 @@ RSpec.describe KongConnection, type: :model do
       expect(build(:kong_connection, git_web_url: nil)).to be_valid
     end
   end
+
+  # R1.13: the one answer to "can this session write?" -- the same rule
+  # Kong::ChangeGuardrails.check_write_access! enforces, so the UI can hide
+  # what the server would refuse.
+  describe "#write_block_reason" do
+    def connection_for(apply_mode:, access_level:)
+      create(:kong_connection, apply_mode: apply_mode, access_level: access_level)
+    end
+
+    it "blocks an env whose apply mode is not set, whatever the credential" do
+      expect(connection_for(apply_mode: nil, access_level: "rw").write_block_reason).to eq(:apply_mode_unset)
+    end
+
+    it "blocks a direct env whose credential cannot write" do
+      expect(connection_for(apply_mode: "direct", access_level: "ro").write_block_reason).to eq(:read_only)
+    end
+
+    it "blocks a direct env whose credential has not been probed yet" do
+      expect(connection_for(apply_mode: "direct", access_level: nil).write_block_reason).to eq(:read_only)
+    end
+
+    it "lets a direct env with a read-write credential write" do
+      expect(connection_for(apply_mode: "direct", access_level: "rw").write_block_reason).to be_nil
+    end
+
+    it "lets a PR env write with a read-only credential, since it writes to git, not Kong" do
+      expect(connection_for(apply_mode: "pr", access_level: "ro").write_block_reason).to be_nil
+    end
+  end
 end

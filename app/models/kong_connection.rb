@@ -94,6 +94,19 @@ class KongConnection < ApplicationRecord
     access_level == "ro"
   end
 
+  # R1.13: why nothing can be written through this connection, or nil when it
+  # can -- :apply_mode_unset (R1.3) or :read_only (a direct env whose
+  # credential cannot write, or has not been probed). A PR env writes to git,
+  # not Kong, so its credential's access level does not matter.
+  # Kong::ChangeGuardrails.check_write_access! refuses on this, and the UI
+  # hides what it would refuse.
+  def write_block_reason
+    return :apply_mode_unset if apply_mode.nil?
+    return nil if apply_mode == "pr" || access_level == "rw"
+
+    :read_only
+  end
+
   def admin_path?(kong_id)
     Kong::AdminPathGuard.admin_path?(admin_path_fingerprint, kong_id)
   end

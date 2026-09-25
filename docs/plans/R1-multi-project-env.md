@@ -806,7 +806,7 @@ end
 
 **ทำไม:** ข้อค้าง 1 — ปุ่มเขียนแสดงทุกกรณี แล้วค่อยถูกปฏิเสธตอนส่ง · UI (R1.14) ต้องมีคำตอบเดียวที่ตรงกับ `check_write_access!` ไม่ใช่เขียนเงื่อนไขเองใน view
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/models/kong_connection_spec.rb — เพิ่ม
@@ -849,12 +849,12 @@ end
 # plugins_spec.rb: GET new_plugin_path → redirect entities_path(type: "plugin") + alert เดียวกัน
 ```
 
-- [ ] **Step 2:** FAIL → implement:
+- [x] **Step 2:** FAIL → implement:
   - `KongConnection#write_block_reason` → `:apply_mode_unset` / `:read_only` / `nil` (กติกาเดียวกับ `check_write_access!` เดิม)
   - `ChangeGuardrails.check_write_access!` เรียก `write_block_reason` แล้ว raise ข้อความเดิมทุกตัวอักษร (spec เดิมต้องผ่านโดยไม่แก้)
   - `ApplicationController`: `helper_method :write_block_reason` (ของ `current_connection`, `nil` ถ้าไม่ได้ login) และ `require_writable!` ที่ redirect ไป list ของ type นั้นพร้อม `flash[:alert]` = ข้อความของ guardrail
   - `before_action :require_writable!` ใน `EntitiesController` (`new create edit update destroy`) และ `PluginsController` (`new create`)
-- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R1.13): one write policy per connection; write forms refuse before they open`
+- [x] **Step 3:** PASS · suite 0 failures · Commit `feat(R1.13): one write policy per connection; write forms refuse before they open`
 
 ---
 

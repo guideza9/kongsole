@@ -687,14 +687,15 @@ RSpec.describe "Entities (web)", type: :request do
         expect(ChangePlan.count).to eq(0)
       end
 
+      # R1.13: refused before the form opens, back to the list with the reason.
       it "refuses to propose on a read-only credential" do
         sign_in
         connection.update!(access_level: "ro")
 
         post entities_path, params: { type: "upstream", payload_json: { name: "orders" }.to_json }
 
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.body).to match(/can(&#39;|')t write/)
+        expect(response).to redirect_to(entities_path(type: "upstream"))
+        expect(flash[:alert]).to include("can't write")
         expect(ChangePlan.count).to eq(0)
       end
     end
@@ -1450,5 +1451,60 @@ RSpec.describe "Entities (web)", type: :request do
         expect(response.body).not_to include("can&#39;t be set here")
       end
     end
+  end
+
+  # R1.13: a write form never opens where the write would be refused -- the
+  # reason comes back on the list instead. No Kong write is stubbed, so any
+  # call through to Kong fails the example.
+  describe "where nothing can be written" do
+    let(:unset) { create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil) }
+    let(:upstream) { create(:kong_entity, kong_connection: unset, entity_type: "upstream", name: "pay-up") }
+
+    before { sign_in_to(unset) }
+
+    it "sends the new form back to the list of its type with the reason" do
+      get new_entity_path(type: "upstream")
+
+      expect(response).to redirect_to(entities_path(type: "upstream"))
+      expect(flash[:alert]).to include("apply mode is not set")
+    end
+
+    it "refuses a create without reaching Kong" do
+      post entities_path, params: { type: "upstream", payload_json: { name: "x" }.to_json }
+
+      expect(response).to redirect_to(entities_path(type: "upstream"))
+      expect(ChangePlan.count).to eq(0)
+    end
+
+    it "refuses edit, update and delete of an entity, back to the list of its type" do
+      get edit_entity_path(upstream)
+      expect(response).to redirect_to(entities_path(type: "upstream"))
+
+      patch entity_path(upstream), params: { payload_json: { name: "y" }.to_json }
+      expect(response).to redirect_to(entities_path(type: "upstream"))
+
+      delete entity_path(upstream)
+      expect(response).to redirect_to(entities_path(type: "upstream"))
+      expect(flash[:alert]).to include("apply mode is not set")
+      expect(ChangePlan.count).to eq(0)
+    end
+
+    it "still shows the list and the entity" do
+      get entities_path(type: "upstream")
+      expect(response).to have_http_status(:ok)
+
+      get entity_path(upstream)
+      expect(response).to have_http_status(:ok)
+    end
+  end
+
+  it "refuses the new form to a direct env logged in with a read-only credential" do
+    ro = create(:kong_connection, admin_url: "https://kong-ro.test", apply_mode: "direct")
+    sign_in_to(ro, access: :ro)
+
+    get new_entity_path(type: "upstream")
+
+    expect(response).to redirect_to(entities_path(type: "upstream"))
+    expect(flash[:alert]).to include("can't write")
   end
 end

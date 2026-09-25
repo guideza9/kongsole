@@ -144,4 +144,25 @@ RSpec.describe "Plugins (web)", type: :request do
       expect(response.body).to include(">Delete<")
     end
   end
+
+  # R1.13: no plugin form where the write would be refused.
+  describe "where nothing can be written" do
+    let(:unset) { create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil) }
+
+    before { sign_in_to(unset) }
+
+    it "sends the catalog back to the plugin list with the reason" do
+      get new_plugin_path
+
+      expect(response).to redirect_to(entities_path(type: "plugin"))
+      expect(flash[:alert]).to include("apply mode is not set")
+    end
+
+    it "refuses a create without reaching Kong" do
+      post plugins_path, params: { plugin_name: "cors", payload_json: {}.to_json }
+
+      expect(response).to redirect_to(entities_path(type: "plugin"))
+      expect(ChangePlan.count).to eq(0)
+    end
+  end
 end

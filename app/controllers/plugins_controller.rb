@@ -14,6 +14,8 @@ class PluginsController < ApplicationController
   include JsonPayloadParsing
 
   before_action :require_session!
+  # R1.13: no plugin form where the write would be refused.
+  before_action -> { require_writable!(back_to: entities_path(type: "plugin")) }
 
   def new
     @scope_type = params[:scope_type].presence

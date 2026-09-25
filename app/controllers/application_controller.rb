@@ -5,7 +5,8 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
-  helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?, :current_project_envs
+  helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?, :current_project_envs,
+    :write_block_reason
 
   private
 
@@ -84,5 +85,18 @@ class ApplicationController < ActionController::Base
     return if signed_in?
 
     redirect_to root_path, alert: "Log into a connection first."
+  end
+
+  # R1.13: why this session cannot write (KongConnection#write_block_reason),
+  # or nil -- nil too when nobody is logged in. Views hide write controls on it.
+  def write_block_reason
+    current_connection&.write_block_reason
+  end
+
+  # R1.13: a write form never opens where the write would be refused; the
+  # reason is the guardrail's own message. `back_to` is where the list is.
+  def require_writable!(back_to:)
+    message = current_connection && Kong::ChangeGuardrails.write_block_message(current_connection)
+    redirect_to back_to, alert: message if message
   end
 end

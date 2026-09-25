@@ -19,17 +19,23 @@ module Kong
   class ChangeGuardrails
     class Violation < StandardError; end
 
+    # R1.13: the rule itself is KongConnection#write_block_reason, so the UI
+    # hides exactly what this refuses.
     def self.check_write_access!(connection:)
-      # R1.3: an env with no apply_mode is read-only through every path --
-      # never read as direct.
-      if connection.apply_mode.nil?
-        raise Violation, "#{connection.qualified_name || connection.name}: apply mode is not set -- nothing can be " \
-          "written until the environment is set to direct (in Kongsole) or pr (in config/connections.yml)"
-      end
-      return if connection.apply_mode == "pr"
-      return if connection.access_level == "rw"
+      message = write_block_message(connection)
+      raise Violation, message if message
+    end
 
-      raise Violation, "this credential can't write (access_level: #{connection.access_level || 'unknown'})"
+    def self.write_block_message(connection)
+      case connection.write_block_reason
+      when :apply_mode_unset
+        # R1.3: an env with no apply_mode is read-only through every path --
+        # never read as direct.
+        "#{connection.qualified_name || connection.name}: apply mode is not set -- nothing can be " \
+          "written until the environment is set to direct (in Kongsole) or pr (in config/connections.yml)"
+      when :read_only
+        "this credential can't write (access_level: #{connection.access_level || 'unknown'})"
+      end
     end
 
     # R1.3: a plan runs the way it was proposed (a direct write or a pushed

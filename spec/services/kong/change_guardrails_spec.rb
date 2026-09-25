@@ -110,4 +110,21 @@ RSpec.describe Kong::ChangeGuardrails do
         .to raise_error(Kong::ChangeGuardrails::Violation, /apply mode is not set/i)
     end
   end
+
+  # R1.13: the guardrail and KongConnection#write_block_reason cannot drift
+  # apart -- the UI hides exactly what this refuses.
+  describe ".check_write_access!" do
+    [ [ nil, "rw" ], [ "direct", "ro" ], [ "direct", nil ], [ "direct", "rw" ], [ "pr", "ro" ] ].each do |mode, access|
+      it "refuses apply_mode #{mode.inspect} / access #{access.inspect} exactly when the connection says writing is blocked" do
+        connection = create(:kong_connection, apply_mode: mode, access_level: access)
+        check = -> { described_class.check_write_access!(connection: connection) }
+
+        if connection.write_block_reason
+          expect(&check).to raise_error(described_class::Violation)
+        else
+          expect(&check).not_to raise_error
+        end
+      end
+    end
+  end
 end

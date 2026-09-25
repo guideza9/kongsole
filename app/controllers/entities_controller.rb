@@ -10,7 +10,11 @@ class EntitiesController < ApplicationController
   before_action :require_session!
   before_action :set_type, only: :index
   before_action :set_entity, only: %i[show edit update destroy]
-  before_action :set_creatable_type, :set_parent, only: %i[new create]
+  before_action :set_creatable_type, only: %i[new create]
+  # R1.13: before set_parent, so a refused write never looks anything up.
+  before_action -> { require_writable!(back_to: entities_path(type: @creatable_type || @entity.entity_type)) },
+    only: %i[new create edit update destroy]
+  before_action :set_parent, only: %i[new create]
 
   DEFAULT_TYPE = "service"
 
