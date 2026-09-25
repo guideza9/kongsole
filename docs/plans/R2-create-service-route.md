@@ -432,9 +432,23 @@ end
 
 ล้างข้อมูลทดสอบ: service `echo` + route `echo-route`/`echo-host` ลบจาก Kong dev และ read-model แล้ว · plan/audit เก็บไว้เป็นบันทึก
 
+## Final review (2026-09-26, reviewer แยก บน Opus)
+
+ไม่มี Critical · กฎข้อ 1–4 ไม่ถูกละเมิด · Important 2 ข้อ + ยกระดับ 1 ข้อจาก Minor → แก้ในรอบเดียว (commit `fix(R2 review)`), ทุกข้อมี test ที่เห็น RED ก่อน:
+#1 ฟอร์มปฏิเสธสิ่งที่ Kong ปฏิเสธ: path บน service grpc/grpcs, host ที่ไม่ใช่ชื่อ host/IP เปล่า (มี scheme/port/path), tag ที่มี `/`, `strip_path` บน route ที่รับแค่ gRPC ·
+#2 overlap ไม่นับ route ของ admin path ยกเว้น route ใหม่ระบุ host ของมัน (เดิมขึ้นเตือนทุก route ที่ไม่มี host) ·
+ยกระดับ: `RoutesController` ปฏิเสธ service ของ admin path ไม่ว่า URL จะมาอย่างไร (เดิมซ่อนแค่ลิงก์)
+ไม่เลือก: ให้ service/route ตรวจกับ schema ของ Kong ตอนเสนอ (จะเปลี่ยนทุก create ของ service/route รวม JSON editor)
+
+Minor ที่เลื่อนไว้: error ตอน apply ไม่มีคำอธิบายแบบ R3 (ก่อน R2, ทุก type) · wildcard ท้าย `example.*` จับชั้นเดียว ·
+ไม่ติ๊ก protocol เลย = ได้ http+https เงียบๆ · ไม่ตรวจชื่อซ้ำตอนเสนอ · route ไม่มีชื่อแสดงชื่อว่างใน overlap · comment ของ SNI ใน planner ผิดที่ ·
+ไม่มี test ของ ruling R2.3 (update/delete ใน changeset แทน route เดิม) · ไม่มี JS แล้วเลือก https port ยังเป็น 80 · ข้อความ error ของ RouteForm อ่านแข็ง
+
 ## เกณฑ์ปิดงาน R2
 
-- [ ] เกณฑ์ใน `R2-create-service-route.md` (ฉบับแก้ §C3) ครบ พร้อมหลักฐาน
-- [ ] test "PR mode ไม่เรียก Admin API แบบเขียน" ผ่าน (request + planner)
-- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่ม · `hints:todo` รายงาน
-- [ ] R3.7 บันทึกผลแล้ว
+- [ ] เกณฑ์ใน `R2-create-service-route.md` (ฉบับแก้ §C3) ครบ พร้อมหลักฐาน — **ครบยกเว้น 2 จุด:** "ผ่านเกณฑ์ของ R3" รอ R3.7 ·
+  "direct: error จาก Kong แสดงตาม error mapping 6 แบบ" ตอน apply แสดงข้อความที่จำแนกแล้ว (เช่น `(refused)`) + ขั้นต่อไป แต่ยังไม่มีคำอธิบายแบบ R3 (Minor ที่เลื่อนไว้)
+- [x] test "PR mode ไม่เรียก Admin API แบบเขียน" ผ่าน (request: services_spec, routes_spec · planner: change_planner_spec) · compose: non-GET มีแค่ access probe ตอน login
+- [x] `bundle exec rspec` **1238/0** · vitest **31/31** · detect: 84 → 108 ทั้งหมดอยู่บนหน้าใหม่ (service-new ×3, route-new ×2, change-plan-route-overlap) เป็นชนิดที่ baseline มี ·
+  `hints:todo`: ไม่มี key ใหม่ (เหลือ 3 key `git_auth_failed` จาก R8)
+- [ ] R3.7 บันทึกผลแล้ว — **รอเจ้าของงาน**
