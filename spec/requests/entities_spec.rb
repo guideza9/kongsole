@@ -1507,4 +1507,60 @@ RSpec.describe "Entities (web)", type: :request do
     expect(response).to redirect_to(entities_path(type: "upstream"))
     expect(flash[:alert]).to include("can't write")
   end
+
+  # R2.7: every write button answers to one rule (can_propose_writes?): a PR
+  # env, or a direct env whose credential can write. Where it is hidden, the
+  # page says why instead.
+  describe "write buttons follow one rule" do
+    def page = Nokogiri::HTML(response.body)
+    def links = page.css("main a").map { |a| a["href"] }
+
+    it "offers New service and Add route on a read-write direct login" do
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+
+      get entities_path(type: "service")
+      expect(links).to include(new_service_path)
+      get entity_path(service)
+      expect(links).to include(new_route_path(service_id: service.kong_id))
+    end
+
+    it "offers them on a PR env too, whose credential is read-only on purpose" do
+      pr = create(:kong_connection, admin_url: "https://kong-pr.test", env: "uat", rank: 2, apply_mode: "pr", select_tags: %w[managed-by-kongctl])
+      sign_in_to(pr, access: :ro)
+      service = create(:kong_entity, kong_connection: pr, entity_type: "service", name: "billing")
+
+      get entities_path(type: "service")
+      expect(links).to include(new_service_path)
+      get entity_path(service)
+      expect(links).to include(new_route_path(service_id: service.kong_id))
+    end
+
+    it "hides every write button on a read-only direct login, and says why instead" do
+      ro = create(:kong_connection, admin_url: "https://kong-ro.test", apply_mode: "direct")
+      sign_in_to(ro, access: :ro)
+      service = create(:kong_entity, kong_connection: ro, entity_type: "service", name: "billing")
+
+      get entities_path(type: "service")
+      expect(links).not_to include(new_service_path)
+      expect(page.at_css("main .write-blocked")).to be_present
+
+      get entity_path(service)
+      expect(links).not_to include(new_route_path(service_id: service.kong_id), edit_entity_path(service))
+      expect(links.grep(%r{/plugins/new})).to be_empty
+      expect(page.at_css("main .write-blocked")).to be_present
+
+      %w[upstream plugin certificate].each do |type|
+        get entities_path(type: type)
+        expect(page.css("main a.btn-primary").map(&:text)).to be_empty
+      end
+    end
+
+    it "offers no Add route under the service the console reaches Kong through" do
+      sign_in
+      admin = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "kong-admin", is_admin_path: true)
+      get entity_path(admin)
+      expect(links).not_to include(new_route_path(service_id: admin.kong_id))
+    end
+  end
 end

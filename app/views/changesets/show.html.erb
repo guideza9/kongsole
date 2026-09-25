@@ -81,7 +81,7 @@
               <th scope="col">Type</th>
               <th scope="col">Name</th>
               <th scope="col">Proposed by</th>
-              <% if open %><th scope="col"><span class="sr-only">Remove</span></th><% end %>
+              <% if open %><th scope="col"><span class="sr-only">Actions</span></th><% end %>
             </tr>
           </thead>
           <tbody>
@@ -94,10 +94,18 @@
                 <td class="text-ink-soft"><%= actor_summary(item) %></td>
                 <% if open %>
                   <td class="changeset-items__remove">
+                    <div class="changeset-items__actions">
+                    <%# R2: a service this changeset creates has no Kong id yet; its
+                        routes are added under its provisional id, into this changeset. %>
+                    <% if item.operation == "create" && item.entity_type == "service" && item.provisional_kong_id %>
+                      <%= link_to "Add route", new_route_path(service_id: item.provisional_kong_id), class: "btn-sm btn-text",
+                            aria: { label: "Add a route to #{item.entity_label}" } %>
+                    <% end %>
                     <%= button_to "Remove", changeset_item_path(@changeset, item), method: :delete,
                           class: "btn-sm btn-text-danger bg-transparent",
                           aria: { label: "Remove item #{item.position}, #{item.entity_label}" },
                           form: { data: { turbo_confirm: "Take item #{item.position} (#{item.operation} #{item.entity_type} #{item.entity_label}) out of this changeset? It stays on record as cancelled." } } %>
+                    </div>
                   </td>
                 <% end %>
               </tr>

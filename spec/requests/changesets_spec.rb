@@ -145,4 +145,12 @@ RSpec.describe "Changesets", type: :request do
     post submit_changeset_path(changeset), params: { confirm_env_name: connection.name, password: "pw", confirm_delete: { item.id.to_s => "orders" } }
     expect(changeset.reload.status).to eq("submitted")
   end
+
+  # R2.7 / Review Focus 5: a service that exists only in the changeset still
+  # takes a route -- from its item.
+  it "offers Add route on a service the changeset creates, by its provisional id" do
+    service = add_item("billing", 1)
+    get changeset_path(changeset)
+    expect(response.body).to include(new_route_path(service_id: service.provisional_kong_id))
+  end
 end

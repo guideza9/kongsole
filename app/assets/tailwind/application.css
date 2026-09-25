@@ -2265,7 +2265,7 @@ a.env-switcher__item:hover {
 
 .changeset-items {
   width: 100%;
-  min-width: 34rem;
+  min-width: 40rem; /* the wrapper scrolls sideways on a phone; the columns keep their shape */
   font-size: 0.875rem;
   border-collapse: collapse;
 }
@@ -2298,6 +2298,7 @@ a.env-switcher__item:hover {
 }
 
 .changeset-items__name {
+  min-width: 12ch; /* a long name wraps by word-sized pieces, never letter by letter */
   max-width: 18rem;
   overflow-wrap: anywhere;
   font-weight: 500;
@@ -2307,6 +2308,14 @@ a.env-switcher__item:hover {
   width: 1%;
   text-align: right;
   white-space: nowrap;
+}
+
+/* R2: "Add route" (a service the changeset creates) beside Remove, on one line. */
+.changeset-items__actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 /* The YAML diff: one line per row, the sign kept in the text so an added or

@@ -25,8 +25,10 @@
       <%= link_to "Expiring soon", expiring_certificates_path, class: "btn-sm btn-text" %>
       <%= link_to(@type == "certificate" ? "CA certificates" : "Certificates", entities_path(type: @type == "certificate" ? "ca_certificate" : "certificate"), class: "btn-sm btn-text") %>
     <% end %>
-    <% if write_block_reason %>
-      <%# R1.14: nothing to offer -- the notice below says why. %>
+    <% if !can_propose_writes? %>
+      <%# R1.14 / R2.7: nothing to offer -- the notice below says why. %>
+    <% elsif @type == "service" %>
+      <%= link_to "New service", new_service_path, class: "btn-primary btn" %>
     <% elsif @type == "plugin" %>
       <%= link_to "New global plugin", new_plugin_path, class: "btn-primary btn" %>
     <% elsif @type == "upstream" %>
