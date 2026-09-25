@@ -23,25 +23,25 @@
     <div class="grid gap-4">
       <div>
         <%= f.label :name, class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :name, required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
+        <%= f.text_field :name, placeholder: hint_placeholder(:service, :name), required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
               autofocus: form.name.blank?, class: "field-input mt-1 font-mono", aria: { describedby: described.(:name), invalid: invalid.(:name) } %>
         <%= error_line.(:name) %>
-        <%= field_hint(:service, :name) %>
+        <%= field_hint(:service, :name, quiet: true) %>
       </div>
       <div>
         <%= f.label :tags, class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :tags, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+        <%= f.text_field :tags, placeholder: hint_placeholder(:service, :tags), autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
               aria: { describedby: described.(:tags) } %>
         <% if current_connection.select_tags.present? %>
           <p class="mt-1 text-xs text-ink-soft">Always added: <% current_connection.select_tags.each do |tag| %><code class="font-mono text-ink"><%= tag %></code> <% end %></p>
         <% end %>
-        <%= field_hint(:service, :tags) %>
+        <%= field_hint(:service, :tags, quiet: true) %>
       </div>
       <div>
         <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
           <%= f.check_box :enabled, aria: { describedby: described.(:enabled) } %> Enabled
         </label>
-        <%= field_hint(:service, :enabled) %>
+        <%= field_hint(:service, :enabled, quiet: true) %>
       </div>
     </div>
   </section>
@@ -56,15 +56,15 @@
                 data: { service_form_target: "protocol", action: "service-form#protocolChanged" },
                 aria: { describedby: described.(:protocol), invalid: invalid.(:protocol) } %>
           <%= error_line.(:protocol) %>
-          <%= field_hint(:service, :protocol) %>
+          <%= field_hint(:service, :protocol, quiet: true) %>
         </div>
         <div>
           <%= f.label :host, class: "block text-sm font-medium text-ink" %>
-          <%= f.text_field :host, required: true, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+          <%= f.text_field :host, placeholder: hint_placeholder(:service, :host), required: true, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
                 data: { service_form_target: "host", action: "service-form#preview" },
                 aria: { describedby: described.(:host), invalid: invalid.(:host) } %>
           <%= error_line.(:host) %>
-          <%= field_hint(:service, :host) %>
+          <%= field_hint(:service, :host, quiet: true) %>
         </div>
       </div>
       <div class="grid gap-4 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
@@ -75,15 +75,15 @@
                 data: { service_form_target: "port", action: "input->service-form#portEdited" },
                 aria: { describedby: described.(:port), invalid: invalid.(:port) } %>
           <%= error_line.(:port) %>
-          <%= field_hint(:service, :port) %>
+          <%= field_hint(:service, :port, quiet: true) %>
         </div>
         <div>
           <%= f.label :path, class: "block text-sm font-medium text-ink" %>
-          <%= f.text_field :path, pattern: "/.*", autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+          <%= f.text_field :path, placeholder: hint_placeholder(:service, :path), pattern: "/.*", autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
                 data: { service_form_target: "path", action: "service-form#preview" },
                 aria: { describedby: described.(:path), invalid: invalid.(:path) } %>
           <%= error_line.(:path) %>
-          <%= field_hint(:service, :path) %>
+          <%= field_hint(:service, :path, quiet: true) %>
         </div>
       </div>
       <p class="service-target" data-service-form-target="target" hidden>
@@ -100,7 +100,7 @@
         <%= f.number_field :retries, min: 0, max: 32_767, required: true, class: "field-input mt-1 font-mono tabular-nums",
               aria: { describedby: described.(:retries), invalid: invalid.(:retries) } %>
         <%= error_line.(:retries) %>
-        <%= field_hint(:service, :retries) %>
+        <%= field_hint(:service, :retries, quiet: true) %>
       </div>
       <% %i[connect_timeout read_timeout write_timeout].each do |field| %>
         <div>
@@ -108,15 +108,14 @@
           <%= f.number_field field, min: 1, max: 2_147_483_646, required: true, class: "field-input mt-1 font-mono tabular-nums",
                 aria: { describedby: described.(field), invalid: invalid.(field) } %>
           <%= error_line.(field) %>
-          <%= field_hint(:service, field) %>
+          <%= field_hint(:service, field, quiet: true) %>
         </div>
       <% end %>
     </div>
   </details>
 
-  <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+  <div class="mt-6 flex flex-wrap items-center gap-3">
     <%= f.submit pr ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
     <%= link_to "Cancel", entities_path(type: "service"), class: "btn btn-text" %>
-    <p class="basis-full text-xs text-ink-soft"><%= t(pr ? "hints.pages.service_new.pr_note" : "hints.pages.service_new.direct_note", env: current_connection.name) %></p>
   </div>
 <% end %>

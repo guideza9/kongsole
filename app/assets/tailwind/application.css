@@ -694,6 +694,54 @@ input:where([type="submit"]):not(:disabled) { cursor: pointer; }
   opacity: 1;
 }
 
+/* Number fields: no spinner buttons inside the field (owner, 2026-09-26) --
+   the value is typed; min/max still bound it. */
+.field-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.field-input[type="number"]::-webkit-inner-spin-button,
+.field-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* A select draws its own chevron, the same border-drawn mark the
+   disclosures use, instead of each browser's native button. */
+select.field-input {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-ink-soft) 50%),
+    linear-gradient(135deg, var(--color-ink-soft) 50%, transparent 50%);
+  background-position: calc(100% - 1rem) 55%, calc(100% - 0.7rem) 55%;
+  background-size: 0.3rem 0.3rem, 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+}
+select.field-input[multiple] {
+  padding-right: 0.65rem;
+  background-image: none;
+}
+
+/* One row per value (line_list_controller): the field, then its Remove. */
+.line-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.line-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.line-list__row .field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.line-list__add {
+  margin-top: 0.35rem;
+}
+
 .section-label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -1567,10 +1615,6 @@ html:has(.action-bar) {
 }
 .route-overlaps-live:empty {
   display: none;
-}
-.route-overlaps-live__none {
-  font-size: var(--text-xs);
-  color: var(--color-ink-soft);
 }
 
 /* The routes a new one competes with: name, its service, then why, in words.

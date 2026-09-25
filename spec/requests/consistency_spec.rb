@@ -174,7 +174,10 @@ RSpec.describe "Console consistency", type: :request do
         sign_in
         get new_service_path
         expect(undescribed_fields).to eq([])
-        expect(page.css("main .field-hint__example").size).to be >= 4
+        # Compact hints (the default): examples are placeholders, and the help
+        # is there for screen readers only -- nothing under the fields.
+        expect(page.css("main input[placeholder]").size).to be >= 4
+        expect(page.css("main .field-hint:not(.sr-only)")).to be_empty
 
         tuning = page.at_css("main details.disclosure")
         expect(tuning.at_css("summary").text).to include("Timeouts and retries")

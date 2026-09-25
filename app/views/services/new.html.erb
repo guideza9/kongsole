@@ -1,7 +1,6 @@
 <% content_for :title, "New service" %>
 
 <p class="page-back"><%= link_to "Services", entities_path(type: "service") %></p>
-<h1 class="page-title mb-1">New service</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.service_new.intro") %></p>
+<h1 class="page-title mb-6">New service</h1>
 
 <%= render "form", form: @form %>

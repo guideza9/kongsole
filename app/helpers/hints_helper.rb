@@ -4,11 +4,23 @@ module HintsHelper
   # A field's help line and example value, with the longer detail only while
   # detailed hints are on. `id` is what the input's aria-describedby points at
   # (hint_describedby builds the conventional one).
-  def field_hint(form, field, id: hint_describedby(form, field))
+  #
+  # `quiet: true` (the R2 forms): with compact hints nothing shows under the
+  # field -- the example is its placeholder (hint_placeholder) and the help
+  # stays for screen readers only. Detailed hints show everything, as before.
+  def field_hint(form, field, id: hint_describedby(form, field), quiet: false)
     scope = "hints.fields.#{form}.#{field}"
     render "shared/field_hint", id: id, help: t("#{scope}.help"),
       example: optional_hint("#{scope}.example"),
-      detail: (optional_hint("#{scope}.detail") if detailed_hints?)
+      detail: (optional_hint("#{scope}.detail") if detailed_hints?),
+      screen_reader_only: quiet && !detailed_hints?
+  end
+
+  # A field's example value, for its placeholder -- "e.g. …", so an empty
+  # field never reads as a filled one.
+  def hint_placeholder(form, field)
+    example = optional_hint("hints.fields.#{form}.#{field}.example")
+    example && "#{t('hints.ui.example_prefix')} #{example}"
   end
 
   def hint_describedby(form, field)

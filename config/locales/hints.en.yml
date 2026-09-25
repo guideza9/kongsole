@@ -322,10 +322,11 @@ en:
 
     risks:
       route_overlap:
-        title: "Other routes already take some of these requests"
-        body: "Kong sends a request to one route only, so one of them stops receiving it. This is a warning; you can still go ahead."
-        checking: "Checking for routes that overlap..."
-        none: "No other route on this environment takes these requests."
+        # One route gets each request, so an overlap means one of them stops
+        # getting it. A warning: the change can still go ahead.
+        title:
+          one: "1 other route takes some of these requests"
+          other: "%{count} other routes take some of these requests"
         reasons:
           exact: "Same path"
           prefix: "Path prefix"
@@ -445,14 +446,6 @@ en:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:
         intro: "Changes here apply to this machine only. The key stays: every connection in the project is named after it."
-      route_new:
-        intro: "Which requests reach the service. Kong needs at least one method, host or path to tell them apart."
-        direct_note: "Next you see exactly what will be created on %{env}, with any routes it overlaps, and apply it from there."
-        pr_note: "On %{env} this becomes an item of the changeset, under its service. Nothing is written to Kong."
-      service_new:
-        intro: "Where Kong forwards requests. Add routes to it afterwards; a service with no route takes no traffic."
-        direct_note: "Next you see exactly what will be created on %{env}, and apply it from there."
-        pr_note: "On %{env} this becomes an item of the changeset. Nothing is written to Kong; it goes out as one pull request."
       project_envs_new:
         intro: "One stage of the project, served by one Kong node. Connect the node once the environment exists."
       project_envs_edit:

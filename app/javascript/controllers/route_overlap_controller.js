@@ -7,7 +7,7 @@ import { Controller } from "@hotwired/stimulus"
 // region: a warning to read, never a block. The server re-checks on review.
 export default class extends Controller {
   static targets = ["method", "hosts", "paths", "preview", "line", "list"]
-  static values = { url: String, reasons: Object, title: String, none: String }
+  static values = { url: String, reasons: Object, titles: Object }
 
   connect() {
     this.render()
@@ -99,19 +99,14 @@ export default class extends Controller {
   }
 
   show(overlaps) {
-    if (overlaps.length === 0) {
-      const none = document.createElement("p")
-      none.className = "route-overlaps-live__none"
-      none.textContent = this.noneValue
-      this.listTarget.replaceChildren(none)
-      return
-    }
+    if (overlaps.length === 0) return this.listTarget.replaceChildren()
 
     const box = document.createElement("div")
     box.className = "notice-banner notice-banner--warning risk-notice"
     const title = document.createElement("p")
     title.className = "risk-notice__title"
-    title.textContent = this.titleValue
+    const template = overlaps.length === 1 ? this.titlesValue.one : this.titlesValue.other
+    title.textContent = template.replace("%{count}", overlaps.length)
     const list = document.createElement("ul")
     list.className = "route-overlaps"
     overlaps.forEach((overlap) => {

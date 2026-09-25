@@ -1,7 +1,6 @@
 <% content_for :title, "Add route to #{@service_label}" %>
 
 <p class="page-back"><%= link_to "Services", entities_path(type: "service") %></p>
-<h1 class="page-title mb-1">Add route to <span class="font-mono"><%= @service_label %></span></h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.route_new.intro") %></p>
+<h1 class="page-title mb-6">Add route to <span class="font-mono"><%= @service_label %></span></h1>
 
 <%= render "form", form: @form, service_kong_id: @service_kong_id %>

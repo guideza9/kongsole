@@ -13,8 +13,7 @@
       data: { controller: "route-overlap",
               route_overlap_url_value: routes_overlap_path,
               route_overlap_reasons_value: t("hints.risks.route_overlap.reasons").to_json,
-              route_overlap_title_value: t("hints.risks.route_overlap.title"),
-              route_overlap_none_value: t("hints.risks.route_overlap.none") } do |f| %>
+              route_overlap_titles_value: t("hints.risks.route_overlap.title").to_json } do |f| %>
   <%= hidden_field_tag :service_id, service_kong_id %>
   <% if form.errors.any? %>
     <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
@@ -28,19 +27,19 @@
     <div class="grid gap-4">
       <div>
         <%= f.label :name, class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :name, required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
+        <%= f.text_field :name, placeholder: hint_placeholder(:route, :name), required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
               autofocus: form.name.blank?, class: "field-input mt-1 font-mono", aria: { describedby: described.(:name), invalid: invalid.(:name) } %>
         <%= error_line.(:name) %>
-        <%= field_hint(:route, :name) %>
+        <%= field_hint(:route, :name, quiet: true) %>
       </div>
       <div>
         <%= f.label :tags, class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :tags, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+        <%= f.text_field :tags, placeholder: hint_placeholder(:route, :tags), autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
               aria: { describedby: described.(:tags) } %>
         <% if current_connection.select_tags.present? %>
           <p class="mt-1 text-xs text-ink-soft">Always added: <% current_connection.select_tags.each do |tag| %><code class="font-mono text-ink"><%= tag %></code> <% end %></p>
         <% end %>
-        <%= field_hint(:route, :tags) %>
+        <%= field_hint(:route, :tags, quiet: true) %>
       </div>
     </div>
   </section>
@@ -64,23 +63,35 @@
           <% end %>
         </div>
         <%= error_line.(:methods) %>
-        <%= field_hint(:route, :methods) %>
+        <%= field_hint(:route, :methods, quiet: true) %>
       </fieldset>
-      <div>
+      <%# One row per host (line_list_controller); without JS, the textarea
+          itself, one host per line -- the form posts the same newline list. %>
+      <div data-controller="line-list" data-line-list-noun-value="host"
+           data-line-list-placeholder-value="<%= hint_placeholder(:route, :hosts) %>">
         <%= f.label :hosts, class: "block text-sm font-medium text-ink" %>
         <%= f.text_area :hosts, rows: 2, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
-              data: { route_overlap_target: "hosts", action: "route-overlap#changed" },
+              placeholder: hint_placeholder(:route, :hosts),
+              data: { route_overlap_target: "hosts", line_list_target: "source", action: "route-overlap#changed" },
               aria: { describedby: described.(:hosts), invalid: invalid.(:hosts) } %>
+        <div class="line-list" data-line-list-target="rows"></div>
+        <button type="button" class="btn-sm btn-text line-list__add" data-line-list-target="add" data-action="line-list#add" hidden>Add host</button>
         <%= error_line.(:hosts) %>
-        <%= field_hint(:route, :hosts) %>
+        <%= field_hint(:route, :hosts, quiet: true) %>
       </div>
-      <div>
+      <%# One row per path (line_list_controller); without JS, the textarea
+          itself, one path per line -- the form posts the same newline list. %>
+      <div data-controller="line-list" data-line-list-noun-value="path"
+           data-line-list-placeholder-value="<%= hint_placeholder(:route, :paths) %>">
         <%= f.label :paths, class: "block text-sm font-medium text-ink" %>
         <%= f.text_area :paths, rows: 2, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
-              data: { route_overlap_target: "paths", action: "route-overlap#changed" },
+              placeholder: hint_placeholder(:route, :paths),
+              data: { route_overlap_target: "paths", line_list_target: "source", action: "route-overlap#changed" },
               aria: { describedby: described.(:paths), invalid: invalid.(:paths) } %>
+        <div class="line-list" data-line-list-target="rows"></div>
+        <button type="button" class="btn-sm btn-text line-list__add" data-line-list-target="add" data-action="line-list#add" hidden>Add path</button>
         <%= error_line.(:paths) %>
-        <%= field_hint(:route, :paths) %>
+        <%= field_hint(:route, :paths, quiet: true) %>
       </div>
 
       <div class="route-preview" data-route-overlap-target="preview" hidden>
@@ -105,26 +116,25 @@
           <% end %>
         </div>
         <%= error_line.(:protocols) %>
-        <%= field_hint(:route, :protocols) %>
+        <%= field_hint(:route, :protocols, quiet: true) %>
       </fieldset>
       <div>
         <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
           <%= f.check_box :strip_path, aria: { describedby: described.(:strip_path) } %> Strip the matched path
         </label>
-        <%= field_hint(:route, :strip_path) %>
+        <%= field_hint(:route, :strip_path, quiet: true) %>
       </div>
       <div>
         <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
           <%= f.check_box :preserve_host, aria: { describedby: described.(:preserve_host) } %> Preserve the client's Host header
         </label>
-        <%= field_hint(:route, :preserve_host) %>
+        <%= field_hint(:route, :preserve_host, quiet: true) %>
       </div>
     </div>
   </details>
 
-  <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+  <div class="mt-6 flex flex-wrap items-center gap-3">
     <%= f.submit pr ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
     <%= link_to "Cancel", entities_path(type: "service"), class: "btn btn-text" %>
-    <p class="basis-full text-xs text-ink-soft"><%= t(pr ? "hints.pages.route_new.pr_note" : "hints.pages.route_new.direct_note", env: current_connection.name) %></p>
   </div>
 <% end %>
