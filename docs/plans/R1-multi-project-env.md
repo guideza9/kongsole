@@ -659,10 +659,10 @@ end
 
 **คำสั่ง:** `/impeccable shape header env switcher` → `/impeccable adapt` (390px: 3 แถวสูงสุดตาม `UI-DESIGN.md` §Topbar targets) → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): header มีชื่อ project + env ของ connection ปัจจุบัน; switcher เป็น `<nav aria-label="Environments of <project>">` มี link ต่อ env ที่มี connection → `login_connection_path`, env ปัจจุบัน `aria-current="page"`, env ไม่มี connection เป็น `<span aria-disabled="true">`
-- [ ] **Step 2:** FAIL → ทำ UI (native `<details>` disclosure หรือแถว chip; ต้องใช้คีย์บอร์ดได้; ความดังตาม rank เดิม)
-- [ ] **Step 3:** PASS · snapshot 390x844 + 1280 · detect
-- [ ] **Step 4:** Commit `feat(R1.10): header shows project and env; the switcher lists the project's envs`
+- [x] **Step 1:** assertion (ก่อน): header มีชื่อ project + env ของ connection ปัจจุบัน; switcher เป็น `<nav aria-label="Environments of <project>">` มี link ต่อ env ที่มี connection → `login_connection_path`, env ปัจจุบัน `aria-current="page"`, env ไม่มี connection เป็น `<span aria-disabled="true">`
+- [x] **Step 2:** FAIL → ทำ UI (native `<details>` disclosure หรือแถว chip; ต้องใช้คีย์บอร์ดได้; ความดังตาม rank เดิม)
+- [x] **Step 3:** PASS · snapshot 390x844 + 1280 · detect
+- [x] **Step 4:** Commit `feat(R1.10): header shows project and env; the switcher lists the project's envs`
 
 ---
 

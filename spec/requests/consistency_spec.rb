@@ -172,7 +172,7 @@ RSpec.describe "Console consistency", type: :request do
 
       get health_path
 
-      row = page.css("tbody tr").find { |tr| tr.text.include?("uat-ro") }
+      row = page.css("tbody tr").find { |tr| tr.at_css("[title='#{other.name}']") } # R1.10: the badge names project · env; its title is project/env
       expect(row.css("a").map { |a| [ a.text.strip, a["href"] ] }).to eq([ [ "Log in", login_connection_path(other) ], [ "Details", connection_path(other) ] ])
       expect(row.text).to include("Read-only").and include("Shared")
       expect(row.at_css(".chip-ok").text).to include("Guarded")
@@ -181,11 +181,11 @@ RSpec.describe "Console consistency", type: :request do
     end
 
     it "says a connection with no admin path found is Unknown, in a badge" do
-      create(:kong_connection, name: "fresh")
+      fresh = create(:kong_connection, name: "fresh")
 
       get health_path
 
-      expect(page.css("tbody tr").find { |tr| tr.text.include?("fresh") }.css(".chip-neutral").map(&:text).join).to include("Unknown")
+      expect(page.css("tbody tr").find { |tr| tr.at_css("[title='#{fresh.name}']") }.css(".chip-neutral").map(&:text).join).to include("Unknown")
     end
   end
 

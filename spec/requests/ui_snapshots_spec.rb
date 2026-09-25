@@ -95,6 +95,18 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("connection-show-registry")
     end
 
+    it "header with the env switcher (R1.10)" do
+      project = create(:project, key: "payments", name: "Payments")
+      create(:kong_connection, project_env: create(:project_env, project: project, name: "dev", position: 1), admin_url: "http://localhost:8101")
+      create(:project_env, project: project, name: "sit", position: 2)
+      create(:kong_connection, project_env: create(:project_env, project: project, name: "pt", position: 3, rank: 1), admin_url: "http://localhost:8103")
+      uat = create(:kong_connection, project_env: create(:project_env, project: project, name: "uat", position: 4, apply_mode: "pr", source: "registry"),
+        admin_url: "https://kong-uat.test")
+      sign_in(uat)
+      get health_path
+      snapshot!("header-switcher")
+    end
+
     it "connections new" do
       get new_connection_path
       snapshot!("connections-new")

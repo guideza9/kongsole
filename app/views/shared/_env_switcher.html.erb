@@ -1,0 +1,41 @@
+<%# R1.10 -- Switch opens the envs of the logged-in project, in the project's
+    order (ApplicationController#current_project_envs). An env with a
+    connection goes to its login page; the current one is marked; one with no
+    connection yet is shown so the project reads whole, but is not offered.
+    A native disclosure: keyboard and screen readers get it for free, and
+    without JS it still opens. %>
+<% rows = current_project_envs %>
+<% project = current_connection.project %>
+<% if rows.empty? || project.nil? %>
+  <%= link_to "Switch", connections_path, class: "btn-text topbar-action" %>
+<% else %>
+  <details class="env-switcher">
+    <summary class="btn-text topbar-action env-switcher__summary">Switch<svg class="env-switcher__chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+    <div class="env-switcher__panel">
+      <nav aria-label="Environments of <%= project.name %>">
+        <p class="env-switcher__project"><%= project.name %></p>
+        <ul class="env-switcher__list">
+          <% rows.each do |row| %>
+            <% env = row[:env] %>
+            <li>
+              <% if row[:connection] %>
+                <%= link_to login_connection_path(row[:connection]), class: "env-switcher__item",
+                      aria: { current: (row[:current] ? "page" : nil) } do %>
+                  <%= env_name_chip(env) %>
+                  <% if env.rank_kind == "other" %><span class="env-switcher__rank"><%= rank_label(env) %></span><% end %>
+                  <% if row[:current] %><span class="env-switcher__here">Current</span><% end %>
+                <% end %>
+              <% else %>
+                <span class="env-switcher__item is-disabled" aria-disabled="true">
+                  <%= env_name_chip(env) %>
+                  <span class="env-switcher__here">No connection</span>
+                </span>
+              <% end %>
+            </li>
+          <% end %>
+        </ul>
+      </nav>
+      <%= link_to "All connections", connections_path, class: "env-switcher__all" %>
+    </div>
+  </details>
+<% end %>
