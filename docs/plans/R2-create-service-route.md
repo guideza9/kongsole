@@ -425,7 +425,7 @@ end
   พร้อมขั้นต่อไป "Check the service in Kong before proposing this again…" · **ไม่มี** คำอธิบายแบบ R3 (cause + next step + network note)
   เพราะ `ChangePlansController#apply` ตั้งใจไม่ flash (กัน banner ซ้อน) — ส่งให้ final review ตัดสิน · start `kong-1` กลับ healthy แล้ว
 - [ ] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้ — **รอบที่ 1 (เจ้าของงาน, 2026-09-26):** uat เห็นปุ่มและสร้างได้ ·
-  dev "ไม่เห็นปุ่มสร้าง service" — ทำซ้ำด้วย jakkapat แล้วเห็นปุ่ม (log: ลอง `ro-kongctl` ก่อน ถูกปฏิเสธ แล้วเข้า jakkapat) รอข้อมูลเพิ่ม ·
+  "ไม่เห็นปุ่มสร้าง service" คือ `default/dev-readonly` (direct + credential อ่านอย่างเดียว) — ถูกต้องตามกฎ (เจ้าของงานยืนยัน) ·
   "ข้อความเยอะเกินไปทุกหน้า" → hint เป็นแบบกระชับโดยค่าเริ่มต้น (`d635930`) + distill หน้า R2 ผ่าน `/impeccable shape → distill → clarify` (`18960df`):
   ใต้ช่องไม่มีข้อความ (ตัวอย่างอยู่ใน placeholder "e.g. …"), ตัดประโยคใต้หัวข้อและใต้ปุ่ม, overlap เหลือหัวข้อนับจำนวน + รายการ ·
   ปุ่มเล็กในช่อง → เอา spinner ของช่องตัวเลขออก, select วาด chevron เอง · hosts/paths → แถวละค่า + Add/Remove · **รอรอบถัดไป**
