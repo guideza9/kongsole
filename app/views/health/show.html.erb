@@ -1,7 +1,8 @@
 <% content_for :title, "Health" %>
 
-<h1 class="page-title mb-1">Connection health</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.health.intro") %> Log in again to recheck.</p>
+<% lede = page_lede("hints.pages.health.intro", facts: "Nothing here is checked live; log in again to recheck.") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Connection health</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <div class="overflow-x-auto panel">
   <table class="w-full text-sm min-w-[720px]">

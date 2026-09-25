@@ -1,4 +1,5 @@
 <% content_for :title, "New environment" %>
-<h1 class="page-title mb-1">New environment in <%= @project_env.project.name %></h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.project_envs_new.intro") %></p>
+<% lede = page_lede("hints.pages.project_envs_new.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">New environment in <%= @project_env.project.name %></h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 <%= render "form", project_env: @project_env %>

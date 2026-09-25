@@ -59,9 +59,10 @@
     </div>
   </dl>
 
-  <p class="text-sm text-ink-soft">
-    <%= @changeset.status == "submitted" ? t("hints.pages.changeset_show.submitted") : t("hints.pages.changeset_show.intro", env: current_connection.name) %>
-  </p>
+  <%# A submitted changeset says what happens next (a fact); an open one's
+      explanation is a detailed hint. %>
+  <% lede = @changeset.status == "submitted" ? t("hints.pages.changeset_show.submitted") : page_lede("hints.pages.changeset_show.intro", env: current_connection.name) %>
+  <% if lede %><p class="text-sm text-ink-soft"><%= lede %></p><% end %>
 
   <% if items.empty? %>
     <% if open %>

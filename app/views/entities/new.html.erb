@@ -1,12 +1,13 @@
 <% content_for :title, "New #{creatable_type_name(@creatable_type)}" %>
 
-<h1 class="page-title mb-1">New <%= creatable_type_name(@creatable_type) %></h1>
-<p class="text-sm mb-6 text-ink-soft">
-  <% if @parent %>
-    <span class="font-mono"><%= @parent.entity_type %>: <%= @parent.name %></span> ·
-  <% end %>
-  <%= t("hints.pages.entities_new.intro") %>
-</p>
+<% lede = page_lede("hints.pages.entities_new.intro") %>
+<h1 class="page-title <%= lede || @parent ? "mb-1" : "mb-6" %>">New <%= creatable_type_name(@creatable_type) %></h1>
+<% if lede || @parent %>
+  <p class="text-sm mb-6 text-ink-soft">
+    <% if @parent %><span class="font-mono"><%= @parent.entity_type %>: <%= @parent.name %></span><% end %>
+    <% if @parent && lede %> · <% end %><%= lede %>
+  </p>
+<% end %>
 
 <div class="max-w-2xl grid gap-4">
   <%# Presets seed the editor server-side (a plain GET), same idea as the

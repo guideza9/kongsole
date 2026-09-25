@@ -23,7 +23,7 @@
       <div>
         <%= f.label :project_env_id, "Environment", class: "block text-sm font-medium text-ink" %>
         <%= f.select :project_env_id, grouped_options_for_select(env_choices, connection.project_env_id || params[:project_env_id].to_i.nonzero?), { include_blank: true }, class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :project_env_id) } %>
-        <%= field_hint(:connection, :project_env_id) %>
+        <%= field_hint(:connection, :project_env_id, quiet: true) %>
       </div>
     </div>
   </section>
@@ -33,8 +33,8 @@
     <div class="grid gap-4">
       <div>
         <%= f.label :admin_url, "Admin URL", class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :admin_url, placeholder: "https://kong-admin.internal", class: "field-input mt-1 font-mono text-sm", aria: { describedby: hint_describedby(:connection, :admin_url) } %>
-        <%= field_hint(:connection, :admin_url) %>
+        <%= f.text_field :admin_url, placeholder: hint_placeholder(:connection, :admin_url), class: "field-input mt-1 font-mono text-sm", aria: { describedby: hint_describedby(:connection, :admin_url) } %>
+        <%= field_hint(:connection, :admin_url, quiet: true) %>
       </div>
 
       <div>
@@ -42,13 +42,13 @@
           <%= f.check_box :verify_ssl, class: "accent-accent", aria: { describedby: hint_describedby(:connection, :verify_ssl) } %>
           <%= f.label :verify_ssl, "Verify SSL", class: "text-sm text-ink" %>
         </div>
-        <%= field_hint(:connection, :verify_ssl) %>
+        <%= field_hint(:connection, :verify_ssl, quiet: true) %>
       </div>
 
       <div>
         <%= f.label :ca_bundle_path, "CA bundle path (optional)", class: "block text-sm font-medium text-ink" %>
-        <%= f.text_field :ca_bundle_path, class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :ca_bundle_path) } %>
-        <%= field_hint(:connection, :ca_bundle_path) %>
+        <%= f.text_field :ca_bundle_path, placeholder: hint_placeholder(:connection, :ca_bundle_path), class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :ca_bundle_path) } %>
+        <%= field_hint(:connection, :ca_bundle_path, quiet: true) %>
       </div>
     </div>
   </section>
@@ -59,7 +59,7 @@
       <div>
         <%= f.label :credential_mode, class: "block text-sm font-medium text-ink" %>
         <%= f.select :credential_mode, KongConnection::CREDENTIAL_MODES, {}, class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :credential_mode) } %>
-        <%= field_hint(:connection, :credential_mode) %>
+        <%= field_hint(:connection, :credential_mode, quiet: true) %>
       </div>
     </div>
   </section>

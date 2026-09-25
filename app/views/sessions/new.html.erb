@@ -8,7 +8,7 @@
   </div>
   <p class="text-sm mb-6 font-mono break-all text-ink-soft"><%= @connection.admin_url %> <span class="font-sans">· <%= apply_mode_label(@connection.apply_mode) %></span></p>
 
-  <p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.login.intro") %></p>
+  <% if (lede = page_lede("hints.pages.login.intro")) %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
   <%# uat and prod (rank >= 2): said before the credential is typed, in the
       environment's own tone (docs/UI-DESIGN.md, "loud at uat/prod"). %>
   <% if @connection.protected_env? %>
@@ -22,21 +22,21 @@
     <div class="panel p-4 grid gap-4">
       <div>
         <label for="username" class="block text-sm font-medium text-ink">Username</label>
-        <input type="text" id="username" name="username" required autofocus class="field-input mt-1" aria-describedby="<%= hint_describedby(:login, :username) %>" />
-        <%= field_hint(:login, :username) %>
+        <input type="text" id="username" name="username" required autofocus placeholder="<%= hint_placeholder(:login, :username) %>" class="field-input mt-1" aria-describedby="<%= hint_describedby(:login, :username) %>" />
+        <%= field_hint(:login, :username, quiet: true) %>
       </div>
 
       <div>
         <label for="password" class="block text-sm font-medium text-ink">Password</label>
         <input type="password" id="password" name="password" required class="field-input mt-1" aria-describedby="<%= hint_describedby(:login, :password) %>" />
-        <%= field_hint(:login, :password) %>
+        <%= field_hint(:login, :password, quiet: true) %>
       </div>
     </div>
 
     <div class="panel p-4">
       <label for="operator" class="block text-sm font-medium text-ink">Operator <span class="font-normal text-ink-soft">(only if this is a shared credential)</span></label>
-      <input type="text" id="operator" name="operator" aria-describedby="operator-hint" class="field-input mt-1" />
-      <%= field_hint(:login, :operator, id: "operator-hint") %>
+      <input type="text" id="operator" name="operator" placeholder="<%= hint_placeholder(:login, :operator) %>" aria-describedby="operator-hint" class="field-input mt-1" />
+      <%= field_hint(:login, :operator, id: "operator-hint", quiet: true) %>
     </div>
 
     <button type="submit" class="btn btn-primary mt-1 justify-self-start">Connect</button>

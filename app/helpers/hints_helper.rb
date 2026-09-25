@@ -27,6 +27,14 @@ module HintsHelper
     "hint-#{form}-#{field}".tr("_", "-")
   end
 
+  # The line under a page's heading. Compact hints (the default): only the
+  # page's own facts -- a scope, a time window, the next action -- or nothing.
+  # Detailed hints add the explanation from hints.pages.*.intro in front.
+  def page_lede(key = nil, facts: nil, **interpolations)
+    parts = [ (t(key, **interpolations) if key && detailed_hints?), facts ].compact_blank
+    parts.any? ? safe_join(parts, " ") : nil
+  end
+
   # What a page is for and how to start, when it has nothing to show yet. A
   # block supplies the page's own action (a link or button), if it has one.
   def empty_state(page, **interpolations, &action)

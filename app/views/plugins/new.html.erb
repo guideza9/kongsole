@@ -2,7 +2,7 @@
 
 <h1 class="page-title mb-1">Add plugin</h1>
 <p class="text-sm mb-6 text-ink-soft">
-  Scope: <span class="font-mono"><%= @scope_label %></span> · <%= t("hints.pages.plugins_new.intro") %>
+  Scope: <span class="font-mono"><%= @scope_label %></span><% if (lede = page_lede("hints.pages.plugins_new.intro")) %> · <%= lede %><% end %>
 </p>
 
 <% if @catalog %>

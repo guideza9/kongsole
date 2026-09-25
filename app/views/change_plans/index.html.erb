@@ -1,7 +1,8 @@
 <% content_for :title, "Pending PRs" %>
 
-<h1 class="page-title mb-1">Pending PRs</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.change_plans_index.intro") %> Newest first, on <%= current_connection.name %>.</p>
+<% lede = page_lede("hints.pages.change_plans_index.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Pending PRs</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <% if @change_plans.empty? %>
   <%= empty_state(:change_plans) %>

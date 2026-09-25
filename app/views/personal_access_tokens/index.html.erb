@@ -3,7 +3,7 @@
 <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
   <div>
     <h1 class="page-title">Personal access tokens</h1>
-    <p class="text-sm mt-0.5 text-ink-soft"><%= t("hints.pages.tokens_index.intro") %> A token only reaches connections with a stored credential.</p>
+    <p class="text-sm mt-0.5 text-ink-soft"><%= page_lede("hints.pages.tokens_index.intro", facts: "A token only reaches connections with a stored credential.") %></p>
   </div>
   <%= link_to "Issue a token", new_personal_access_token_path, class: "btn-primary btn" %>
 </div>

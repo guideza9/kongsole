@@ -3,8 +3,9 @@
     branch went. %>
 <% content_for :title, "Changesets" %>
 
-<h1 class="page-title mb-1">Changesets</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.changesets_index.intro") %> On <%= current_connection.name %>.</p>
+<% lede = page_lede("hints.pages.changesets_index.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Changesets</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <% if @changesets.empty? %>
   <%= empty_state(:changesets) do %>

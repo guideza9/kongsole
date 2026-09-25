@@ -4,7 +4,7 @@
   <div>
     <h1 class="page-title">Expiring certificates</h1>
     <p class="text-sm mt-0.5 text-ink-soft">
-      <%= t("hints.pages.certificates_expiring.intro") %> Within <%= @days %> days on <%= current_connection.name %>, expired ones included.
+      <%= page_lede("hints.pages.certificates_expiring.intro", facts: "Within #{@days} days, expired ones included.") %>
       <% if @last_synced_at %>Last synced <%= time_ago_in_words(@last_synced_at) %> ago.<% else %>This connection has never synced.<% end %>
     </p>
   </div>

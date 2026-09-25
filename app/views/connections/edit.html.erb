@@ -1,4 +1,5 @@
 <% content_for :title, "Edit #{@connection.name}" %>
-<h1 class="page-title mb-1">Edit connection: <%= @connection.name %></h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.connections_edit.intro") %></p>
+<% lede = page_lede("hints.pages.connections_edit.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Edit connection: <%= @connection.name %></h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 <%= render "form", connection: @connection %>

@@ -1,4 +1,5 @@
 <% content_for :title, "Add connection" %>
-<h1 class="page-title mb-1">Add connection</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.connections_new.intro") %></p>
+<% lede = page_lede("hints.pages.connections_new.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Add connection</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 <%= render "form", connection: @connection %>

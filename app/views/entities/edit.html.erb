@@ -1,7 +1,8 @@
 <% content_for :title, "Edit #{@entity.name}" %>
 
-<h1 class="page-title mb-1">Edit <%= @entity.name %></h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.entities_edit.intro") %></p>
+<% lede = page_lede("hints.pages.entities_edit.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Edit <%= @entity.name %></h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <div class="max-w-2xl grid gap-4">
   <%= form_with url: entity_path(@entity), method: :patch, class: "grid gap-4" do %>
@@ -10,8 +11,8 @@
       <div class="grid gap-4">
         <div>
           <label for="entity-tags" class="block text-sm font-medium mb-1 text-ink">Tags <span class="font-normal text-ink-soft">(comma separated)</span></label>
-          <input type="text" id="entity-tags" name="tags" value="<%= @entity.tags.join(', ') %>" class="field-input font-mono text-sm" aria-describedby="<%= hint_describedby(:entity_edit, :tags) %>" />
-          <%= field_hint(:entity_edit, :tags) %>
+          <input type="text" id="entity-tags" name="tags" value="<%= @entity.tags.join(', ') %>" placeholder="<%= hint_placeholder(:entity_edit, :tags) %>" class="field-input font-mono text-sm" aria-describedby="<%= hint_describedby(:entity_edit, :tags) %>" />
+          <%= field_hint(:entity_edit, :tags, quiet: true) %>
         </div>
         <% if @entity.entity_type == "service" %>
           <div>
@@ -20,7 +21,7 @@
               <input class="accent-accent" type="checkbox" id="enabled" name="enabled" value="1" <%= "checked" if @entity.enabled %> aria-describedby="<%= hint_describedby(:entity_edit, :enabled) %>" />
               <label for="enabled" class="text-sm text-ink">Enabled</label>
             </div>
-            <%= field_hint(:entity_edit, :enabled) %>
+            <%= field_hint(:entity_edit, :enabled, quiet: true) %>
           </div>
         <% end %>
       </div>

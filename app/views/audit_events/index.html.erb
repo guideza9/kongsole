@@ -1,7 +1,8 @@
 <% content_for :title, "Audit log" %>
 
-<h1 class="page-title mb-1">Audit log</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.audit_events.intro") %> Newest first, on <%= current_connection.name %>.</p>
+<% lede = page_lede("hints.pages.audit_events.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Audit log</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <% if @audit_events.empty? %>
   <%= empty_state(:audit_events) %>

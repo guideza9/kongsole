@@ -1,7 +1,8 @@
 <% content_for :title, "Issue a token" %>
 
-<h1 class="page-title mb-1">Issue a token</h1>
-<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.tokens_new.intro") %></p>
+<% lede = page_lede("hints.pages.tokens_new.intro", facts: "The token is shown once, right after you issue it. Keep it somewhere safe.") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Issue a token</h1>
+<% if lede %><p class="text-sm mb-6 text-ink-soft"><%= lede %></p><% end %>
 
 <%= form_with url: personal_access_tokens_path, method: :post, class: "max-w-xl grid gap-4" do %>
   <section class="panel p-4">
@@ -9,13 +10,13 @@
     <div class="grid gap-4">
       <div>
         <%= label_tag :operator, "Operator", class: "block text-sm font-medium text-ink" %>
-        <input type="text" name="operator" id="operator" required class="field-input mt-1" placeholder="your name" aria-describedby="<%= hint_describedby(:token, :operator) %>" />
-        <%= field_hint(:token, :operator) %>
+        <input type="text" name="operator" id="operator" required class="field-input mt-1" placeholder="<%= hint_placeholder(:token, :operator) %>" aria-describedby="<%= hint_describedby(:token, :operator) %>" />
+        <%= field_hint(:token, :operator, quiet: true) %>
       </div>
       <div>
         <%= label_tag :name, "Label ", class: "block text-sm font-medium text-ink" %><span class="font-normal text-sm text-ink-soft">(optional)</span>
-        <input type="text" name="name" id="name" class="field-input mt-1" aria-describedby="<%= hint_describedby(:token, :name) %>" />
-        <%= field_hint(:token, :name) %>
+        <input type="text" name="name" id="name" class="field-input mt-1" placeholder="<%= hint_placeholder(:token, :name) %>" aria-describedby="<%= hint_describedby(:token, :name) %>" />
+        <%= field_hint(:token, :name, quiet: true) %>
       </div>
     </div>
   </section>
@@ -28,7 +29,7 @@
         <%= link_to "edit a connection", connections_path %> to switch it to stored first.
       </p>
     <% else %>
-      <%= field_hint(:token, :connection_ids) %>
+      <%= field_hint(:token, :connection_ids, quiet: true) %>
       <div class="grid gap-2 mt-3">
         <% @eligible_connections.each do |connection| %>
           <label class="flex items-center gap-2 text-sm">

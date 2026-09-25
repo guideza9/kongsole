@@ -15,8 +15,9 @@
 <% git_drift = changeset_git_drift(drift) %>
 
 <p class="page-back"><%= link_to "Changeset ##{@changeset.id}", changeset_path(@changeset) %></p>
-<h1 class="page-title mb-1">Review changeset #<%= @changeset.id %></h1>
-<p class="text-sm mb-5 text-ink-soft"><%= t("hints.pages.changeset_preview.intro") %></p>
+<% lede = page_lede("hints.pages.changeset_preview.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Review changeset #<%= @changeset.id %></h1>
+<% if lede %><p class="text-sm mb-5 text-ink-soft"><%= lede %></p><% end %>
 
 <% if preview.error %>
   <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "risk-notice mb-5" } do %>

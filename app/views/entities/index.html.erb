@@ -59,7 +59,7 @@
     <div class="flex-1 min-w-[180px]">
       <label for="entities-q" class="block text-sm font-medium mb-1 text-ink">Search</label>
       <input type="text" id="entities-q" name="q" value="<%= @filters[:q] %>" placeholder="name contains…" class="field-input" aria-describedby="<%= hint_describedby(:entity_filter, :q) %>" />
-      <%= field_hint(:entity_filter, :q) %>
+      <%= field_hint(:entity_filter, :q, quiet: true) %>
     </div>
     <button type="submit" class="btn-secondary btn">Filter</button>
     <% if filtered %>
@@ -73,8 +73,8 @@
     <div class="flex flex-wrap items-end gap-4 mt-3">
       <div class="flex-1 min-w-[180px]">
         <label for="entities-tags" class="block text-sm font-medium mb-1 text-ink">Tags</label>
-        <input type="text" id="entities-tags" name="tags" value="<%= @filters[:tags] %>" placeholder="payment, core" aria-describedby="entities-tags-hint" class="field-input font-mono text-sm" />
-        <%= field_hint(:entity_filter, :tags, id: "entities-tags-hint") %>
+        <input type="text" id="entities-tags" name="tags" value="<%= @filters[:tags] %>" placeholder="<%= hint_placeholder(:entity_filter, :tags) %>" aria-describedby="entities-tags-hint" class="field-input font-mono text-sm" />
+        <%= field_hint(:entity_filter, :tags, id: "entities-tags-hint", quiet: true) %>
       </div>
       <div>
         <label for="entities-sort" class="block text-sm font-medium mb-1 text-ink">Sort</label>
@@ -85,7 +85,7 @@
             <option value="<%= value %>" <%= "selected" if @filters[:sort] == value %>><%= label %></option>
           <% end %>
         </select>
-        <%= field_hint(:entity_filter, :sort) %>
+        <%= field_hint(:entity_filter, :sort, quiet: true) %>
       </div>
     </div>
   </details>

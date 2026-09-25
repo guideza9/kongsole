@@ -7,7 +7,7 @@
 <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
   <div>
     <h1 class="page-title">Connections</h1>
-    <p class="text-sm mt-0.5 text-ink-soft"><%= t("hints.pages.connections.intro") %></p>
+    <% if (lede = page_lede("hints.pages.connections.intro")) %><p class="text-sm mt-0.5 text-ink-soft"><%= lede %></p><% end %>
   </div>
   <%= link_to "New project", new_project_path, class: "btn btn-primary shrink-0" %>
 </div>

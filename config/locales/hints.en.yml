@@ -459,7 +459,7 @@ en:
       login:
         intro: "Log in with the Kong credential for this node. It is the only login Kongsole has."
       health:
-        intro: "The result of the last login to each connection. Nothing here is checked live."
+        intro: "The result of the last login to each connection."
       entities_index:
         intro: "What Kongsole last read from this Kong node. Sync to refresh it."
       entity_show:
@@ -487,6 +487,6 @@ en:
       tokens_index:
         intro: "Tokens let an agent use Kongsole through MCP, as you."
       tokens_new:
-        intro: "The token is shown once, right after you issue it. Keep it somewhere safe."
+        intro: "An agent uses it to reach Kongsole through MCP, as you."
       certificates_expiring:
         intro: "Certificates on this connection that expire soon, as of the last sync."

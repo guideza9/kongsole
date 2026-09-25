@@ -1,11 +1,12 @@
 <% content_for :title, @connection.name %>
 
-<div class="flex items-center gap-3 mb-2">
+<% lede = page_lede("hints.pages.connection_show.intro") %>
+<div class="flex items-center gap-3 <%= lede ? "mb-2" : "mb-8" %>">
   <h1 class="sr-only">Connection: <%= @connection.name %></h1>
   <%= env_badge(@connection, size: :lg) %>
   <%= status_badge(@connection.last_status) %>
 </div>
-<p class="text-sm mb-8 text-ink-soft"><%= t("hints.pages.connection_show.intro") %></p>
+<% if lede %><p class="text-sm mb-8 text-ink-soft"><%= lede %></p><% end %>
 
 <% unless @connection.editable_in_ui? %>
   <div class="panel max-w-xl mb-6 p-4 text-sm">
