@@ -10,10 +10,11 @@ class ApplicationController < ActionController::Base
 
   private
 
-  # R3: detailed hints unless this browser chose compact (HintPreferencesController).
-  # Anything but "compact" -- a missing or tampered cookie -- reads as detailed.
+  # R3: compact hints unless this browser chose detailed (HintPreferencesController).
+  # Anything but "detailed" -- a missing or tampered cookie -- reads as compact
+  # (owner decision 2026-09-26: the detailed default was too much text).
   def detailed_hints?
-    cookies[:kongsole_hints] != "compact"
+    cookies[:kongsole_hints] == "detailed"
   end
 
   # The connection the current browser session is logged into, if any.
