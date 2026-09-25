@@ -249,9 +249,6 @@ en:
         title: "This is %{env}"
         body: "Please take a moment to check you meant to connect here."
         pr_note: "Changes on this connection go through a reviewed pull request."
-      rank_2_apply:
-        title: "This change is for %{env}"
-        body: "Read the diff once more. Type the connection name and your password to confirm."
       shared_credential_write:
         title: "Recorded under %{operator}"
         body: "This credential is shared, so the audit log names the operator you gave at login, not the Kong consumer."
