@@ -1,7 +1,8 @@
 <% content_for :title, "Review change" %>
 <%
   plan = @change_plan
-  branch = "kongctl/#{plan.id}"
+  # R8: a plan pushed as part of a changeset went out on the changeset's branch.
+  branch = plan.changeset&.branch.presence || "kongctl/#{plan.id}"
   branch_url = current_connection.branch_url(branch)
   env_name = env_display_name(current_connection)
   changed_keys = plan_changed_keys(plan)
@@ -20,6 +21,14 @@
   Proposed by <%= actor_summary(plan) %>
   · <%= plan_timestamp(plan.created_at) %>
 </p>
+
+<%# R8.8: an item of a changeset is reviewed and submitted there, not here. %>
+<% if plan.changeset %>
+  <p class="text-sm mb-5">
+    In changeset #<%= plan.changeset_id %> as item <%= plan.position %> --
+    <%= link_to "open changeset ##{plan.changeset_id}", changeset_path(plan.changeset), class: "underline underline-offset-2" %>
+  </p>
+<% end %>
 
 <% if plan.status == "pending" && plan.expired? %>
   <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "mb-5" } do %>

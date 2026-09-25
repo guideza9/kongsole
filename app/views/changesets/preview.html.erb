@@ -1,0 +1,26 @@
+<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
+<% content_for :title, "Preview changeset ##{@changeset.id}" %>
+<p class="text-sm mb-2"><%= link_to "Back to changeset ##{@changeset.id}", changeset_path(@changeset) %></p>
+<h1 class="page-title mb-6">Preview · changeset #<%= @changeset.id %></h1>
+
+<% if @preview.error %>
+  <p class="text-sm mb-4">Could not preview: <%= @preview.error %></p>
+  <% if @preview.explanation %>
+    <p class="text-sm mb-4"><%= @preview.explanation.title %> <%= @preview.explanation.cause %> <%= @preview.explanation.next_step %></p>
+  <% end %>
+<% else %>
+  <p class="mb-2">CI gate: <%= @preview.gate.passed? ? "Clear" : "Blocked" %></p>
+  <% @preview.gate.reasons.each do |reason| %><p class="text-sm"><%= reason %></p><% end %>
+
+  <% if @preview.drift %>
+    <% if @preview.drift.git_moved?.nil? %>
+      <p class="text-sm">Unknown whether git moved: the config repo could not be read when this changeset began.</p>
+    <% elsif @preview.drift.git_moved? %>
+      <p class="text-sm">git moved since this changeset began<%= " (#{@preview.drift.commits_behind} commits)" if @preview.drift.commits_behind %>.</p>
+    <% end %>
+    <% @preview.drift.kong_changed.each do |changed| %><p class="text-sm">Changed in Kong since proposed: <%= changed[:label] %></p><% end %>
+  <% end %>
+
+  <h2 class="section-label mt-6 mb-2">YAML diff</h2>
+  <pre class="text-xs whitespace-pre-wrap"><%= @preview.yaml_diff %></pre>
+<% end %>

@@ -2,19 +2,18 @@
 # 5 ("Review") and 6 ("Execute"). Nothing touches Kong until #apply; #show
 # is a pure read of the plan already written by Kong::ChangePlanner.
 class ChangePlansController < ApplicationController
+  include Reauthentication
+
   before_action :require_session!
   before_action :set_change_plan, except: :index
 
-  # rank >= 2 (uat/prod) requires re-entering the credential immediately
-  # before a direct-mode apply, per docs/DESIGN.md section 10 step 5 --
-  # defense in depth, since no dev/sit connection actually reaches rank 2
-  # under the normal apply_mode convention.
-  REAUTH_RANK_THRESHOLD = 2
-
   # The "PR ค้าง" (outstanding PRs) screen from docs/DESIGN.md section 14 --
   # every PR-mode plan for the current connection, newest first, so pushed
-  # branches awaiting review/merge don't just disappear once applied.
+  # branches awaiting review/merge don't just disappear once applied. On a
+  # PR-mode connection those live in changesets now (R8.8).
   def index
+    return redirect_to(changesets_path) if current_connection.apply_mode == "pr"
+
     @change_plans = ChangePlan.where(kong_connection: current_connection, apply_mode: "pr").order(created_at: :desc)
   end
 
@@ -22,14 +21,14 @@ class ChangePlansController < ApplicationController
     @protected_entity = @change_plan.delete? &&
       Kong::ChangeGuardrails.protected_entity?(current_connection, @change_plan.before)
     @requires_confirmation_name = @protected_entity || (@change_plan.delete? && current_connection.protected_env?)
-    @requires_reauth = current_connection.rank >= REAUTH_RANK_THRESHOLD
+    @requires_reauth = requires_reauth?
     @requires_env_name = current_connection.protected_env?
     @dependent_routes = dependent_routes
     @dependent_targets = dependent_targets
     @env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.env_vars_for(@change_plan) : []
     @deck_env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.deck_vars_for(@change_plan) : []
     @dependent_snis = dependent_snis
-    @actionable = @change_plan.status == "pending" && !@change_plan.expired?
+    @actionable = @change_plan.status == "pending" && !@change_plan.expired? && !@change_plan.in_changeset?
     @guardrails = @actionable ? guardrails_for(@change_plan) : []
     # Where an applied plan goes next: the record it left in the audit log, and
     # the entity it changed (nothing to open after a delete).
@@ -40,11 +39,17 @@ class ChangePlansController < ApplicationController
   end
 
   def apply
-    if current_connection.protected_env? && !params[:confirm_env_name].to_s.strip.casecmp?(current_connection.name)
+    # R8: an item of a changeset leaves only when a person submits that changeset.
+    if @change_plan.changeset
+      return redirect_to(changeset_path(@change_plan.changeset),
+        alert: "This plan is item #{@change_plan.position} of changeset ##{@change_plan.changeset_id} -- submit the changeset to push it.")
+    end
+
+    unless env_name_confirmed?
       return redirect_to(change_plan_path(@change_plan), alert: "Connection name didn't match -- nothing was applied.")
     end
 
-    if current_connection.rank >= REAUTH_RANK_THRESHOLD && !reauthenticated?
+    if requires_reauth? && !reauthenticated?
       return redirect_to(change_plan_path(@change_plan), alert: "Password confirmation failed -- nothing was applied.")
     end
 
@@ -132,15 +137,6 @@ class ChangePlansController < ApplicationController
 
   def set_change_plan
     @change_plan = ChangePlan.where(kong_connection: current_connection).find(params[:id])
-  end
-
-  def reauthenticated?
-    return false if params[:password].blank?
-
-    Kong::Client.new(connection: current_connection, secret: params[:password]).get("/")
-    true
-  rescue Kong::Client::Error
-    false
   end
 
   # docs/DESIGN.md section 15 M3's cascade preview: Kong itself refuses to

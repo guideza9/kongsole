@@ -507,7 +507,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R8.7 · **ไฟล์ที่แก้ได้:** Create `app/controllers/changesets_controller.rb`, `app/controllers/changeset_items_controller.rb`, `app/views/changesets/{index,show,preview}.html.erb` (ขั้นต่ำ: ตาราง/รายการ/ฟอร์ม, ไม่มีการตกแต่ง), `spec/requests/changesets_spec.rb`; Modify `config/routes.rb`, `app/controllers/application_controller.rb` (`current_open_changeset`), `app/controllers/change_plans_controller.rb` (`index` → redirect ไป `changesets_path` เมื่อ connection เป็น PR), `app/views/change_plans/show.html.erb` (render "In changeset #N" + link เท่านั้น)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -567,8 +567,8 @@ end
 ```
 (reauth ใช้กลไกเดียวกับ `ChangePlansController#reauthenticated?` — แยกเป็น concern `Reauthentication` ในไฟล์ `app/controllers/concerns/reauthentication.rb` ที่ทั้งสอง controller ใช้)
 
-- [ ] **Step 2:** FAIL → implement → PASS · suite 0 failures
-- [ ] **Step 3:** Commit `feat(R8.8): changeset pages -- list, preview, remove item, submit, record PR URL`
+- [x] **Step 2:** FAIL → implement → PASS · suite 0 failures
+- [x] **Step 3:** Commit `feat(R8.8): changeset pages -- list, preview, remove item, submit, record PR URL`
 
 ---
 

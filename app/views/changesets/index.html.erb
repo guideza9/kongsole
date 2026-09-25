@@ -1,0 +1,21 @@
+<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
+<% content_for :title, "Changesets" %>
+<h1 class="page-title mb-6">Changesets</h1>
+
+<% if @changesets.empty? %>
+  <p class="text-sm text-ink-soft">Nothing collected for <%= current_connection.name %> yet.</p>
+<% else %>
+  <table class="w-full text-sm">
+    <thead><tr><th scope="col">Changeset</th><th scope="col">Status</th><th scope="col">Items</th><th scope="col">Branch</th></tr></thead>
+    <tbody>
+      <% @changesets.each do |changeset| %>
+        <tr>
+          <td><%= link_to "##{changeset.id}", changeset_path(changeset) %></td>
+          <td><%= changeset.status %></td>
+          <td><%= changeset.open? ? changeset.items.count : changeset.change_plans.where(status: "applied").count %></td>
+          <td class="font-mono"><%= changeset.branch %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

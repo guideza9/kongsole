@@ -1,0 +1,66 @@
+<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
+<% content_for :title, "Changeset ##{@changeset.id}" %>
+<p class="text-sm mb-2"><%= link_to "All changesets", changesets_path %></p>
+<h1 class="page-title mb-2">Changeset #<%= @changeset.id %> · <%= current_connection.name %></h1>
+<p class="text-sm mb-6">Status: <%= @changeset.status %></p>
+
+<% if @changeset.failure_reason.present? && @changeset.open? %>
+  <p class="text-sm mb-4">Last submit failed: <%= @changeset.failure_reason %></p>
+<% end %>
+
+<% items = @changeset.open? ? @items : @changeset.change_plans.where(status: "applied").order(:position) %>
+<% if items.empty? %>
+  <p class="text-sm">No items yet. Changes proposed on <%= current_connection.name %> collect here.</p>
+<% else %>
+  <table class="w-full text-sm mb-6">
+    <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col"></th></tr></thead>
+    <tbody>
+      <% items.each do |item| %>
+        <tr>
+          <td><%= item.position %></td>
+          <td><%= item.operation %></td>
+          <td><%= item.entity_type %></td>
+          <td><%= link_to item.entity_label, change_plan_path(item) %></td>
+          <td>
+            <% if @changeset.open? %>
+              <%= button_to "Remove", changeset_item_path(@changeset, item), method: :delete %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+
+<% if @changeset.open? && items.any? %>
+  <p class="mb-4"><%= link_to "Preview YAML diff", preview_changeset_path(@changeset) %></p>
+
+  <%= form_with url: submit_changeset_path(@changeset), method: :post, local: true do %>
+    <% if current_connection.protected_env? %>
+      <label>Type <%= current_connection.name %> to confirm <input type="text" name="confirm_env_name" autocomplete="off"></label>
+    <% end %>
+    <% if current_connection.rank >= Reauthentication::REAUTH_RANK_THRESHOLD %>
+      <label>Password <input type="password" name="password" autocomplete="current-password"></label>
+    <% end %>
+    <label><input type="checkbox" name="acknowledge_drift" value="1"> I have looked at what changed in git or Kong since this began</label>
+    <label><input type="checkbox" name="acknowledge_env_vars" value="1"> The environment variables these certificates read are set on every Kong node</label>
+    <button type="submit">Submit changeset</button>
+  <% end %>
+
+  <%= button_to "Abandon changeset", abandon_changeset_path(@changeset), method: :post %>
+<% end %>
+
+<% if @changeset.status == "submitted" %>
+  <p class="mb-2">Branch:
+    <% if @changeset.branch_url %><%= link_to @changeset.branch, @changeset.branch_url, target: "_blank", rel: "noopener" %><% else %><code><%= @changeset.branch %></code><% end %>
+  </p>
+  <h2 class="section-label">PR description</h2>
+  <pre class="text-xs whitespace-pre-wrap mb-4"><%= @changeset.pr_body %></pre>
+  <% if @changeset.pr_url.present? %>
+    <p>Pull request: <%= link_to @changeset.pr_url, @changeset.pr_url, target: "_blank", rel: "noopener" %></p>
+  <% end %>
+  <%= form_with url: pr_url_changeset_path(@changeset), method: :patch, local: true do %>
+    <label>Pull request URL <input type="url" name="pr_url" value="<%= @changeset.pr_url %>"></label>
+    <button type="submit">Save</button>
+  <% end %>
+<% end %>

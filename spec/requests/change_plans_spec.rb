@@ -60,12 +60,13 @@ RSpec.describe "ChangePlans (web)", type: :request do
   it "sends Apply on a PR-mode plan back with the reason, and changes nothing" do
     prod = create(:kong_connection, :prod, name: "prod", admin_url: "https://kong-prod.test", credential_mode: "session", apply_mode: "pr")
     sign_in(prod)
-    plan = create(:change_plan, kong_connection: prod, apply_mode: "pr", changeset: create(:changeset, kong_connection: prod))
+    changeset = create(:changeset, kong_connection: prod)
+    plan = create(:change_plan, kong_connection: prod, apply_mode: "pr", changeset: changeset)
     expect(Kong::GitClient).not_to receive(:new)
 
     post apply_change_plan_path(plan), params: { confirm_env_name: prod.name, password: "pw" }
 
-    expect(response).to redirect_to(change_plan_path(plan))
+    expect(response).to redirect_to(changeset_path(changeset))
     expect(flash[:alert]).to include("changeset")
     expect(plan.reload.status).to eq("pending")
   end

@@ -6,7 +6,7 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?, :current_project_envs,
-    :write_block_reason
+    :write_block_reason, :current_open_changeset
 
   private
 
@@ -54,6 +54,14 @@ class ApplicationController < ActionController::Base
 
   def current_operator
     session[:operator]
+  end
+
+  # R8: the open changeset of the logged-in connection, or nil (direct mode,
+  # or nothing collected yet) -- for the nav's item count.
+  def current_open_changeset
+    return @current_open_changeset if defined?(@current_open_changeset)
+
+    @current_open_changeset = current_connection && Changeset.find_by(kong_connection: current_connection, status: "open")
   end
 
   def signed_in?

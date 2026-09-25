@@ -36,6 +36,17 @@ Rails.application.routes.draw do
     member { post :apply }
   end
 
+  # R8: a PR-mode connection's changes, collected into one branch and one PR.
+  resources :changesets, only: %i[index show] do
+    member do
+      get :preview
+      post :submit
+      patch :pr_url
+      post :abandon
+    end
+  end
+  delete "/changesets/:changeset_id/items/:id" => "changeset_items#destroy", as: :changeset_item
+
   resources :audit_events, only: %i[index]
 
   resources :personal_access_tokens, only: %i[index new create] do
