@@ -320,4 +320,45 @@ RSpec.describe Kong::ChangesetSubmitter do
       expect(Kong::GitClient).not_to have_received(:new)
     end
   end
+  # Final review #1: a real commit to the same entity after the item was
+  # proposed survives the push; one to the same field is refused by name.
+  describe "an update proposed before git moved" do
+    def seed_service!(fields)
+      dir = @bare_git_tmp.join("reseed-#{SecureRandom.hex(4)}")
+      Open3.capture3("git", "clone", repo.to_s, dir.to_s)
+      text = Kong::DeckDocument.serialize(Kong::DeckDocument.parse({ "services" => [ { "name" => "orders" }.merge(fields) ] }.to_yaml.sub(/\A---\n/, ""), select_tags: %w[managed-by-kongctl]))
+      File.write(dir.join("uat", "kong.yaml"), text)
+      Open3.capture3("git", "add", "-A", chdir: dir.to_s)
+      Open3.capture3("git", "-c", "user.name=bob", "-c", "user.email=bob@example.com", "commit", "-m", "bob", chdir: dir.to_s)
+      Open3.capture3("git", "push", "origin", "main", chdir: dir.to_s)
+    end
+
+    def update_item(from:, to:)
+      create(:change_plan, changeset: changeset, kong_connection: connection, apply_mode: "pr", position: 1, operation: "update",
+        entity_type: "service", target_kong_id: SecureRandom.uuid, base_updated_at: nil,
+        before: { "name" => "orders", "retries" => 5, "read_timeout" => from },
+        after: { "name" => "orders", "retries" => 5, "read_timeout" => to },
+        diff: { "read_timeout" => { "from" => from, "to" => to } })
+    end
+
+    it "keeps another field someone changed in git in the meantime" do
+      seed_service!("url" => "http://orders:80", "retries" => 5, "read_timeout" => 60000)
+      update_item(from: 60000, to: 30000)
+      seed_service!("url" => "http://orders:80", "retries" => 10, "read_timeout" => 60000)
+
+      submitter.call
+
+      yaml = Open3.capture3("git", "--git-dir=#{repo}", "show", "kongctl/changeset-#{changeset.id}:uat/kong.yaml").first
+      expect(YAML.safe_load(yaml)["services"]).to eq([ { "name" => "orders", "read_timeout" => 30000, "retries" => 10, "url" => "http://orders:80" } ])
+    end
+
+    it "refuses when git changed the same field in the meantime" do
+      seed_service!("url" => "http://orders:80", "read_timeout" => 60000)
+      update_item(from: 60000, to: 30000)
+      seed_service!("url" => "http://orders:80", "read_timeout" => 45000)
+
+      expect { submitter.call }.to raise_error(Kong::DeckRenderer::Unrenderable, /read_timeout of service orders changed in git/)
+      expect(branches).to be_empty
+    end
+  end
 end

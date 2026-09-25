@@ -19,8 +19,11 @@ RSpec.describe Kong::DeckRenderer do
       end
     end
 
-    def plan(entity_type:, operation:, before: {}, after: {}, target_kong_id: nil, parent_kong_id: nil)
-      ChangePlan.new(entity_type: entity_type, operation: operation, before: before, after: after,
+    # An update carries the diff the planner computes (Kong::ChangePlanner
+    # #compute_diff): the fields whose value changed. The renderer writes only those.
+    def plan(entity_type:, operation:, before: {}, after: {}, target_kong_id: nil, parent_kong_id: nil, diff: nil)
+      diff ||= operation == "update" ? after.reject { |key, value| before.key?(key) && before[key] == value }.to_h { |key, value| [ key, { "from" => before[key], "to" => value } ] } : {}
+      ChangePlan.new(entity_type: entity_type, operation: operation, before: before, after: after, diff: diff,
         target_kong_id: target_kong_id, parent_kong_id: parent_kong_id)
     end
 
@@ -43,6 +46,28 @@ RSpec.describe Kong::DeckRenderer do
           after: { "id" => "abc", "name" => "payments-api", "tags" => %w[payment deprecated], "enabled" => true, "path" => nil })
 
         expect(doc["services"]).to eq([ { "name" => "payments-api", "tags" => %w[payment deprecated], "enabled" => true } ])
+      end
+
+      # Final review #1: an item proposed days ago carries Kong's whole entity as
+      # it was then; only what the item changed may be written, or it reverts
+      # whatever else changed in git since.
+      it "writes only the fields the item changed, leaving the rest of git's entry as it is" do
+        doc["services"] = [ { "name" => "payments-api", "url" => "http://pay:80", "retries" => 10, "read_timeout" => 60000 } ]
+
+        render_change(entity_type: "service", operation: "update",
+          before: { "name" => "payments-api", "host" => "pay", "port" => 80, "retries" => 5, "read_timeout" => 60000, "tags" => [] },
+          after: { "name" => "payments-api", "host" => "pay", "port" => 80, "retries" => 5, "read_timeout" => 30000, "tags" => [] })
+
+        expect(doc["services"]).to eq([ { "name" => "payments-api", "url" => "http://pay:80", "retries" => 10, "read_timeout" => 30000 } ])
+      end
+
+      it "refuses, by name, a field git changed since the item was proposed" do
+        doc["services"] = [ { "name" => "payments-api", "read_timeout" => 45000 } ]
+
+        expect {
+          render_change(entity_type: "service", operation: "update",
+            before: { "name" => "payments-api", "read_timeout" => 60000 }, after: { "name" => "payments-api", "read_timeout" => 30000 })
+        }.to raise_error(described_class::Unrenderable, /read_timeout of service payments-api changed in git/)
       end
 
       it "removes the matched service on delete" do

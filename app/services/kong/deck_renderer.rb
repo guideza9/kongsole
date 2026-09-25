@@ -64,16 +64,42 @@ module Kong
     end
     private_class_method :create
 
+    # Only the fields the item changed (its diff) are written onto git's entry:
+    # `after` is Kong's whole entity as it was when the item was proposed, and
+    # a changeset can wait days, so writing all of it would revert whatever
+    # else changed in git since. A changed field that git itself changed in the
+    # meantime is refused by name rather than overwritten.
     def self.update(list, plan, definition)
       index = locate!(list, plan, definition)
       refuse_rename_onto_taken!(list, index, plan, definition)
       existing = list[index]
-      incoming = keep_redacted(plan.after.except(*MANAGED), plan.before, existing)
+      changed = plan.diff.is_a?(Hash) ? plan.diff.keys : plan.after.keys
+      refuse_changed_in_git!(existing, plan, changed, definition)
+      incoming = keep_redacted(plan.after.slice(*changed).except(*MANAGED), plan.before, existing)
       incoming["snis"] = keep_sni_entries(existing["snis"], incoming["snis"]) if plan.entity_type == "certificate" && incoming["snis"].is_a?(Array)
 
       list[index] = renderable(existing.merge(incoming), definition, keep_id: true)
     end
     private_class_method :update
+
+    # A field git holds a third value for -- neither what the item started from
+    # nor what it sets -- was changed by someone else since the item was
+    # proposed. Nested values (a plugin's config) carry redaction marks and
+    # env placeholders that never compare equal to Kong's, so only plain
+    # values are compared.
+    def self.refuse_changed_in_git!(existing, plan, changed, definition)
+      changed.each do |key|
+        next unless plan.before.key?(key) && existing.key?(key)
+
+        was = plan.before[key]
+        next if was.is_a?(Hash) || was == Kong::Redactor::MARK
+        next if [ was, plan.after[key] ].include?(existing[key])
+
+        raise Unrenderable, "#{key} of #{plan.entity_type} #{identity_label(plan, definition)} changed in git since this item was " \
+          "proposed -- remove the item and propose it again from what git holds now"
+      end
+    end
+    private_class_method :refuse_changed_in_git!
 
     # `before` is redacted and Kong::Redactor.prune_marked drops those marks
     # from `after`, so a secret Kong holds arrives here as a missing key. Git
