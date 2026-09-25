@@ -1,33 +1,54 @@
 #!/usr/bin/env ruby
 # CI gate for a PR-mode branch this tool pushed (docs/DESIGN.md section 6
 # step 6, section 15 M2). Host-agnostic: a future CI pipeline (GitHub
-# Actions, GitLab CI, ...) invokes this once a host is chosen; it takes a
-# change_plan id, re-derives the admin-path entity names for that plan's
-# connection, and exits non-zero with a reason if the gate should block.
+# Actions, GitLab CI, ...) invokes this once a host is chosen; it re-derives
+# the admin-path entity names for the connection and exits non-zero with a
+# reason if the gate should block.
 #
-# Usage: bin/deck-ci-gate <change_plan_id>
+# Usage: bin/deck-ci-gate --changeset <changeset_id>   (R8: a changeset branch,
+#          checked against its project's delete threshold)
+#        bin/deck-ci-gate <change_plan_id>              (a single-plan branch)
 
-APP_PATH = File.expand_path("../config/environment", __dir__)
+APP_PATH = File.expand_path("../config/environment", __dir__) unless defined?(APP_PATH)
 require_relative "../config/boot"
 require APP_PATH
 
-change_plan_id = ARGV.first
-unless change_plan_id
-  warn "usage: bin/deck-ci-gate <change_plan_id>"
-  exit 2
+usage = "usage: bin/deck-ci-gate --changeset <changeset_id> | <change_plan_id>"
+
+if ARGV.first == "--changeset"
+  changeset_id = ARGV[1]
+  unless changeset_id
+    warn usage
+    exit 2
+  end
+
+  changeset = Changeset.find(changeset_id)
+  connection = changeset.kong_connection
+  subject = "changeset #{changeset.id}"
+  deck_diff = changeset.deck_diff
+  threshold = connection.project&.delete_threshold
+else
+  change_plan_id = ARGV.first
+  unless change_plan_id
+    warn usage
+    exit 2
+  end
+
+  plan = ChangePlan.find(change_plan_id)
+  connection = plan.kong_connection
+  subject = "plan #{plan.id}"
+  deck_diff = plan.deck_diff
+  threshold = nil
 end
 
-plan = ChangePlan.find(change_plan_id)
-connection = plan.kong_connection
 admin_path_names = KongEntity.where(kong_connection: connection, is_admin_path: true).pluck(:name)
-
-result = Kong::CiGate.check(deck_diff: plan.deck_diff, admin_path_names: admin_path_names)
+result = Kong::CiGate.check(deck_diff: deck_diff, admin_path_names: admin_path_names, delete_threshold: threshold)
 
 if result.passed?
-  puts "PASS: #{connection.name} plan #{plan.id}"
+  puts "PASS: #{connection.name} #{subject}"
   exit 0
 else
-  warn "BLOCKED: #{connection.name} plan #{plan.id}"
+  warn "BLOCKED: #{connection.name} #{subject}"
   result.reasons.each { |reason| warn "  - #{reason}" }
   exit 1
 end

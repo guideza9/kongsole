@@ -1,21 +1,27 @@
 module Kong
   # R8.5: has anything moved under a changeset since it began? Two sources,
   # both read-only:
-  #   git  -- commits pushed to the base branch since `base_git_sha`
-  #           (nil when that base cannot be found: unknown, still worth a look);
+  #   git  -- commits pushed to the base branch since `base_git_sha`. No
+  #           base recorded (the repo could not be read when it opened) is
+  #           unknown: shown, not blocking. A base no longer in the branch's
+  #           history means the branch was rewritten: that counts as moved.
   #   Kong -- update/delete items whose entity Kong now stamps with a
   #           different `updated_at` than when the item was proposed, or no
   #           longer has at all.
   # A submit over any of it needs the person to say they looked.
   class ChangesetDrift
-    Report = Struct.new(:commits_behind, :kong_changed, keyword_init: true) do
-      # true / false, or nil when the base could not be found.
+    Report = Struct.new(:commits_behind, :kong_changed, :base_missing, keyword_init: true) do
+      # true / false, or nil when no base was recorded (unknown).
       def git_moved?
-        commits_behind.nil? ? nil : commits_behind.positive?
+        return true if base_missing
+        return nil if commits_behind.nil?
+
+        commits_behind.positive?
       end
 
+      # What a submit must be acknowledged over.
       def any?
-        git_moved? != false || kong_changed.any?
+        git_moved? == true || kong_changed.any?
       end
     end
 
@@ -30,16 +36,12 @@ module Kong
     end
 
     def check
-      Report.new(commits_behind: commits_behind, kong_changed: kong_changed)
+      behind = @changeset.base_git_sha.present? ? @git.commits_since(@changeset.base_git_sha) : nil
+      Report.new(commits_behind: behind, kong_changed: kong_changed,
+        base_missing: @changeset.base_git_sha.present? && behind.nil?)
     end
 
     private
-
-    def commits_behind
-      return nil if @changeset.base_git_sha.blank?
-
-      @git.commits_since(@changeset.base_git_sha)
-    end
 
     def kong_changed
       return [] if @client.nil?

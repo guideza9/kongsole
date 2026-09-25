@@ -28,13 +28,21 @@ RSpec.describe Kong::ChangesetDrift do
     expect(report).not_to be_any
   end
 
-  it "treats a base it cannot find as unknown, which still asks for a look" do
+  it "counts a base no longer in the branch's history as moved -- the branch was rewritten" do
     changeset = create(:changeset, kong_connection: connection, base_git_sha: "0" * 40)
     git = Kong::GitClient.new(connection: connection).pull!
     report = described_class.check(changeset: changeset, git: git, client: nil)
     expect(report.commits_behind).to be_nil
-    expect(report.git_moved?).to be_nil
+    expect(report.git_moved?).to be(true)
     expect(report).to be_any
+  end
+
+  it "calls a changeset that began with no readable base unknown, without blocking" do
+    changeset = create(:changeset, kong_connection: connection, base_git_sha: nil)
+    git = Kong::GitClient.new(connection: connection).pull!
+    report = described_class.check(changeset: changeset, git: git, client: nil)
+    expect(report.git_moved?).to be_nil
+    expect(report).not_to be_any
   end
 
   it "lists update/delete items whose entity changed in Kong since they were proposed" do

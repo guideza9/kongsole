@@ -41,7 +41,6 @@ module Kong
     # The file as it will be pushed: every item, in order, onto the latest
     # git's copy, refusing anything that could not be reproduced byte-for-byte.
     def render!(git)
-      items = @changeset.items.to_a
       items.each { |plan| Kong::DeckRenderer.assert_supported!(plan.entity_type) }
       require_select_tags!
 
@@ -60,6 +59,12 @@ module Kong
     def drift_for(git)
       client = @secret.present? ? Kong::Client.new(connection: @connection, secret: @secret) : nil
       Kong::ChangesetDrift.check(changeset: @changeset, git: git, client: client)
+    end
+
+    # The items as rendered, once: the renderer mints a certificate create's id
+    # onto its plan in memory, and the submitter saves exactly these objects.
+    def items
+      @items ||= @changeset.items.to_a
     end
 
     def gate_for(deck_diff)

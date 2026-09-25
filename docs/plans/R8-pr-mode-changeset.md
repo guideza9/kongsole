@@ -410,7 +410,7 @@ end
 - ล้มก่อน push → `git.discard!`, changeset คง `open`, `failure_reason` (scrubbed เหมือน `ChangeApplier#failure_reason_for`)
 - `Kong::PrBody.markdown(changeset, deck_diff:, gate:) -> String`, `Kong::PrBody.commit_message(changeset) -> String`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -475,9 +475,9 @@ end
 ```
 (`add_create_item` เป็น helper ใน spec ที่สร้าง `change_plan` create service ใน changeset)
 
-- [ ] **Step 2:** FAIL → implement → PASS
-- [ ] **Step 3:** `bin/deck-ci-gate --changeset <id>` test: ผ่าน/ไม่ผ่านตาม `changeset.deck_diff` + `delete_threshold`
-- [ ] **Step 4:** suite 0 failures · Commit `feat(R8.6): submit a changeset as one gated branch with a PR body`
+- [x] **Step 2:** FAIL → implement → PASS
+- [x] **Step 3:** `bin/deck-ci-gate --changeset <id>` test: ผ่าน/ไม่ผ่านตาม `changeset.deck_diff` + `delete_threshold`
+- [x] **Step 4:** suite 0 failures · Commit `feat(R8.6): submit a changeset as one gated branch with a PR body`
 
 ---
 
