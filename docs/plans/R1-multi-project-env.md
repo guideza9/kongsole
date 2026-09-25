@@ -401,7 +401,7 @@ end
 
 **Interfaces:** `Kong::ConnectionsConfigLoader.call(path:) -> Array<KongConnection>`; raise `Kong::ConnectionsConfigLoader::InvalidRegistry` (ข้อความระบุ `project/env` ที่ผิด) — ไม่บันทึกอะไรเลยถ้ามีข้อผิด (transaction)
 
-- [ ] **Step 1: fixtures + test**
+- [x] **Step 1: fixtures + test**
 
 ```yaml
 # spec/fixtures/connections/two_projects.yml
@@ -467,10 +467,10 @@ it "still loads the legacy flat list into project default" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (detect `Hash` with `projects:` vs `Array` legacy; ทุกแถวที่ load → `source: "registry"`; upsert project by key, env by (project, name), connection by env; position = index ใน list + 1; env/connection ที่เคยเป็น registry แต่หายไปจากไฟล์ → **ไม่ลบ** ให้พิมพ์เตือนใน rake output)
-- [ ] **Step 3:** แปลง `config/connections.yml` ของ compose เป็นรูปแบบใหม่: project `local` — env `dev` (rw route), `dev-ro` (`rank: 0`, ro route), `sit`, `uat` (pr) — คงคอมเมนต์อธิบายเดิมทั้งหมด
-- [ ] **Step 4:** PASS · `bin/rails kong:load_connections` กับ compose พิมพ์ `local/dev`, `local/dev-ro`, `local/sit`, `local/uat`
-- [ ] **Step 5:** Commit `feat(R1.4): connections.yml groups envs under projects; pr envs live only here`
+- [x] **Step 2:** FAIL → implement (detect `Hash` with `projects:` vs `Array` legacy; ทุกแถวที่ load → `source: "registry"`; upsert project by key, env by (project, name), connection by env; position = index ใน list + 1; env/connection ที่เคยเป็น registry แต่หายไปจากไฟล์ → **ไม่ลบ** ให้พิมพ์เตือนใน rake output)
+- [x] **Step 3:** แปลง `config/connections.yml` ของ compose เป็นรูปแบบใหม่: project `local` — env `dev` (rw route), `dev-ro` (`rank: 0`, ro route), `sit`, `uat` (pr) — คงคอมเมนต์อธิบายเดิมทั้งหมด
+- [x] **Step 4:** PASS · `bin/rails kong:load_connections` กับ compose พิมพ์ `local/dev`, `local/dev-ro`, `local/sit`, `local/uat`
+- [x] **Step 5:** Commit `feat(R1.4): connections.yml groups envs under projects; pr envs live only here`
 
 ---
 

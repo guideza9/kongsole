@@ -3,6 +3,15 @@
 # pulls this file and supplies their own credential through the web login;
 # nothing here ever authenticates anything by itself.
 #
+# R1: connections are grouped by project, each project listing its envs in
+# its own order. A connection is named <project key>/<env name> ("local/dev")
+# everywhere -- the UI, the API and MCP. Env names dev/sit/uat/prod fix the
+# rank (0/1/2/3); any other name needs an explicit `rank:` (0-3) or the whole
+# file is refused. An env without `apply_mode` is read only -- nothing can be
+# written to it. PR mode (`apply_mode: pr`) can only be set here, never in
+# the UI. Everything in this file shows in Kongsole as "From connections.yml"
+# and is edited here, not there.
+#
 # The local dev/sit values below match docker-compose.yml's two-node Kong CE
 # stack, which fronts its own Admin API through the loopback pattern
 # (docs/DESIGN.md section 1): rw route on kong-admin.internal, ro route on
@@ -10,73 +19,76 @@
 # /etc/hosts pointing at 127.0.0.1 to resolve them locally, or edit the
 # admin_url values to hit the proxy with an explicit Host header instead.
 
-- name: dev-readwrite
-  env: dev
-  # Port 8000 -- the *proxy* port carrying the admin-api-rw route (basic-auth
-  # + acl). Port 8001 is Kong's raw, unauthenticated Admin API listener and
-  # does not go through the loopback guard at all -- pointing admin_url at
-  # it makes every credential probe back as rw, regardless of which Kong
-  # consumer you log in as.
-  admin_url: http://kong-admin.internal:8000
-  apply_mode: direct
-  color_tag: green
-  verify_ssl: false # local compose stack only; never set false against a real endpoint
-  insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
+projects:
+  - key: local
+    name: Local
+    # One config repo per project. uat is the only PR-mode env here: a local
+    # bare repo seeded by `bin/rails kong:seed_config_repo`.
+    git_repo: <%= Rails.root.join("storage", "config_repos", "uat.git") %>
+    git_branch: main
+    # No git_web_url: this is a local bare repo with nothing to browse, so the
+    # review page shows the pushed branch as plain text instead of a link.
+    envs:
+      - name: dev
+        # Port 8000 -- the *proxy* port carrying the admin-api-rw route (basic-auth
+        # + acl). Port 8001 is Kong's raw, unauthenticated Admin API listener and
+        # does not go through the loopback guard at all -- pointing admin_url at
+        # it makes every credential probe back as rw, regardless of which Kong
+        # consumer you log in as.
+        admin_url: http://kong-admin.internal:8000
+        apply_mode: direct
+        color_tag: green
+        verify_ssl: false # local compose stack only; never set false against a real endpoint
+        insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
 
-- name: dev-readonly
-  env: dev
-  # Port 8000, not 8001 -- see dev-readwrite above. This is what actually
-  # routes through admin-api-ro (GET/HEAD only) instead of bypassing it.
-  admin_url: http://kong-admin-ro.internal:8000
-  apply_mode: direct
-  color_tag: green
-  verify_ssl: false # local compose stack only; never set false against a real endpoint
-  insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
+      - name: dev-ro
+        # Not a known env name, so its rank is given: 0, like dev.
+        rank: 0
+        # Port 8000, not 8001 -- see dev above. This is what actually
+        # routes through admin-api-ro (GET/HEAD only) instead of bypassing it.
+        admin_url: http://kong-admin-ro.internal:8000
+        apply_mode: direct
+        color_tag: green
+        verify_ssl: false # local compose stack only; never set false against a real endpoint
+        insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
 
-- name: sit
-  env: sit
-  admin_url: http://localhost:8011
-  apply_mode: direct
-  color_tag: yellow
-  verify_ssl: false
-  insecure_http: true
+      - name: sit
+        admin_url: http://localhost:8011
+        apply_mode: direct
+        color_tag: yellow
+        verify_ssl: false
+        insecure_http: true
 
-# uat: local stand-in until a real uat Kong + git host exist (PRODUCT.md
-# "before M2" -- git host is still undecided). Reuses dev-readonly's ro
-# route (same compose stack, proves writes really fail at the Kong layer)
-# and a local bare repo seeded by `bin/rails kong:seed_config_repo`, so the
-# whole PR-mode pipeline is exercisable end to end without a real host.
-- name: uat
-  env: uat
-  admin_url: http://kong-admin-ro.internal:8000
-  apply_mode: pr
-  color_tag: orange
-  verify_ssl: false # local compose stack only; never set false against a real endpoint
-  insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
-  git_repo: <%= Rails.root.join("storage", "config_repos", "uat.git") %>
-  git_branch: main
-  git_path: uat/kong.yaml
-  select_tags: [managed-by-kongctl]
-  # No git_web_url: this is a local bare repo with nothing to browse, so the
-  # review page shows the pushed branch as plain text instead of a link.
+      # uat: local stand-in until a real uat Kong + git host exist (PRODUCT.md
+      # "before M2" -- git host is still undecided). Reuses dev-ro's ro
+      # route (same compose stack, proves writes really fail at the Kong layer)
+      # and the project's local bare repo, so the whole PR-mode pipeline is
+      # exercisable end to end without a real host.
+      - name: uat
+        admin_url: http://kong-admin-ro.internal:8000
+        apply_mode: pr
+        color_tag: orange
+        verify_ssl: false # local compose stack only; never set false against a real endpoint
+        insecure_http: true # local compose stack only -- the one config-file-only escape hatch, docs/DESIGN.md section 3
+        git_path: uat/kong.yaml
+        select_tags: [managed-by-kongctl]
 
-# git_web_url turns the branch the review page reports into a link. It is a
-# template, not a base URL -- the tool substitutes {branch} and never guesses
-# the host's URL shape, because the host is still undecided (PRODUCT.md,
-# "before M2"). Omit it and the branch stays plain text; nothing else changes.
+# git_web_url (per project) turns the branch the review page reports into a
+# link. It is a template, not a base URL -- the tool substitutes {branch} and
+# never guesses the host's URL shape, because the host is still undecided
+# (PRODUCT.md, "before M2"). Omit it and the branch stays plain text; nothing
+# else changes.
 #
 #   GitHub / GitLab / Gitea  https://host/org/repo/tree/{branch}
 #   Bitbucket Cloud          https://bitbucket.org/org/repo/branch/{branch}
 #   Azure DevOps             https://dev.azure.com/org/proj/_git/repo?version=GB{branch}
 #
 # prod is illustrative -- point admin_url at prod's *read-only* route once it
-# exists (docs/DESIGN.md section 1.3), and set git_repo/git_branch/git_path
-# once a real git host is chosen (M2).
+# exists (docs/DESIGN.md section 1.3), and set the project's git settings and
+# the env's git_path once a real git host is chosen (M2).
 #
-# - name: prod
-#   env: prod
-#   admin_url: https://kong-prod-admin-ro.internal
-#   apply_mode: pr
-#   select_tags: [managed-by-kongctl]
-#   shared_usernames: [kong-admin]
-#   git_web_url: https://github.com/acme/kong-config/tree/{branch}
+#      - name: prod
+#        admin_url: https://kong-prod-admin-ro.internal
+#        apply_mode: pr
+#        git_path: prod/kong.yaml
+#        select_tags: [managed-by-kongctl]

@@ -1,0 +1,17 @@
+projects:
+  - key: project-a
+    name: Project A
+    git_repo: /tmp/project-a.git
+    envs:
+      - { name: dev, apply_mode: direct, admin_url: "http://localhost:8001" }
+      - { name: sit, apply_mode: direct, admin_url: "http://localhost:8011" }
+      - { name: uat, apply_mode: pr, admin_url: "http://localhost:8021", git_path: uat/kong.yaml, select_tags: [managed-by-kongctl] }
+      - { name: pt, rank: 1, apply_mode: direct, admin_url: "http://localhost:8031" }
+      - { name: ps, rank: 3, apply_mode: pr, admin_url: "http://localhost:8041", git_path: ps/kong.yaml, select_tags: [managed-by-kongctl] }
+      - { name: prod, apply_mode: pr, admin_url: "https://kong-a-prod-ro.internal", git_path: prod/kong.yaml, select_tags: [managed-by-kongctl] }
+  - key: project-x
+    name: Project X
+    envs:
+      - { name: nonprod, rank: 1, apply_mode: direct, admin_url: "http://localhost:8051" }
+      - { name: pt, rank: 1, admin_url: "http://localhost:8061" }
+      - { name: prod, apply_mode: pr, admin_url: "https://kong-x-prod-ro.internal", git_path: prod/kong.yaml, select_tags: [managed-by-kongctl] }

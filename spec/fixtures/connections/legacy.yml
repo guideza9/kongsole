@@ -1,0 +1,8 @@
+- name: dev-readwrite
+  env: dev
+  admin_url: http://localhost:8001
+  apply_mode: direct
+- name: dev-readonly
+  env: dev
+  admin_url: http://localhost:8002
+  apply_mode: direct
