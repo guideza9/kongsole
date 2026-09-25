@@ -63,9 +63,30 @@ RSpec.describe Kong::LegacyProjectBackfill do
     expect(env.project).to have_attributes(key: "default", git_repo: "/tmp/uat.git", git_branch: "main")
   end
 
-  it "refuses to merge PR connections that push to different repos into one project" do
-    legacy(name: "uat", env: "uat", rank: 2, admin_url: "http://localhost:8001", color_tag: "orange", apply_mode: "pr", git_repo: "/tmp/a.git")
-    legacy(name: "prod", env: "prod", rank: 3, admin_url: "http://localhost:8001", color_tag: "red", apply_mode: "pr", git_repo: "/tmp/b.git")
-    expect { described_class.call }.to raise_error(described_class::ConflictingRepos, %r{/tmp/a\.git.*/tmp/b\.git})
+  describe "PR connections that push to different repos" do
+    let(:pr_attrs) { { admin_url: "http://localhost:8001", apply_mode: "pr" } }
+
+    before do
+      legacy(pr_attrs.merge(name: "uat", env: "uat", rank: 2, color_tag: "orange", git_repo: "/tmp/a.git"))
+      legacy(pr_attrs.merge(name: "prod", env: "prod", rank: 3, color_tag: "red", git_repo: "/tmp/b.git"))
+    end
+
+    # R1.16: the refusal comes while the migration is half done, when
+    # kong:load_connections cannot run -- so it says what can be done then.
+    it "refuses, naming each PR connection with its repo and how to continue from this schema" do
+      expect { described_class.call }.to raise_error(described_class::ConflictingRepos) { |e|
+        expect(e.message).to include("uat → /tmp/a.git", "prod → /tmp/b.git")
+        expect(e.message).to include("Nothing was changed", "bin/rails console", "update_all(git_repo:", "bin/rails db:migrate")
+        expect(e.message).not_to include("kong:load_connections")
+      }
+      expect(Project.count).to eq(0)
+    end
+
+    it "goes through once the connections are pointed at one repo, as the message says" do
+      KongConnection.where(apply_mode: "pr").update_all(git_repo: "/tmp/a.git")
+
+      expect { described_class.call }.not_to raise_error
+      expect(Project.find_by!(key: "default").git_repo).to eq("/tmp/a.git")
+    end
   end
 end

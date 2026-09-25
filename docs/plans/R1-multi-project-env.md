@@ -898,7 +898,7 @@ end
 **ทำไม:** ข้อค้าง 3 — ข้อความเดิมบอกให้แก้ `config/connections.yml` "before migrating" แต่ตอนนั้น `kong:load_connections` ใช้ไม่ได้
 (`column kong_connections.project_env_id does not exist`) · ไม่เปลี่ยนพฤติกรรม: ยังปฏิเสธเหมือนเดิม
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/legacy_project_backfill_spec.rb — แก้ it เดิมที่ตรวจ ConflictingRepos + เพิ่ม
@@ -924,11 +924,11 @@ it "goes through once the connections are pointed at one repo, as the message sa
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement ข้อความ (ภาษาอังกฤษ หลายบรรทัด): รายการ `name → repo` ต่อบรรทัด · "Nothing was changed: this migration was rolled back." ·
+- [x] **Step 2:** FAIL → implement ข้อความ (ภาษาอังกฤษ หลายบรรทัด): รายการ `name → repo` ต่อบรรทัด · "Nothing was changed: this migration was rolled back." ·
   ทางที่ทำได้ ณ schema นั้น: ใน `bin/rails console` ใช้ `KongConnection.where(name: [...]).update_all(git_repo: "<repo ที่ถูก>")` หรือลบ connection ที่ไม่ใช้แล้ว → `bin/rails db:migrate` อีกครั้ง ·
   บอกว่าหลัง migrate ทุก connection อยู่ใน project `default` เป็น `default/<ชื่อเดิม>`
-- [ ] **Step 3:** เพิ่มขั้นตอนเดียวกันในคอลัมน์ Rollback แถว #3 ของ `00-roadmap.md`
-- [ ] **Step 4:** PASS · suite 0 failures · Commit `fix(R1.16): the conflicting-repos refusal says how to continue from where the migration stopped`
+- [x] **Step 3:** เพิ่มขั้นตอนเดียวกันในคอลัมน์ Rollback แถว #3 ของ `00-roadmap.md`
+- [x] **Step 4:** PASS · suite 0 failures · Commit `fix(R1.16): the conflicting-repos refusal says how to continue from where the migration stopped`
 
 ---
 

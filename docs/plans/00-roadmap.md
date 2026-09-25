@@ -47,7 +47,7 @@ T0 ──► R3 ──► R1 ──► R8 ──► R2
 |---|---|---|---|---|
 | 1 | R1 | `CreateProjects` (รวม `network_note`, `delete_threshold`) | drop table | ไม่มีข้อมูลอื่นพึ่ง ก่อน #3 ถอย |
 | 2 | R1 | `CreateProjectEnvs` | drop table | เหมือน #1 |
-| 3 | R1 | `AddProjectEnvToKongConnections` (+ backfill ใส่ project `default`, env = ชื่อ connection เดิม) | ลบ column `project_env_id` (ข้อมูล project/env หาย, connection เดิมยังอยู่ครบ credential ไม่แตะ) | `bin/rails db:rollback STEP=3` หลังถอดโค้ด R1; `connections.yml` รูปแบบเดิมยังโหลดได้ |
+| 3 | R1 | `AddProjectEnvToKongConnections` (+ backfill ใส่ project `default`, env = ชื่อ connection เดิม) | ลบ column `project_env_id` (ข้อมูล project/env หาย, connection เดิมยังอยู่ครบ credential ไม่แตะ) | `bin/rails db:rollback STEP=3` หลังถอดโค้ด R1; `connections.yml` รูปแบบเดิมยังโหลดได้ · migrate กลับถูกปฏิเสธ (`ConflictingRepos`) ถ้า PR connection ชี้ git repo ต่างกัน — ไม่มีอะไรเปลี่ยน: ใน `bin/rails console` ใช้ `KongConnection.where(name: [...]).update_all(git_repo: "<repo ที่ถูก>")` หรือลบ connection ที่ไม่ใช้ แล้ว `bin/rails db:migrate` อีกครั้ง (R1.16) |
 | 4 | R1 | `MakeKongConnectionApplyModeNullable` (drop default `direct`, allow null) | **ปฏิเสธ** ถ้ามีแถว `apply_mode IS NULL` พร้อมรายชื่อ; ถ้าไม่มี คืน default+not null | ก่อน rollback ต้องกำหนด apply_mode ให้ทุก connection ที่ยังว่าง (ห้ามเดาเป็น direct — นั่นคือบั๊กที่ R1 ปิด) |
 | 5 | R8 | `CreateChangesets` | drop table | ต้อง rollback #6 ก่อน |
 | 6 | R8 | `AddChangesetToChangePlans` (+ `provisional_kong_id`) | ลบ column; plan PR ที่ค้างใน changeset กลายเป็น plan เดี่ยวที่หมดอายุแล้ว | ปิด changeset ที่ `open` ทั้งหมดก่อน (หรือยอมให้หาย — ไม่มีอะไรถูก push) |

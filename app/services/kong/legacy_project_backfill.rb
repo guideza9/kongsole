@@ -48,15 +48,28 @@ module Kong
     def adopt_git_settings(project, connections)
       pr = connections.select { |c| c.apply_mode == "pr" }
       repos = pr.map(&:git_repo).compact_blank.uniq
-      if repos.size > 1
-        raise ConflictingRepos, "PR connections #{pr.map(&:name).join(', ')} push to different repos " \
-          "(#{repos.join(', ')}); split them into projects in config/connections.yml before migrating"
-      end
+      raise ConflictingRepos, conflicting_repos_message(pr) if repos.size > 1
 
       GIT_FIELDS.each do |field|
         value = pr.map { |c| c.public_send(field) }.compact_blank.first
         project.public_send("#{field}=", value) if value && project.public_send(field).blank?
       end
+    end
+
+    # R1.16: raised while the migration is half done -- kong_connections has no
+    # project_env_id yet, so kong:load_connections cannot run. The way on is a
+    # console edit of the rows as they are now, then the migration again.
+    def conflicting_repos_message(pr)
+      names = pr.map { |c| c.name.inspect }.join(", ")
+      <<~MSG
+        PR connections push to different git repos, and one project can have only one:
+        #{pr.map { |c| "  #{c.name} → #{c.git_repo.presence || '(none)'}" }.join("\n")}
+        Nothing was changed: this migration was rolled back.
+        To continue, open bin/rails console and either point them at one repo:
+          KongConnection.where(name: [#{names}]).update_all(git_repo: "<the right repo>")
+        or remove the connections you no longer use, then run bin/rails db:migrate again.
+        After migrating, every connection is in project "default", named default/<its old name>.
+      MSG
     end
 
     # A rollback of the migration drops the link but keeps the renamed rows
