@@ -5,7 +5,7 @@ class ApplicationController < ActionController::Base
   # Changes to the importmap will invalidate the etag for HTML responses
   stale_when_importmap_changes
 
-  helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?
+  helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?, :current_project_envs
 
   private
 
@@ -25,6 +25,24 @@ class ApplicationController < ActionController::Base
     return @current_connection if defined?(@current_connection)
 
     @current_connection = session[:connection_id] && KongConnection.find_by(id: session[:connection_id])
+  end
+
+  # R1.7: the envs of the logged-in connection's project, in the project's
+  # order, for the header switcher -- each with its connection (nil when the
+  # env has none yet, so it shows but cannot be picked) and whether it is the
+  # one this session is in. [] when nobody is logged in.
+  def current_project_envs
+    return @current_project_envs if defined?(@current_project_envs)
+
+    project = current_connection&.project
+    @current_project_envs =
+      if project
+        project.project_envs.includes(:kong_connection).map do |env|
+          { env: env, connection: env.kong_connection, current: env.id == current_connection.project_env_id }
+        end
+      else
+        []
+      end
   end
 
   def current_operator

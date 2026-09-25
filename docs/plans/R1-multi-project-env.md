@@ -596,7 +596,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R1.2 · **ไฟล์ที่แก้ได้:** `app/controllers/application_controller.rb`, `spec/requests/connection_switcher_spec.rb` (create)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -620,7 +620,7 @@ end
 ```
 (สร้าง `spec/support/sign_in_helper.rb` — `module SignInHelper; def sign_in_to(connection, access: :rw, username: "alice")` — stub `GET /`, probe `PATCH #{Kong::AccessProbe::PROBE_PATH}` (404 `Not found` = rw, 404 `no Route matched` = ro), `GET /consumers/<username>`, `GET /routes` แบบเดียวกับ `plugins_spec.rb#sign_in` แล้ว `post login_connection_path`; include ใน `rails_helper` สำหรับ `type: :request`)
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R1.7): the header knows the current project's envs`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R1.7): the header knows the current project's envs`
 
 ---
 
