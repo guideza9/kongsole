@@ -1,0 +1,130 @@
+<%# R2.6: a new route under one service. What it matches comes first and is
+    shown back as a request line (the .route-match mark the lists use) while
+    it is typed, with the routes it would compete with underneath -- a
+    warning, never a block. Protocols and path handling keep their defaults
+    folded away. The server (RouteForm) still decides. %>
+<% pr = current_connection.apply_mode == "pr" %>
+<% field_error = ->(field) { form.errors[field].any? ? "error-route-#{field}".tr("_", "-") : nil } %>
+<% described = ->(field) { [ hint_describedby(:route, field), field_error.(field) ].compact.join(" ") } %>
+<% invalid = ->(field) { form.errors[field].any? || nil } %>
+<% error_line = ->(field) { form.errors[field].any? ? tag.p(form.errors.full_messages_for(field).to_sentence, id: field_error.(field), class: "field-error") : nil } %>
+
+<%= form_with model: form, url: routes_path, method: :post, class: "max-w-xl",
+      data: { controller: "route-overlap",
+              route_overlap_url_value: routes_overlap_path,
+              route_overlap_reasons_value: t("hints.risks.route_overlap.reasons").to_json,
+              route_overlap_title_value: t("hints.risks.route_overlap.title"),
+              route_overlap_none_value: t("hints.risks.route_overlap.none") } do |f| %>
+  <%= hidden_field_tag :service_id, service_kong_id %>
+  <% if form.errors.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
+      <p class="font-medium">Nothing was proposed. Fix <%= pluralize(form.errors.count, "problem") %> and send it again:</p>
+      <ul class="mt-1 list-disc pl-5"><% form.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    <% end %>
+  <% end %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Route</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :name, required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
+              autofocus: form.name.blank?, class: "field-input mt-1 font-mono", aria: { describedby: described.(:name), invalid: invalid.(:name) } %>
+        <%= error_line.(:name) %>
+        <%= field_hint(:route, :name) %>
+      </div>
+      <div>
+        <%= f.label :tags, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :tags, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+              aria: { describedby: described.(:tags) } %>
+        <% if current_connection.select_tags.present? %>
+          <p class="mt-1 text-xs text-ink-soft">Always added: <% current_connection.select_tags.each do |tag| %><code class="font-mono text-ink"><%= tag %></code> <% end %></p>
+        <% end %>
+        <%= field_hint(:route, :tags) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Which requests it takes</h2>
+    <% if form.errors[:base].any? %>
+      <p class="field-error mb-3" id="error-route-base"><%= form.errors[:base].to_sentence %></p>
+    <% end %>
+    <div class="grid gap-4">
+      <fieldset aria-describedby="<%= described.(:methods) %>">
+        <legend class="block text-sm font-medium text-ink">Methods</legend>
+        <div class="method-picks mt-1">
+          <% RouteForm::METHODS.each do |method| %>
+            <label class="method-pick">
+              <%= check_box_tag "route_form[methods][]", method, form.methods_list.include?(method), id: "route_form_methods_#{method.downcase}",
+                    class: "method-pick__box", aria: { describedby: hint_describedby(:route, :methods) },
+                    data: { route_overlap_target: "method", action: "route-overlap#changed" } %>
+              <span class="method-pick__label"><%= method %></span>
+            </label>
+          <% end %>
+        </div>
+        <%= error_line.(:methods) %>
+        <%= field_hint(:route, :methods) %>
+      </fieldset>
+      <div>
+        <%= f.label :hosts, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_area :hosts, rows: 2, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+              data: { route_overlap_target: "hosts", action: "route-overlap#changed" },
+              aria: { describedby: described.(:hosts), invalid: invalid.(:hosts) } %>
+        <%= error_line.(:hosts) %>
+        <%= field_hint(:route, :hosts) %>
+      </div>
+      <div>
+        <%= f.label :paths, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_area :paths, rows: 2, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+              data: { route_overlap_target: "paths", action: "route-overlap#changed" },
+              aria: { describedby: described.(:paths), invalid: invalid.(:paths) } %>
+        <%= error_line.(:paths) %>
+        <%= field_hint(:route, :paths) %>
+      </div>
+
+      <div class="route-preview" data-route-overlap-target="preview" hidden>
+        <p class="route-preview__label">Takes</p>
+        <div data-route-overlap-target="line"></div>
+      </div>
+      <div class="route-overlaps-live" aria-live="polite" data-route-overlap-target="list"></div>
+    </div>
+  </section>
+
+  <details class="disclosure panel mt-4" <%= "open" if (%i[protocols strip_path preserve_host] & form.errors.attribute_names).any? %>>
+    <summary>Protocols and path handling <span><%= form.protocols_list.join(", ") %> · <%= form.strip_path ? "strips the path" : "keeps the path" %></span></summary>
+    <div class="grid gap-4 px-4 pb-4 pt-1">
+      <fieldset aria-describedby="<%= described.(:protocols) %>">
+        <legend class="block text-sm font-medium text-ink">Protocols</legend>
+        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+          <% RouteForm::PROTOCOLS.each do |protocol| %>
+            <label class="inline-flex items-center gap-2 text-sm font-mono text-ink">
+              <%= check_box_tag "route_form[protocols][]", protocol, form.protocols_list.include?(protocol), id: "route_form_protocols_#{protocol}",
+                    aria: { describedby: hint_describedby(:route, :protocols) } %> <%= protocol %>
+            </label>
+          <% end %>
+        </div>
+        <%= error_line.(:protocols) %>
+        <%= field_hint(:route, :protocols) %>
+      </fieldset>
+      <div>
+        <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
+          <%= f.check_box :strip_path, aria: { describedby: described.(:strip_path) } %> Strip the matched path
+        </label>
+        <%= field_hint(:route, :strip_path) %>
+      </div>
+      <div>
+        <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
+          <%= f.check_box :preserve_host, aria: { describedby: described.(:preserve_host) } %> Preserve the client's Host header
+        </label>
+        <%= field_hint(:route, :preserve_host) %>
+      </div>
+    </div>
+  </details>
+
+  <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <%= f.submit pr ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
+    <%= link_to "Cancel", entities_path(type: "service"), class: "btn btn-text" %>
+    <p class="basis-full text-xs text-ink-soft"><%= t(pr ? "hints.pages.route_new.pr_note" : "hints.pages.route_new.direct_note", env: current_connection.name) %></p>
+  </div>
+<% end %>

@@ -203,6 +203,47 @@ RSpec.describe "Console consistency", type: :request do
         expect(page.at_css("main input[type=submit]")["value"]).to eq("Add to changeset")
       end
     end
+
+    # R2.6: the route form opens under its service, says what it matches as it
+    # is typed, and warns (never blocks) about routes it would compete with.
+    describe "the route form" do
+      let!(:service) { create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing") }
+
+      def route(name, paths:, hosts: [], methods: [])
+        create(:kong_entity, kong_connection: connection, entity_type: "route", name: name, parent_type: "service",
+          parent_kong_id: service.kong_id, data: { "name" => name, "paths" => paths, "hosts" => hosts, "methods" => methods })
+      end
+
+      it "names its service, describes every field, and has a polite live region for overlaps" do
+        sign_in
+        get new_route_path(service_id: service.kong_id)
+        expect(page.at_css("main").text).to include("billing")
+        expect(undescribed_fields).to eq([])
+        expect(page.at_css("main [aria-live=polite][data-route-overlap-target=list]")).to be_present
+        expect(page.at_css("main input[type=submit]")["value"]).to eq("Review change")
+      end
+
+      it "names each overlapping route and why, in words, on the plan review" do
+        sign_in
+        route("same", paths: %w[/billing])
+        route("shorter", paths: %w[/bill])
+        route("regex", paths: [ "~/billing/v[0-9]+$" ])
+        post routes_path, params: { service_id: service.kong_id,
+          route_form: { name: "billing-v1", protocols: %w[http https], paths: "/billing", methods: %w[GET] } }
+        get change_plan_path(ChangePlan.last)
+
+        overlaps = page.at_css("main [data-overlaps]")
+        expect(overlaps.text).to include("same", "Same path", "shorter", "Path prefix", "regex", "Can't tell (regex)")
+      end
+
+      it "says nothing about overlaps when there are none" do
+        sign_in
+        post routes_path, params: { service_id: service.kong_id,
+          route_form: { name: "billing-v1", protocols: %w[http https], paths: "/billing", methods: %w[GET] } }
+        get change_plan_path(ChangePlan.last)
+        expect(page.at_css("main [data-overlaps]")).to be_nil
+      end
+    end
   end
 
   describe "health" do

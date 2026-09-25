@@ -1,0 +1,18 @@
+<%# R2.6: the routes a new route would compete with (Kong::RouteOverlap), on
+    the plan review. A warning, never a block: each route by name, its
+    service, and why -- in words, not a code. Nothing at all when none. %>
+<% if overlaps.present? %>
+  <%= render layout: "shared/notice", locals: { tone: :warning, class: "risk-notice mb-5", data: { overlaps: true } } do %>
+    <p class="risk-notice__title"><%= t("hints.risks.route_overlap.title") %></p>
+    <ul class="route-overlaps">
+      <% overlaps.each do |overlap| %>
+        <li class="route-overlaps__item">
+          <span class="route-overlaps__name"><%= overlap[:route_name] %></span>
+          <% if overlap[:service_name].present? %><span class="route-overlaps__service">on <%= overlap[:service_name] %></span><% end %>
+          <span class="route-overlaps__reason route-overlaps__reason--<%= overlap[:reason] %>"><%= t("hints.risks.route_overlap.reasons.#{overlap[:reason]}") %></span>
+        </li>
+      <% end %>
+    </ul>
+    <p class="risk-notice__body"><%= t("hints.risks.route_overlap.body") %></p>
+  <% end %>
+<% end %>

@@ -82,6 +82,8 @@
   <% end %>
 <% end %>
 
+<%= render "routes/overlaps", overlaps: @route_overlaps %>
+
 <% if @dependent_targets.present? %>
   <%= render layout: "shared/notice", locals: { tone: :warning, role: "status", tag: :p, class: "mb-5" } do %>
     Deleting this upstream also removes its <%= @dependent_targets.size %> target<%= "s" unless @dependent_targets.size == 1 %>: <%= @dependent_targets.map(&:name).join(", ") %>

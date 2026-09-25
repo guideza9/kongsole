@@ -147,7 +147,27 @@ en:
           help: "The longest wait between two reads of the upstream's answer, in milliseconds."
         write_timeout:
           help: "The longest wait between two writes of the request to the upstream, in milliseconds."
-      route: {}
+      route:
+        name:
+          help: "How this route is known in Kong and in decK files, which need one to place it. Letters, digits and . _ ~ - only."
+          example: "billing-v1"
+        tags:
+          help: "Comma-separated labels for finding it later. This environment's own tags are added for you."
+          example: "team-payments"
+        methods:
+          help: "The HTTP methods it takes. None ticked means every method."
+        hosts:
+          help: "One per line. Empty means every host. A * may stand for the first or the last part only."
+          example: "api.example.com"
+        paths:
+          help: "One per line, each starting with /. Kong matches the start of the path, so /billing also takes /billing/v2 and /billings. Start with ~ for a regular expression."
+          example: "/billing"
+        protocols:
+          help: "Which requests it takes, by protocol. Most HTTP routes take both http and https."
+        strip_path:
+          help: "On: the matched path is cut off before forwarding, so /billing/invoices reaches the service as /invoices."
+        preserve_host:
+          help: "On: the service sees the client's Host header instead of its own host name."
       upstream:
         name:
           help: "The virtual hostname a service points at to use this upstream. Services reach it as http://<name>."
@@ -301,6 +321,15 @@ en:
           body: "Credentials let this consumer log in through key-auth or basic-auth. Their secrets are never shown here."
 
     risks:
+      route_overlap:
+        title: "Other routes already take some of these requests"
+        body: "Kong sends a request to one route only, so one of them stops receiving it. This is a warning; you can still go ahead."
+        checking: "Checking for routes that overlap..."
+        none: "No other route on this environment takes these requests."
+        reasons:
+          exact: "Same path"
+          prefix: "Path prefix"
+          unknown: "Can't tell (regex)"
       delete_entity:
         title: "Deleting removes it from Kong"
         body: "Anything that points at it stops working. Kong refuses to delete a service that still has routes; a deleted consumer loses its credentials, and a deleted upstream its targets."
@@ -416,6 +445,10 @@ en:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:
         intro: "Changes here apply to this machine only. The key stays: every connection in the project is named after it."
+      route_new:
+        intro: "Which requests reach the service. Kong needs at least one method, host or path to tell them apart."
+        direct_note: "Next you see exactly what will be created on %{env}, with any routes it overlaps, and apply it from there."
+        pr_note: "On %{env} this becomes an item of the changeset, under its service. Nothing is written to Kong."
       service_new:
         intro: "Where Kong forwards requests. Add routes to it afterwards; a service with no route takes no traffic."
         direct_note: "Next you see exactly what will be created on %{env}, and apply it from there."

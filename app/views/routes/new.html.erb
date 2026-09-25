@@ -1,49 +1,7 @@
-<% content_for :title, "Add route" %>
+<% content_for :title, "Add route to #{@service_label}" %>
 
-<h1 class="page-title mb-1">Add route</h1>
-<p class="text-sm mb-6 text-ink-soft">Service: <span class="font-mono"><%= @service_label %></span></p>
+<p class="page-back"><%= link_to "Services", entities_path(type: "service") %></p>
+<h1 class="page-title mb-1">Add route to <span class="font-mono"><%= @service_label %></span></h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.route_new.intro") %></p>
 
-<%= form_with model: @form, url: routes_path, method: :post, class: "max-w-xl grid gap-4" do |f| %>
-  <%= hidden_field_tag :service_id, @service_kong_id %>
-  <% if @form.errors.any? %>
-    <div role="alert">
-      <ul><% @form.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
-    </div>
-  <% end %>
-
-  <div>
-    <%= f.label :name %>
-    <%= f.text_field :name, class: "field-input" %>
-  </div>
-  <fieldset>
-    <legend>Protocols</legend>
-    <% RouteForm::PROTOCOLS.each do |protocol| %>
-      <label><%= check_box_tag "route_form[protocols][]", protocol, @form.protocols_list.include?(protocol), id: "route_form_protocols_#{protocol}" %> <%= protocol %></label>
-    <% end %>
-  </fieldset>
-  <fieldset>
-    <legend>Methods</legend>
-    <% RouteForm::METHODS.each do |method| %>
-      <label><%= check_box_tag "route_form[methods][]", method, @form.methods_list.include?(method), id: "route_form_methods_#{method}" %> <%= method %></label>
-    <% end %>
-  </fieldset>
-  <div>
-    <%= f.label :hosts, "Hosts (one per line)" %>
-    <%= f.text_area :hosts, rows: 3, class: "field-input" %>
-  </div>
-  <div>
-    <%= f.label :paths, "Paths (one per line)" %>
-    <%= f.text_area :paths, rows: 3, class: "field-input" %>
-  </div>
-  <div><%= f.check_box :strip_path %> <%= f.label :strip_path %></div>
-  <div><%= f.check_box :preserve_host %> <%= f.label :preserve_host %></div>
-  <div>
-    <%= f.label :tags %>
-    <%= f.text_field :tags, class: "field-input" %>
-  </div>
-
-  <div>
-    <%= f.submit current_connection.apply_mode == "pr" ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
-    <%= link_to "Cancel", entities_path(type: "service"), class: "btn-sm btn-text" %>
-  </div>
-<% end %>
+<%= render "form", form: @form, service_kong_id: @service_kong_id %>

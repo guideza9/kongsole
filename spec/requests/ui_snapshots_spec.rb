@@ -291,6 +291,27 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("service-new-pr")
     end
 
+    it "route form and the review of an overlapping route (R2.6)" do
+      connection.update!(access_level: "rw")
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+      { "billing-legacy" => %w[/billing], "bill" => %w[/bill], "billing-versions" => [ "~/billing/v[0-9]+$" ] }.each do |name, paths|
+        create(:kong_entity, kong_connection: connection, entity_type: "route", name: name, parent_type: "service",
+          parent_kong_id: service.kong_id, data: { "name" => name, "paths" => paths, "hosts" => [], "methods" => [] })
+      end
+
+      get new_route_path(service_id: service.kong_id)
+      snapshot!("route-new")
+
+      post routes_path, params: { service_id: service.kong_id, route_form: { name: "", paths: "billing", hosts: "api.*.example.com" } }
+      snapshot!("route-new-errors", status: :unprocessable_entity)
+
+      post routes_path, params: { service_id: service.kong_id,
+        route_form: { name: "billing-v1", protocols: %w[http https], paths: "/billing", methods: %w[GET POST] } }
+      get change_plan_path(ChangePlan.last)
+      snapshot!("change-plan-route-overlap")
+    end
+
   end
   # R8.9: the changeset pages in each state.
   describe "changesets" do
