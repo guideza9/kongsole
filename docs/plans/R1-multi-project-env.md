@@ -728,6 +728,18 @@ end
 - [ ] เครือข่าย: สร้าง connection local ชี้ `https://kong.nonexistent.invalid` ใน project ที่มี `network_note` → login แสดง `network_dns_failed` + note, หน้า Connections แสดง "Unreachable from this machine"; `docker compose stop kong-1 kong-2` แล้ว login `local/dev` → `network_refused` (ไม่ใช่ "Admin API down"); start กลับ
 - [ ] ภาพหน้าจอ 390/1280 ของ connections, env form, header
 
+### ผลตรวจ R1.12 (2026-09-25, cloud session — ไม่มี Docker/compose)
+
+- [x] โหลด `two_projects.yml` → หน้า Connections แสดง Project A 6 env, Project X 3 env ตามลำดับ (snapshot `connections-index-projects`, consistency_spec)
+- [x] migration 4 ตัว: up → rollback STEP=4 → up บน DB scratch (test env) ที่มีแถว legacy — สำเร็จ, credential อยู่ครบ, ชื่อคงเป็น `default/<ชื่อเดิม>`
+  (เจอบั๊ก 2 จุดระหว่างตรวจและแก้แล้ว: env ซ้ำเมื่อ rollback 1 ขั้นแล้ว migrate ใหม่ · ชื่อกลายเป็น `default/default-…` หลัง rollback ทั้ง 4)
+- [x] rollback ปฏิเสธพร้อมรายชื่อเมื่อมี connection ที่ apply_mode ว่าง
+- [x] API/MCP: `kong_connections` คืน `project/env`; ชื่อไม่มี `/` → 401 บอกให้ใช้ `project/env` (request spec + vitest)
+- [x] credential: `log_filtering_spec` ผ่าน · `grep "Basic " log/test.log` เจอเฉพาะ fixture `"Basic abc"` · API connections ไม่มี `auth_secret` (spec เทียบ hash ตรงตัว)
+- [ ] **ต้องทำบนเครื่องที่มี compose:** login `local/dev` + switcher → uat; สร้าง project/env `nonprod` + connection แล้ว login;
+  ตั้ง apply_mode = Not set แล้ว `kong_plan` ต้อง 403; `https://kong.nonexistent.invalid` → `network_dns_failed` + note;
+  `docker compose stop kong-1 kong-2` → `network_refused`; ภาพหน้าจอจากแอปจริง (ตอนนี้มีจาก snapshot)
+
 ## เกณฑ์ปิดงาน R1
 
 - [ ] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน

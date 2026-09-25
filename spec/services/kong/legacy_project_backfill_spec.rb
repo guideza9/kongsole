@@ -48,6 +48,12 @@ RSpec.describe Kong::LegacyProjectBackfill do
     expect(c.reload).to have_attributes(project_env_id: env.id, name: "default/sit")
   end
 
+  it "keeps the name after a full rollback dropped projects, instead of prefixing it twice" do
+    c = legacy(name: "default/dev-readwrite", env: "dev", rank: 0, admin_url: "http://localhost:8001", color_tag: "green", apply_mode: "direct")
+    described_class.call
+    expect(c.reload.name).to eq("default/dev-readwrite")
+  end
+
   it "keeps a PR env's git settings, marking it as coming from connections.yml" do
     legacy(name: "uat", env: "uat", rank: 2, admin_url: "http://localhost:8001", color_tag: "orange", apply_mode: "pr",
       git_repo: "/tmp/uat.git", git_branch: "main", git_path: "uat/kong.yaml", select_tags: [ "managed-by-kongctl" ])

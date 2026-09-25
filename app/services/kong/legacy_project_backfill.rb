@@ -71,7 +71,9 @@ module Kong
     end
 
     def build_env(project, connection)
-      name = free_env_name(project, connection.name)
+      # A row renamed default/<env> by an earlier run, whose envs a full
+      # rollback dropped, keeps <env> rather than becoming default/default-<env>.
+      name = free_env_name(project, connection.name.to_s.delete_prefix("#{PROJECT_KEY}/"))
       project.project_envs.build(
         name: name,
         position: next_position(project),
