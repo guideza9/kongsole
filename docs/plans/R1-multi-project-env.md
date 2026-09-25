@@ -543,7 +543,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R1.2 · **ไฟล์ที่แก้ได้:** `app/controllers/api/v1/base_controller.rb`, `app/controllers/api/v1/connections_controller.rb`, `mcp/src/tools.ts` (description), `mcp/src/tools.test.ts`, `mcp/README.md`, `spec/requests/api/v1/connections_spec.rb` (create ถ้าไม่มี), `spec/requests/api/v1/entities_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/api/v1/connections_spec.rb
@@ -586,9 +586,9 @@ RSpec.describe "API connections", type: :request do
 end
 ```
 
-- [ ] **Step 2:** FAIL → `current_pat_connection` ใช้ `find_by(name: params[:connection])` ต่อไปได้ เพราะ `name` = qualified name แล้ว (R1.2) — เพิ่มการปฏิเสธชื่อที่ไม่มี `/` ด้วยข้อความ "use project/env"
-- [ ] **Step 3:** MCP: ทุก `connection: z.string()` → `.describe('Connection as "project/env", e.g. "project-a/uat" (required, no default)')` · test ใน `tools.test.ts` ตรวจว่า description มี `project/env`
-- [ ] **Step 4:** PASS (rspec + vitest) · Commit `feat(R1.6): API and MCP name connections project/env`
+- [x] **Step 2:** FAIL → `current_pat_connection` ใช้ `find_by(name: params[:connection])` ต่อไปได้ เพราะ `name` = qualified name แล้ว (R1.2) — เพิ่มการปฏิเสธชื่อที่ไม่มี `/` ด้วยข้อความ "use project/env"
+- [x] **Step 3:** MCP: ทุก `connection: z.string()` → `.describe('Connection as "project/env", e.g. "project-a/uat" (required, no default)')` · test ใน `tools.test.ts` ตรวจว่า description มี `project/env`
+- [x] **Step 4:** PASS (rspec + vitest) · Commit `feat(R1.6): API and MCP name connections project/env`
 
 ---
 

@@ -14,7 +14,8 @@ module Api
 
       def serialize(connection)
         {
-          "name" => connection.name,
+          "name" => connection.name, # project/env -- what every other tool takes as `connection`
+          "project" => connection.project&.key,
           "env" => connection.env,
           "rank" => connection.rank,
           "apply_mode" => connection.apply_mode,

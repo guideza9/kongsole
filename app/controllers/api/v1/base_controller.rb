@@ -34,11 +34,23 @@ module Api
           end
       end
 
+      # R1.6: a connection is named "project/env". A bare env name ("uat")
+      # would be ambiguous across projects, so it is refused with a message
+      # that says how to name one, never guessed.
       def require_connection!
         return if current_pat_connection
 
-        render json: { error: "connection #{params[:connection].inspect} is required and must be one this token is bound to" },
-          status: :unauthorized
+        render json: { error: connection_error_message }, status: :unauthorized
+      end
+
+      def connection_error_message
+        raw = params[:connection]
+        if raw.is_a?(String) && raw.present? && !raw.include?("/")
+          "connection #{raw.inspect} is not a project/env name -- name it as project/env, e.g. \"project-a/#{raw}\" " \
+            "(kong_connections lists the ones this token is bound to)"
+        else
+          "connection #{raw.inspect} is required, as a project/env this token is bound to"
+        end
       end
     end
   end
