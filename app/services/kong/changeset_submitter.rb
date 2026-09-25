@@ -9,7 +9,7 @@ module Kong
     BRANCH_PREFIX = "kongctl/changeset-"
 
     def initialize(changeset:, client:, secret:, actor_username:, actor_operator:, acknowledge_drift: false,
-                    env_acknowledged: false)
+                    env_acknowledged: false, delete_confirmations: {})
       @changeset = changeset
       @connection = changeset.kong_connection
       @client = client
@@ -18,12 +18,30 @@ module Kong
       @actor_operator = actor_operator
       @acknowledge_drift = acknowledge_drift == true
       @env_acknowledged = env_acknowledged == true
+      @delete_confirmations = delete_confirmations.to_h.transform_keys(&:to_s)
       @renderer = Kong::ChangesetRenderer.new(changeset: changeset, secret: secret)
       @env_vars = {}
     end
 
+    # The changeset row is locked for the whole submit, so no item is added,
+    # removed or abandoned under it and a second submit waits, then finds it
+    # submitted. The working copy is held (GitClient.exclusive) from pull to
+    # discard.
     def call
-      check_submittable!
+      Changeset.transaction do
+        @changeset.lock!
+        check_submittable!
+        Kong::GitClient.exclusive(@connection) { submit_in_working_copy }
+      end
+      @changeset
+    rescue StandardError => e
+      record_failure(e)
+      raise
+    end
+
+    private
+
+    def submit_in_working_copy
       git = Kong::GitClient.new(connection: @connection).pull!
       check_drift!(git)
 
@@ -40,17 +58,25 @@ module Kong
 
       branch = "#{BRANCH_PREFIX}#{@changeset.id}"
       git.checkout_branch!(branch)
-      commit_sha = git.commit!(Kong::PrBody.commit_message(@changeset, operator: @actor_operator), author_name: @actor_username)
+      message = Kong::PrBody.commit_message(@changeset, operator: @actor_operator, items: @renderer.items)
+      commit_sha = git.commit!(message, author_name: @actor_username)
       git.push!(branch)
 
       record_submitted!(branch: branch, commit_sha: commit_sha, deck_diff: deck_diff, gate: gate)
-    rescue StandardError => e
+    rescue StandardError
       git&.discard!
-      @changeset.update_columns(failure_reason: Kong::ChangesetRenderer.scrub(e.message), updated_at: Time.current) if @changeset.open?
       raise
     end
 
-    private
+    # Kept on the changeset, outside the rolled-back transaction, and only if
+    # it is still open -- a submit that lost the race never writes onto the
+    # one that won.
+    def record_failure(error)
+      fresh = Changeset.find_by(id: @changeset.id)
+      return unless fresh&.open?
+
+      fresh.update_columns(failure_reason: Kong::ChangesetRenderer.scrub(error.message), updated_at: Time.current)
+    end
 
     def check_submittable!
       raise Kong::ChangeGuardrails::Violation, "this changeset is #{@changeset.status}, not open" unless @changeset.open?
@@ -69,6 +95,13 @@ module Kong
       if @connection.admin_path?(plan.target_kong_id) || @connection.admin_path?(plan.parent_kong_id)
         raise Kong::ChangeGuardrails::Violation,
           "item #{plan.position} (#{plan.entity_type} #{plan.entity_label}) is on the admin path -- it is never rendered into decK YAML"
+      end
+
+      # uat/prod: a delete names what it deletes, item by item, as the
+      # single-plan apply always asked (ChangeGuardrails#check_delete_confirmation!).
+      if plan.delete?
+        Kong::ChangeGuardrails.check_delete_confirmation!(connection: @connection, entity: plan.before,
+          confirmation_name: @delete_confirmations[plan.id.to_s], actor_kind: "human")
       end
 
       Kong::CertificateKeyPolicy.check!(plan.after, entity_type: plan.entity_type, apply_mode: @connection.apply_mode,
@@ -91,7 +124,7 @@ module Kong
     end
 
     def record_submitted!(branch:, commit_sha:, deck_diff:, gate:)
-      pr_body = Kong::PrBody.markdown(@changeset, deck_diff: deck_diff, gate: gate, operator: @actor_operator)
+      pr_body = Kong::PrBody.markdown(@changeset, deck_diff: deck_diff, gate: gate, operator: @actor_operator, items: @renderer.items)
 
       Changeset.transaction do
         @renderer.items.each do |plan|

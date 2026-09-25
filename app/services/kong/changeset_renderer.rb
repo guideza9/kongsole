@@ -18,6 +18,10 @@ module Kong
     end
 
     def preview
+      Kong::GitClient.exclusive(@connection) { preview_in_working_copy }
+    end
+
+    def preview_in_working_copy
       git = nil
       git = Kong::GitClient.new(connection: @connection).pull!
       rendered = render!(git)

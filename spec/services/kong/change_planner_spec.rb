@@ -621,6 +621,35 @@ RSpec.describe Kong::ChangePlanner do
         actor_username: "alice", attributes: { "name" => "x", "url" => "http://x.internal" }, replaces_plan_id: id).call
     end
 
+    # Final review #2: a submit or abandon that finished between finding the
+    # changeset and adding to it leaves the item in a fresh open one.
+    it "adds to a fresh changeset when the one it found closed in the meantime" do
+      first = plan_create("billing").changeset
+      calls = 0
+      allow(Changeset).to receive(:open_for!).and_wrap_original do |m, **kw|
+        found = m.call(**kw)
+        Changeset.where(id: found.id).update_all(status: "submitted") if (calls += 1) == 1
+        found
+      end
+
+      later = plan_create("ledger")
+
+      expect(later.changeset).not_to eq(first)
+      expect(later.changeset).to be_open
+      expect(first.reload.change_plans.pending.pluck(:id)).not_to include(later.id)
+    end
+
+    # Final review #9: reading the config repo's head is network I/O; it must
+    # not hold a database transaction open while it waits.
+    it "reads the config repo's head outside any database transaction" do
+      baseline = ActiveRecord::Base.connection.open_transactions
+      seen = nil
+      allow_any_instance_of(Kong::GitClient).to receive(:remote_head_sha) { seen = ActiveRecord::Base.connection.open_transactions; "a" * 40 }
+      connection.update_columns(git_repo: "/some/repo.git")
+      plan_create("billing")
+      expect(seen).to eq(baseline)
+    end
+
     it "refuses an admin-path entity before it reaches the changeset" do
       admin_id = SecureRandom.uuid
       connection.update!(admin_path_fingerprint: { "service_id" => admin_id, "route_ids" => [], "plugin_ids" => [], "consumer_ids" => [] })

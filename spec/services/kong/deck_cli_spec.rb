@@ -100,6 +100,19 @@ RSpec.describe Kong::DeckCli do
         )
       end
 
+      # Final review #6: a placeholder in one of the env's other files needs its
+      # dummy value too, or decK stops on a variable that is not set.
+      it "sets a dummy for every DECK_ variable any of the files references" do
+        extra = Rails.root.join("tmp", "deck_cli_spec_extra.yaml")
+        File.write(extra, %q(plugins: [{name: x, config: {key: "${{ env "DECK_EXTRA_ONLY" }}"}}]) + "\n")
+        allow(Open3).to receive(:capture3).and_return([ { "changes" => {} }.to_json, "", success ])
+        described_class.diff(file, connection: connection, secret: "pw", extra_paths: [ extra.to_s ])
+        expect(Open3).to have_received(:capture3).with(
+          { "DECK_EXTRA_ONLY" => described_class::PLACEHOLDER_VALUE }, "deck", "gateway", "diff", file.to_s, extra.to_s,
+          "--kong-addr", "https://kong-uat-admin-ro.internal", "--headers", header, "--json-output"
+        )
+      end
+
       # R8.4: an env's other decK files are read alongside the rendered one.
       it "passes the env's extra files as more positional state files" do
         allow(Open3).to receive(:capture3).and_return([ { "changes" => {} }.to_json, "", success ])

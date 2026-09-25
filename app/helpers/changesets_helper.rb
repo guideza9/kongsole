@@ -52,6 +52,16 @@ module ChangesetsHelper
     items.flat_map { |item| Kong::CertificateKeyPolicy.env_vars_for(item) }.uniq
   end
 
+  # The delete items whose own name must be typed before the submit: a
+  # protected entity anywhere, any delete at uat/prod (the guardrail the
+  # single-plan apply always ran; Kong::ChangeGuardrails).
+  def changeset_deletes_needing_name(items, connection)
+    items.select do |item|
+      item.delete? && (Kong::ChangeGuardrails.protected_entity?(connection, item.before) ||
+        Kong::ChangeGuardrails.human_delete_needs_name?(connection, "human"))
+    end
+  end
+
   # What the drift report says about git, in words; nil when git did not move.
   def changeset_git_drift(drift)
     case drift&.git_moved?

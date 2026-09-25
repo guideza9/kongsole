@@ -10,6 +10,7 @@
 <% drift = preview.drift %>
 <% env_name = env_display_name(current_connection) %>
 <% env_vars = changeset_env_vars(items) %>
+<% named_deletes = changeset_deletes_needing_name(items, current_connection) %>
 <% submittable = preview.error.nil? && preview.gate&.passed? && items.any? %>
 <% git_drift = changeset_git_drift(drift) %>
 
@@ -133,8 +134,18 @@
         <span>Pushes one branch · Kong does not change until the pull request is merged</span>
       </p>
 
-      <% if gated || reauth || env_vars.any? %>
+      <% if gated || reauth || env_vars.any? || named_deletes.any? %>
         <div class="action-bar__fields">
+          <% named_deletes.each do |item| %>
+            <div>
+              <label for="confirm_delete_<%= item.id %>" class="block text-sm font-medium mb-1 text-ink">
+                Type <span class="font-mono"><%= item.entity_label %></span> to confirm deleting it from <%= env_name %>
+              </label>
+              <input type="text" id="confirm_delete_<%= item.id %>" name="confirm_delete[<%= item.id %>]" class="field-input font-mono text-sm"
+                autocomplete="off" autocapitalize="off" spellcheck="false" data-expected="<%= item.entity_label %>" data-exact
+                data-env-confirm-target="input" data-action="input->env-confirm#check">
+            </div>
+          <% end %>
           <% if gated %>
             <div>
               <label for="confirm_env_name" class="block text-sm font-medium mb-1 text-ink">
@@ -166,7 +177,7 @@
 
       <div class="action-bar__buttons">
         <% if gated %>
-          <p id="unlock-hint" class="action-bar__hint" data-env-confirm-target="hint">Push branch unlocks when the name matches</p>
+          <p id="unlock-hint" class="action-bar__hint" data-env-confirm-target="hint">Push branch unlocks when <%= named_deletes.any? ? "every name matches" : "the name matches" %></p>
         <% end %>
         <div class="action-bar__actions">
           <%= link_to "Back", changeset_path(@changeset), class: "btn-sm btn-text" %>

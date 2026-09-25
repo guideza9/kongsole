@@ -123,4 +123,26 @@ RSpec.describe "Changesets", type: :request do
     expect(flash[:alert]).to include("remote rejected")
     expect(flash[:error_explanation]).to be_nil
   end
+  # Final review #4: the review asks for each delete's own name at rank >= 2.
+  it "asks for each delete's name on the review, and passes it to the submit" do
+    dir = @bare_git_tmp.join("seed-#{SecureRandom.hex(4)}")
+    Open3.capture3("git", "clone", repo.to_s, dir.to_s)
+    File.write(dir.join("uat", "kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse("services:\n  - name: orders\n", select_tags: %w[managed-by-kongctl])))
+    Open3.capture3("git", "add", "-A", chdir: dir.to_s)
+    Open3.capture3("git", "-c", "user.name=s", "-c", "user.email=s@example.com", "commit", "-m", "s", chdir: dir.to_s)
+    Open3.capture3("git", "push", "origin", "main", chdir: dir.to_s)
+    changeset.update!(base_git_sha: head_sha(repo))
+    kong_id = SecureRandom.uuid
+    item = create(:change_plan, :delete, changeset: changeset, kong_connection: connection, apply_mode: "pr", position: 1,
+      entity_type: "service", target_kong_id: kong_id, before: { "id" => kong_id, "name" => "orders", "tags" => [] })
+    stub_request(:get, "https://kong.test/services/#{kong_id}")
+      .to_return(status: 200, body: { id: kong_id, name: "orders", updated_at: 1_700_000_000 }.to_json)
+
+    get preview_changeset_path(changeset)
+    field = Nokogiri::HTML(response.body).at_css("form#submit-changeset-form input[name='confirm_delete[#{item.id}]']")
+    expect(field).to be_present
+
+    post submit_changeset_path(changeset), params: { confirm_env_name: connection.name, password: "pw", confirm_delete: { item.id.to_s => "orders" } }
+    expect(changeset.reload.status).to eq("submitted")
+  end
 end

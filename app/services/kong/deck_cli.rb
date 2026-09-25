@@ -36,7 +36,7 @@ module Kong
     end
 
     def validate(file_path, extra_paths: [])
-      _stdout, stderr, status = run([ "file", "validate", file_path.to_s, *extra_paths.map(&:to_s) ], file_path)
+      _stdout, stderr, status = run([ "file", "validate", file_path.to_s, *extra_paths.map(&:to_s) ], [ file_path, *extra_paths ])
       raise Error, "deck file validate failed: #{clean(stderr)}" unless status.success?
 
       true
@@ -49,7 +49,7 @@ module Kong
         "--headers", "Authorization:#{basic_auth(connection.auth_username, secret)}",
         "--json-output"
       ]
-      stdout, stderr, status = run(args, file_path)
+      stdout, stderr, status = run(args, [ file_path, *extra_paths ])
       raise Error, "deck gateway diff failed: #{clean(stderr)}" unless status.success?
 
       parse_diff(stdout)
@@ -68,15 +68,19 @@ module Kong
       ENV["DECK_BIN"].presence || "deck"
     end
 
-    def run(args, file_path)
-      Open3.capture3(placeholder_env(file_path), bin, *args)
+    def run(args, file_paths)
+      Open3.capture3(placeholder_env(file_paths), bin, *args)
     rescue Errno::ENOENT
       raise Error, "the deck binary (#{bin}) wasn't found -- install decK or point DECK_BIN at it"
     end
 
-    def placeholder_env(file_path)
-      text = File.exist?(file_path) ? File.read(file_path) : ""
-      text.scan(ENV_REFERENCE).flatten.uniq.to_h { |name| [ name, PLACEHOLDER_VALUE ] }
+    # Every file decK reads (the rendered one and the env's extra files) may
+    # reference a DECK_ variable; each needs its dummy.
+    def placeholder_env(file_paths)
+      names = Array(file_paths).flat_map do |path|
+        File.exist?(path) ? File.read(path).scan(ENV_REFERENCE).flatten : []
+      end
+      names.uniq.to_h { |name| [ name, PLACEHOLDER_VALUE ] }
     end
 
     # decK's own message is what an operator needs; a pasted private key is

@@ -103,19 +103,31 @@ module Kong
     # never a plan of its own. An item that replaces an earlier one (an edit)
     # takes its place in the order and, for a create, its provisional id, so
     # children proposed under it still find it.
+    #
+    # The changeset is found (or opened) outside the transaction, then locked
+    # and re-checked inside it: a submit or abandon that finished in between
+    # would otherwise take an item it never rendered. One retry opens a
+    # fresh changeset for it.
     def create_in_changeset!(before, after)
-      ChangePlan.transaction do
+      2.times do
         changeset = Changeset.open_for!(connection: @connection, actor_username: @actor_username, actor_operator: @actor_operator)
-        replaced = replaced_item(changeset)
-        refuse_second_item_on_entity!(changeset, replaced)
-        replaced&.update!(status: "cancelled")
+        plan = ChangePlan.transaction do
+          changeset.lock!
+          next nil unless changeset.open?
 
-        create_plan!(before, after,
-          changeset: changeset,
-          replaces_plan: replaced,
-          position: replaced&.position || (changeset.change_plans.maximum(:position).to_i + 1),
-          provisional_kong_id: (@operation == "create" ? replaced&.provisional_kong_id || SecureRandom.uuid : nil))
+          replaced = replaced_item(changeset)
+          refuse_second_item_on_entity!(changeset, replaced)
+          replaced&.update!(status: "cancelled")
+
+          create_plan!(before, after,
+            changeset: changeset,
+            replaces_plan: replaced,
+            position: replaced&.position || (changeset.change_plans.maximum(:position).to_i + 1),
+            provisional_kong_id: (@operation == "create" ? replaced&.provisional_kong_id || SecureRandom.uuid : nil))
+        end
+        return plan if plan
       end
+      raise Kong::ChangeGuardrails::Violation, "the changeset closed while this was being added -- propose it again"
     end
 
     def replaced_item(changeset)
@@ -133,7 +145,8 @@ module Kong
       other = changeset.items.where(target_kong_id: @target_kong_id).where.not(id: replaced&.id).first
       return unless other
 
-      raise InvalidChange, "#{@entity_type} #{other.entity_label} is already in this changeset (item #{other.position}) -- edit that item instead"
+      raise InvalidChange, "#{@entity_type} #{other.entity_label} is already in this changeset (item #{other.position}) -- " \
+        "remove that item first, then propose the change again"
     end
 
     # The admin path is never rendered into decK YAML (CLAUDE.md rule 3), so

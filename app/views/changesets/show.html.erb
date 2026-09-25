@@ -12,7 +12,8 @@
 <div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-1">
   <h1 class="page-title">Changeset #<%= @changeset.id %></h1>
   <% if open && items.any? %>
-    <%= link_to "Review and submit", preview_changeset_path(@changeset), class: "btn btn-primary shrink-0" %>
+    <%# No prefetch: the review renders from git and runs decK -- on click only, never on hover. %>
+    <%= link_to "Review and submit", preview_changeset_path(@changeset), class: "btn btn-primary shrink-0", data: { turbo_prefetch: false } %>
   <% end %>
 </div>
 <p class="text-sm mb-5 text-ink-soft">

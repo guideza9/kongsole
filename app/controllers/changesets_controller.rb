@@ -34,7 +34,8 @@ class ChangesetsController < ApplicationController
     Kong::ChangesetSubmitter.new(
       changeset: @changeset, client: current_client, secret: current_secret,
       actor_username: current_connection.auth_username, actor_operator: current_operator,
-      acknowledge_drift: params[:acknowledge_drift] == "1", env_acknowledged: params[:acknowledge_env_vars] == "1"
+      acknowledge_drift: params[:acknowledge_drift] == "1", env_acknowledged: params[:acknowledge_env_vars] == "1",
+      delete_confirmations: typed_delete_names
     ).call
 
     redirect_to changeset_path(@changeset), notice: "Branch #{@changeset.branch} pushed. Open the pull request on your git host."
@@ -56,18 +57,26 @@ class ChangesetsController < ApplicationController
   end
 
   def abandon
-    unless @changeset.open?
-      return redirect_to(changeset_path(@changeset), alert: "This changeset is #{@changeset.status}; only an open one can be abandoned.")
-    end
+    abandoned = @changeset.with_lock do
+      next false unless @changeset.open?
 
-    Changeset.transaction do
       @changeset.items.update_all(status: "cancelled", updated_at: Time.current)
       @changeset.update!(status: "abandoned")
     end
+    unless abandoned
+      return redirect_to(changeset_path(@changeset), alert: "This changeset is #{@changeset.status}; only an open one can be abandoned.")
+    end
+
     redirect_to changesets_path, notice: "Changeset ##{@changeset.id} abandoned. Nothing was pushed."
   end
 
   private
+
+  # {plan id => the name typed for it}, only compared against each delete's name.
+  def typed_delete_names
+    raw = params[:confirm_delete]
+    raw.respond_to?(:to_unsafe_h) ? raw.to_unsafe_h.transform_values(&:to_s) : {}
+  end
 
   def set_changeset
     @changeset = Changeset.find_by!(id: params[:id], kong_connection: current_connection)

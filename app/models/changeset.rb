@@ -18,11 +18,22 @@ class Changeset < ApplicationRecord
       raise Kong::ChangeGuardrails::Violation, "#{connection.name} is not in PR mode -- only PR-mode changes collect in a changeset"
     end
 
-    find_by(kong_connection: connection, status: "open") ||
-      create!(kong_connection: connection, status: "open", actor_username: actor_username, actor_operator: actor_operator,
-        base_git_sha: remote_head_sha(connection))
-  rescue ActiveRecord::RecordNotUnique
-    find_by!(kong_connection: connection, status: "open")
+    existing = find_by(kong_connection: connection, status: "open")
+    return existing if existing
+
+    # Read before any row is written: it is network I/O, and nothing may wait
+    # on it inside a database transaction.
+    base = remote_head_sha(connection)
+    begin
+      transaction(requires_new: true) do
+        create!(kong_connection: connection, status: "open", actor_username: actor_username, actor_operator: actor_operator,
+          base_git_sha: base)
+      end
+    rescue ActiveRecord::RecordNotUnique
+      # Another proposal opened it first; the savepoint rolled back, so the
+      # caller's transaction (if any) is still usable.
+      find_by!(kong_connection: connection, status: "open")
+    end
   end
 
   # R8.5: where the changeset began, so a submit can tell whether git moved

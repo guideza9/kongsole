@@ -361,4 +361,90 @@ RSpec.describe Kong::ChangesetSubmitter do
       expect(branches).to be_empty
     end
   end
+  # Final review #2: what a submit renders is what the PR says, and a submit
+  # that lost the race to another never writes onto the winner.
+  describe "while other work touches the changeset" do
+    it "describes, in the commit and the PR body, exactly the items it rendered" do
+      add_create_item(changeset, "billing")
+      allow(Kong::DeckCli).to receive(:validate) do
+        add_create_item(changeset, "late-arrival") # proposed while decK was running
+        true
+      end
+
+      result = submitter.call
+
+      log = Open3.capture3("git", "--git-dir=#{repo}", "log", "-1", "--format=%B", "kongctl/changeset-#{changeset.id}").first
+      expect(log).to include("billing")
+      expect(log).not_to include("late-arrival")
+      expect(result.pr_body).not_to include("late-arrival")
+    end
+
+    it "refuses, and records nothing, when another submit got there first" do
+      add_create_item(changeset, "billing")
+      stale = submitter
+      Changeset.where(id: changeset.id).update_all(status: "submitted", branch: "kongctl/changeset-#{changeset.id}")
+
+      expect { stale.call }.to raise_error(Kong::ChangeGuardrails::Violation, /submitted, not open/)
+      expect(changeset.reload.failure_reason).to be_nil
+    end
+  end
+
+  # Final review #3: one working copy per connection -- a preview and a submit
+  # (or two of either) never run git in it at the same time.
+  it "waits for another git operation on the same connection before touching the working copy" do
+    add_create_item(changeset, "billing")
+    events = Queue.new
+    # Another Postgres session -- another request or process -- holding the
+    # lock. (The test's own connection is shared across threads, and advisory
+    # locks nest within a session, so it cannot stand in for a second one.)
+    config = ActiveRecord::Base.connection_db_config.configuration_hash
+    holder = Thread.new do
+      other = PG.connect(host: config[:host], port: config[:port], user: config[:username], password: config[:password], dbname: config[:database])
+      other.exec("SELECT pg_advisory_lock(#{Kong::GitClient::LOCK_NAMESPACE}, #{connection.id})")
+      events << :held
+      sleep 0.6
+      events << :released
+      other.exec("SELECT pg_advisory_unlock(#{Kong::GitClient::LOCK_NAMESPACE}, #{connection.id})")
+    ensure
+      other&.close
+    end
+    sleep 0.2
+    allow_any_instance_of(Kong::GitClient).to receive(:pull!).and_wrap_original { |m, *a| events << :pull; m.call(*a) }
+
+    submitter.call
+    holder.join
+
+    expect(Array.new(events.size) { events.pop }.first(3)).to eq(%i[held released pull])
+  end
+
+  # Final review #4: at uat/prod a delete still asks for the entity's own name,
+  # item by item, as the single-plan apply did.
+  describe "a delete at rank >= 2" do
+    before { seed_orders }
+
+    def seed_orders
+      dir = @bare_git_tmp.join("seed-orders-#{SecureRandom.hex(4)}")
+      Open3.capture3("git", "clone", repo.to_s, dir.to_s)
+      File.write(dir.join("uat", "kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse("services:\n  - name: orders\n", select_tags: %w[managed-by-kongctl])))
+      Open3.capture3("git", "add", "-A", chdir: dir.to_s)
+      Open3.capture3("git", "-c", "user.name=s", "-c", "user.email=s@example.com", "commit", "-m", "s", chdir: dir.to_s)
+      Open3.capture3("git", "push", "origin", "main", chdir: dir.to_s)
+    end
+
+    let!(:delete_item) do
+      create(:change_plan, :delete, changeset: changeset, kong_connection: connection, apply_mode: "pr", position: 1,
+        entity_type: "service", before: { "id" => SecureRandom.uuid, "name" => "orders", "tags" => [] })
+    end
+
+    it "refuses without the typed name, and with a wrong one" do
+      expect { submitter.call }.to raise_error(Kong::ChangeGuardrails::Violation, /deleting orders requires typing its name/)
+      expect { submitter(delete_confirmations: { delete_item.id.to_s => "order" }).call }
+        .to raise_error(Kong::ChangeGuardrails::Violation, /does not match/)
+      expect(branches).to be_empty
+    end
+
+    it "submits once the name is typed" do
+      expect(submitter(delete_confirmations: { delete_item.id.to_s => "orders" }).call.status).to eq("submitted")
+    end
+  end
 end

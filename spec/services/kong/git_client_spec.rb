@@ -118,4 +118,15 @@ RSpec.describe Kong::GitClient do
     expect { described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir)).pull! }
       .to raise_error(described_class::AuthFailed)
   end
+  # Final review #9: a git host that never answers (a VPN that is off drops
+  # packets) is given up on, as unreachable, instead of hanging the request.
+  it "gives up on a git command that does not finish in time" do
+    connection = create(:kong_connection, project_env: create(:project_env, apply_mode: "pr", source: "registry",
+      project: create(:project, git_repo: "https://git.example/team/repo.git")))
+    client = described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir))
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    expect { client.send(:run!, RbConfig.ruby, "-e", "sleep 10", chdir: Dir.tmpdir, timeout: 0.5) }
+      .to raise_error(described_class::Unreachable) { |e| expect(e.kind).to eq(:timeout) }
+    expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
+  end
 end

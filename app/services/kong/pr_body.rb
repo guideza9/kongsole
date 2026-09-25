@@ -7,8 +7,9 @@ module Kong
   module PrBody
     module_function
 
-    def markdown(changeset, deck_diff:, gate:, operator:)
-      items = changeset.items.to_a
+    # `items` are the ones rendered into the branch -- read once by the
+    # submitter, not again here, so the text can never list more than the YAML.
+    def markdown(changeset, deck_diff:, gate:, operator:, items: changeset.items.to_a)
       lines = [
         "## #{changeset.kong_connection.name}: #{pluralize(items.size)}",
         "",
@@ -21,8 +22,7 @@ module Kong
       (lines + [ "" ] + trailers(changeset, items, operator)).join("\n")
     end
 
-    def commit_message(changeset, operator:)
-      items = changeset.items.to_a
+    def commit_message(changeset, operator:, items: changeset.items.to_a)
       lines = [ "Changeset #{changeset.id}: #{pluralize(items.size)} to #{changeset.kong_connection.name}", "" ]
       items.each { |plan| lines << "- #{plan.operation} #{plan.entity_type} #{plan.entity_label}" }
       (lines + [ "" ] + trailers(changeset, items, operator)).join("\n")

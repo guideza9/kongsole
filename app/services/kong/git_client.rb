@@ -28,6 +28,26 @@ module Kong
 
     NETWORK_KINDS = %i[dns refused timeout tls].freeze
 
+    # A remote that never answers (a VPN that is off drops the packets) is
+    # given up on after this long, as unreachable, rather than hanging the
+    # request that asked.
+    REMOTE_TIMEOUT = 15
+
+    # One working copy per connection (storage/git_cache/<id>): a preview and
+    # a submit -- or two of either, from operators sharing a credential --
+    # must not pull, write, commit or discard in it at the same time. A
+    # Postgres session-level advisory lock serialises them across processes;
+    # the same session may take it again (it nests).
+    LOCK_NAMESPACE = 8_401
+
+    def self.exclusive(connection)
+      db = ActiveRecord::Base.connection
+      db.select_value("SELECT pg_advisory_lock(#{LOCK_NAMESPACE}, #{Integer(connection.id)})")
+      yield
+    ensure
+      db&.select_value("SELECT pg_advisory_unlock(#{LOCK_NAMESPACE}, #{Integer(connection.id)})")
+    end
+
     DEFAULT_BRANCH = "main"
 
     def initialize(connection:, working_dir: nil)
@@ -100,7 +120,7 @@ module Kong
     # The base branch's head on the remote, without touching a working copy
     # -- where a changeset began, and whether someone has pushed since.
     def remote_head_sha
-      out = run!("git", "ls-remote", @repo, "refs/heads/#{@branch}", chdir: Dir.tmpdir)
+      out = run!("git", "ls-remote", @repo, "refs/heads/#{@branch}", chdir: Dir.tmpdir, timeout: REMOTE_TIMEOUT)
       out.split.first.presence || raise(Error, "#{@branch} was not found in the config repo")
     end
 
@@ -126,8 +146,8 @@ module Kong
 
     private
 
-    def run!(*cmd, chdir:, env: {})
-      stdout, stderr, status = Open3.capture3(env, *cmd, chdir: chdir.to_s)
+    def run!(*cmd, chdir:, env: {}, timeout: nil)
+      stdout, stderr, status = timeout ? capture_with_timeout(env, cmd, chdir, timeout) : Open3.capture3(env, *cmd, chdir: chdir.to_s)
       return stdout if status.success?
 
       output = stderr.presence || stdout
@@ -137,6 +157,24 @@ module Kong
       raise Unreachable.new(message, kind: kind) if NETWORK_KINDS.include?(kind)
 
       raise Error, message
+    end
+
+    def capture_with_timeout(env, cmd, chdir, timeout)
+      Open3.popen3(env, *cmd, chdir: chdir.to_s) do |stdin, stdout, stderr, waiter|
+        stdin.close
+        out = Thread.new { stdout.read }
+        err = Thread.new { stderr.read }
+        unless waiter.join(timeout)
+          begin
+            Process.kill("KILL", waiter.pid)
+          rescue Errno::ESRCH, Errno::EINVAL
+            nil
+          end
+          waiter.join
+          raise Unreachable.new("#{cmd.first(2).join(' ')} gave no answer within #{timeout}s", kind: :timeout)
+        end
+        [ out.value, err.value, waiter.value ]
+      end
     end
   end
 end
