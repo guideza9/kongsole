@@ -936,10 +936,28 @@ end
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R1.13–R1.16
 
-- [ ] compose: env `apply_mode` ว่าง → หน้า entities / entity / plan review ไม่มีปุ่มเขียน มี notice; เปิด `/entities/new?type=upstream` ตรง → กลับไป list พร้อมเหตุผล;
+- [x] compose: env `apply_mode` ว่าง → หน้า entities / entity / plan review ไม่มีปุ่มเขียน มี notice; เปิด `/entities/new?type=upstream` ตรง → กลับไป list พร้อมเหตุผล;
   ตั้งกลับเป็น Direct apply ผ่านลิงก์ใหม่ในแถว env → ปุ่มกลับมา · connection `access_level: ro` (`local/dev-ro`) direct → ไม่มีปุ่มเขียน · `local/uat` (PR, ro) → ยังมีปุ่ม
-- [ ] สำเนา DB dev: rollback STEP=4 → migrate ที่ PR คนละ repo → ข้อความใหม่ → ทำตามข้อความ → migrate สำเร็จ · drop สำเนา
-- [ ] `bundle exec rspec` 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ภาพหน้าจอ 390/1280 ของหน้าที่เปลี่ยน · ลบข้อมูลทดสอบใน DB dev
+- [x] สำเนา DB dev: rollback STEP=4 → migrate ที่ PR คนละ repo → ข้อความใหม่ → ทำตามข้อความ → migrate สำเร็จ · drop สำเนา
+- [x] `bundle exec rspec` 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ภาพหน้าจอ 390/1280 ของหน้าที่เปลี่ยน · ลบข้อมูลทดสอบใน DB dev
+
+### ผลตรวจ R1.17 (2026-09-25, compose ในเครื่อง, Edge headless)
+
+- [x] env `r1check/nonprod` (สร้างใหม่ผ่าน UI) direct → "New upstream" + ปุ่ม Apply บน plan ที่เสนอไว้ (ไม่ได้ apply) ·
+  ตั้ง Not set ผ่านลิงก์ใหม่ `Edit environment r1check/nonprod` ในแถว → upstream / plugin / certificate list และหน้า plan ไม่มีปุ่มเขียน มี notice เดียว
+  "Nothing can be written to r1check/nonprod" · เปิด `/entities/new?type=upstream` ตรง → กลับ `/entities?type=upstream` พร้อมข้อความของ guardrail ·
+  ตั้งกลับ Direct apply ผ่านลิงก์เดิม → ปุ่มกลับมา
+- [x] `local/dev-ro` (direct, `ro-kongctl`) → ไม่มีปุ่มเขียน notice "This credential can only read local/dev-ro" · `local/uat` (PR, ro) → ยังมี "New upstream" ไม่มี notice
+- [x] สำเนา DB dev: rollback STEP=4 → migrate → ข้อความใหม่แสดง `default/uat → …`, `local/uat → …` + คำสั่ง `update_all` →
+  รันคำสั่งนั้นบนสำเนา → migrate สำเร็จ · drop สำเนาแล้ว
+- [x] rspec **1058/0** · vitest **30/30** · detect 62 findings บน 42 หน้า (หน้าเดิมไม่เพิ่ม; 2 หน้า snapshot ใหม่ +3 cramped-padding ที่ panel/ตารางเดิม ไม่ใช่ notice) ·
+  390px ไม่มี horizontal scroll ในหน้าที่เปลี่ยน · ภาพหน้าจอ 390/1280 แนบในรายงาน ไม่ commit
+- [x] ลบข้อมูลทดสอบ (project `r1check`, env, connection, plan pending #48) · Kong ไม่มี upstream `r1check-up` (404)
+
+**ข้อสังเกต (ยังไม่แก้):** หน้า plan ที่เสนอไว้ตอน env ยังเขียนได้ แสดงการ์ด "Direct apply → live write to Kong" และ "Guardrails: All clear"
+ซึ่งคำนวณตอนเสนอ อยู่เหนือ notice "Nothing can be written" — ข้อมูลขัดกันบนหน้าเดียว (server ปฏิเสธถูกต้อง)
+·
+**ต้องทำเพิ่ม:** ไม่มี `/impeccable` ใน session นี้ — notice ของ R1.14 และแถวของ R1.15 ยังไม่ผ่าน `/impeccable clarify` / `harden`
 
 ## เกณฑ์ปิดงาน R1
 
