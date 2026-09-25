@@ -1,26 +1,178 @@
-<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
-<% content_for :title, "Preview changeset ##{@changeset.id}" %>
-<p class="text-sm mb-2"><%= link_to "Back to changeset ##{@changeset.id}", changeset_path(@changeset) %></p>
-<h1 class="page-title mb-6">Preview · changeset #<%= @changeset.id %></h1>
+<%# R8.9: the review before a changeset is submitted. Reading order follows
+    the plan review page (UI-DESIGN.md, Review page): title -> summary strip
+    (target, items, CI gate, drift) -> what needs a look (drift, a blocked
+    gate) -> the YAML diff itself -> decK's diff -> the sticky action bar.
+    Nothing here was pushed; the bar is the submit. No bar when the gate
+    blocks or the render failed: the server would refuse. %>
+<% content_for :title, "Review changeset ##{@changeset.id}" %>
+<% items = @items.to_a %>
+<% preview = @preview %>
+<% drift = preview.drift %>
+<% env_name = env_display_name(current_connection) %>
+<% env_vars = changeset_env_vars(items) %>
+<% submittable = preview.error.nil? && preview.gate&.passed? && items.any? %>
+<% git_drift = changeset_git_drift(drift) %>
 
-<% if @preview.error %>
-  <p class="text-sm mb-4">Could not preview: <%= @preview.error %></p>
-  <% if @preview.explanation %>
-    <p class="text-sm mb-4"><%= @preview.explanation.title %> <%= @preview.explanation.cause %> <%= @preview.explanation.next_step %></p>
+<p class="page-back"><%= link_to "Changeset ##{@changeset.id}", changeset_path(@changeset) %></p>
+<h1 class="page-title mb-1">Review changeset #<%= @changeset.id %></h1>
+<p class="text-sm mb-5 text-ink-soft"><%= t("hints.pages.changeset_preview.intro") %></p>
+
+<% if preview.error %>
+  <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "risk-notice mb-5" } do %>
+    <p class="risk-notice__title"><%= preview.explanation ? preview.explanation.title : "This changeset could not be rendered, so nothing can be submitted." %></p>
+    <p class="risk-notice__body font-mono text-xs whitespace-pre-wrap"><%= preview.error %></p>
+    <% if preview.explanation %><%= render "shared/error_explanation", explanation: preview.explanation.to_flash %><% end %>
   <% end %>
-<% else %>
-  <p class="mb-2">CI gate: <%= @preview.gate.passed? ? "Clear" : "Blocked" %></p>
-  <% @preview.gate.reasons.each do |reason| %><p class="text-sm"><%= reason %></p><% end %>
-
-  <% if @preview.drift %>
-    <% if @preview.drift.git_moved?.nil? %>
-      <p class="text-sm">Unknown whether git moved: the config repo could not be read when this changeset began.</p>
-    <% elsif @preview.drift.git_moved? %>
-      <p class="text-sm">git moved since this changeset began<%= " (#{@preview.drift.commits_behind} commits)" if @preview.drift.commits_behind %>.</p>
-    <% end %>
-    <% @preview.drift.kong_changed.each do |changed| %><p class="text-sm">Changed in Kong since proposed: <%= changed[:label] %></p><% end %>
-  <% end %>
-
-  <h2 class="section-label mt-6 mb-2">YAML diff</h2>
-  <pre class="text-xs whitespace-pre-wrap"><%= @preview.yaml_diff %></pre>
 <% end %>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-5">
+  <dl class="plan-summary" aria-label="Review summary">
+    <div class="plan-summary__cell<%= " env-strip #{current_connection.env_tone}" if current_connection.protected_env? %>">
+      <dt>Target</dt>
+      <% if current_connection.protected_env? %>
+        <dd class="plan-summary__value env-strip__env"><%= current_connection.env %></dd>
+      <% else %>
+        <dd class="plan-summary__value"><%= env_badge(current_connection) %></dd>
+      <% end %>
+      <dd class="plan-summary__note">Branch <code class="font-mono"><%= Kong::ChangesetSubmitter::BRANCH_PREFIX %><%= @changeset.id %></code></dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Items</dt>
+      <dd class="plan-summary__value"><span class="plan-summary__num"><%= items.size %></span> <%= items.size == 1 ? "change" : "changes" %></dd>
+      <dd class="plan-summary__note"><%= changeset_operations_summary(items) %></dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>CI gate</dt>
+      <% if preview.gate %>
+        <dd class="plan-summary__value<%= " is-danger" unless preview.gate.passed? %>"><%= preview.gate.passed? ? "Clear" : "Blocked" %></dd>
+        <dd class="plan-summary__note"><%= preview.gate.passed? ? "Admin path untouched, deletes within #{current_connection.project&.delete_threshold || Kong::CiGate::DEFAULT_DELETE_THRESHOLD}" : "See why below" %></dd>
+      <% else %>
+        <dd class="plan-summary__value">Not checked</dd>
+        <dd class="plan-summary__note">The render failed first</dd>
+      <% end %>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Since it began</dt>
+      <% if drift.nil? %>
+        <dd class="plan-summary__value">Not checked</dd>
+        <dd class="plan-summary__note">The render failed first</dd>
+      <% elsif drift.any? %>
+        <dd class="plan-summary__value is-warning">Changed</dd>
+        <dd class="plan-summary__note">Read the diff again</dd>
+      <% elsif drift.git_moved?.nil? %>
+        <dd class="plan-summary__value">Unknown</dd>
+        <dd class="plan-summary__note">No base was recorded for git</dd>
+      <% else %>
+        <dd class="plan-summary__value">No change</dd>
+        <dd class="plan-summary__note">git and Kong as they were</dd>
+      <% end %>
+    </div>
+  </dl>
+
+  <% if drift&.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :warning, class: "risk-notice" } do %>
+      <p class="risk-notice__title"><%= t("hints.risks.changeset_drift.title") %></p>
+      <p class="risk-notice__body"><%= t("hints.risks.changeset_drift.body") %></p>
+      <ul class="risk-notice__body list-disc pl-5">
+        <% if drift.git_moved? %><li>git: <%= git_drift %></li><% end %>
+        <% drift.kong_changed.each do |changed| %><li>Kong: <%= changed[:label] %> changed after it was proposed</li><% end %>
+      </ul>
+      <% if submittable %>
+        <label class="flex items-start gap-2 text-sm text-ink mt-2 font-normal">
+          <input type="checkbox" name="acknowledge_drift" value="1" form="submit-changeset-form" required class="mt-0.5 accent-accent">
+          <span>I read the diff below as it is now, and it is still what should go.</span>
+        </label>
+      <% end %>
+    <% end %>
+  <% end %>
+
+  <% if preview.gate && !preview.gate.passed? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, class: "risk-notice" } do %>
+      <p class="risk-notice__title">The CI gate blocks this changeset. It cannot be submitted as it is.</p>
+      <ul class="risk-notice__body list-disc pl-5">
+        <% preview.gate.reasons.each do |reason| %><li><%= reason %></li><% end %>
+      </ul>
+      <p class="risk-notice__body">Take out the items that cause it on the <%= link_to "changeset page", changeset_path(@changeset), class: "underline underline-offset-2" %>, then review again.</p>
+    <% end %>
+  <% end %>
+
+  <% unless preview.error %>
+    <section class="panel" aria-labelledby="yaml-diff-heading">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pt-3 pb-2">
+        <h2 id="yaml-diff-heading" class="section-label">YAML diff</h2>
+        <span class="text-xs text-ink-soft font-mono"><%= current_connection.git_path %></span>
+      </div>
+      <% lines = yaml_diff_lines(preview.yaml_diff) %>
+      <% if lines.empty? %>
+        <p class="px-4 pb-4 text-sm text-ink-soft">The rendered file is the same as the config repo's.</p>
+      <% else %>
+        <%# Each line is its own block, so no newline between them: in a <pre> it would print as a blank line. %>
+        <pre class="yaml-diff" tabindex="0" aria-label="YAML diff of <%= current_connection.git_path %>"><% lines.each do |kind, text| %><span class="yaml-diff__line yaml-diff__line--<%= kind %>"><%= text.presence || " " %></span><% end %></pre>
+      <% end %>
+    </section>
+
+    <% if preview.deck_diff.present? %>
+      <section class="panel disclosure-group" aria-label="decK">
+        <details class="disclosure">
+          <summary>deck gateway diff <span>what CI will sync, read with your credential</span></summary>
+          <div class="disclosure__body">
+            <pre class="json-viewer json-block text-xs font-mono" tabindex="0" aria-label="deck gateway diff"><%= highlight_json(preview.deck_diff) %></pre>
+          </div>
+        </details>
+      </section>
+    <% end %>
+  <% end %>
+
+  <% if submittable %>
+    <% gated = current_connection.protected_env? %>
+    <% reauth = current_connection.rank >= Reauthentication::REAUTH_RANK_THRESHOLD %>
+    <%= form_with url: submit_changeset_path(@changeset), method: :post, id: "submit-changeset-form",
+          class: "action-bar #{current_connection.env_tone}", data: (gated ? { controller: "env-confirm" } : {}) do %>
+      <p class="action-bar__what">
+        <strong>Submit <%= changeset_items_label(items.size) %> to <%= env_name %></strong>
+        <span>Pushes one branch · Kong does not change until the pull request is merged</span>
+      </p>
+
+      <% if gated || reauth || env_vars.any? %>
+        <div class="action-bar__fields">
+          <% if gated %>
+            <div>
+              <label for="confirm_env_name" class="block text-sm font-medium mb-1 text-ink">
+                Type the connection name <span class="font-mono"><%= current_connection.name %></span>
+              </label>
+              <input type="text" id="confirm_env_name" name="confirm_env_name" class="field-input font-mono text-sm" autocomplete="off" autocapitalize="off" spellcheck="false"
+                data-expected="<%= current_connection.name %>" data-env-confirm-target="input" data-action="input->env-confirm#check">
+            </div>
+          <% end %>
+          <% if reauth %>
+            <div>
+              <label for="password" class="block text-sm font-medium mb-1 text-ink">
+                Re-enter your Kong password &mdash; it checks this changeset against <%= env_name %> before the branch is pushed.
+              </label>
+              <input type="password" id="password" name="password" class="field-input text-sm" autocomplete="current-password" required>
+            </div>
+          <% end %>
+          <% if env_vars.any? %>
+            <label class="flex items-start gap-2 text-sm text-ink">
+              <input type="checkbox" name="acknowledge_env_vars" value="1" required class="mt-0.5 accent-accent">
+              <span>
+                <span class="font-mono"><%= env_vars.join(", ") %></span> <%= env_vars.size == 1 ? "is" : "are" %> set on every Kong node of <%= current_connection.name %>.
+                Kong doesn't check this.
+              </span>
+            </label>
+          <% end %>
+        </div>
+      <% end %>
+
+      <div class="action-bar__buttons">
+        <% if gated %>
+          <p id="unlock-hint" class="action-bar__hint" data-env-confirm-target="hint">Push branch unlocks when the name matches</p>
+        <% end %>
+        <div class="action-bar__actions">
+          <%= link_to "Back", changeset_path(@changeset), class: "btn-sm btn-text" %>
+          <button type="submit" class="<%= gated ? "btn-env" : "btn-primary" %> btn" data-env-confirm-target="submit" <%= tag.attributes(aria: { describedby: "unlock-hint" }) if gated %>>Push branch</button>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>

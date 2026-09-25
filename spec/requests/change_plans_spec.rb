@@ -449,18 +449,28 @@ RSpec.describe "ChangePlans (web)", type: :request do
     end
   end
 
-  it "links Pending PRs from the primary nav, current on the list and not on a review page" do
+  # R8.9: a direct connection has nothing waiting for a PR, so the nav offers
+  # no entry for it; a PR-mode one names its changeset.
+  it "offers no pending-PR entry in the nav of a direct connection" do
     sign_in
-    plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", before: { "name" => "svc" }, after: { "name" => "svc" })
+    get entities_path
+    nav = Nokogiri::HTML(response.body).css("nav[aria-label='Primary'] a").map { |a| a.text.squish }
+    expect(nav).not_to include("Pending PRs", a_string_starting_with("Changeset"))
+  end
 
-    get change_plans_path
+  it "links the changeset from the nav of a PR-mode connection, current on it and not on a plan's review page" do
+    pr = create(:kong_connection, apply_mode: "pr", admin_url: "https://kong-pr-nav.test", credential_mode: "session")
+    sign_in(pr)
+    changeset = create(:changeset, kong_connection: pr)
+    plan = create(:change_plan, kong_connection: pr, apply_mode: "pr", changeset: changeset, position: 1)
+
+    get changesets_path
     nav = Nokogiri::HTML(response.body).css("nav[aria-label='Primary'] a")
-    expect(nav.map { |a| a.text.strip }).to include("Pending PRs")
-    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.strip }).to eq([ "Pending PRs" ])
+    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.squish }).to eq([ "Changeset 1" ])
 
     get change_plan_path(plan)
     nav = Nokogiri::HTML(response.body).css("nav[aria-label='Primary'] a")
-    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.strip }).to eq([ "Entities" ])
+    expect(nav.select { |a| a["aria-current"] }.map { |a| a.text.squish }).to eq([ "Entities" ])
   end
 
   it "shows a plan's status as a badge and its time as the shared local timestamp on the list" do

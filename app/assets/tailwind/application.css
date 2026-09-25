@@ -2120,3 +2120,157 @@ a.env-switcher__item:hover {
     min-height: 2.75rem;
   }
 }
+
+/* R8.9 -- changeset pages. The items table and the list share one quiet
+   table: hairline rows, small-caps headers, the name the one link. */
+.changeset-items-wrap {
+  position: relative; /* keeps a visually-hidden header inside the scroller */
+  overflow-x: auto;
+}
+
+.changeset-items {
+  width: 100%;
+  min-width: 34rem;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+
+.changeset-items th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.changeset-items td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.changeset-items tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.changeset-items__pos {
+  width: 2.5rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+}
+
+.changeset-items__name {
+  max-width: 18rem;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.changeset-items__remove {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The YAML diff: one line per row, the sign kept in the text so an added or
+   removed line reads as such without its colour. */
+.yaml-diff {
+  margin: 0;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  border-top: 1px solid var(--color-border);
+}
+
+.yaml-diff__line {
+  display: block;
+  min-width: max-content;
+  padding: 0 1rem;
+  white-space: pre;
+}
+
+.yaml-diff__line--add {
+  background: var(--color-success-tint);
+  color: var(--color-success-ink);
+}
+
+.yaml-diff__line--del {
+  background: var(--color-danger-tint);
+  color: var(--color-danger-ink);
+}
+
+.yaml-diff__line--hunk {
+  color: var(--color-ink-soft);
+  padding-top: 0.25rem;
+}
+
+/* After the push: three steps to the pull request, in order. */
+.handoff {
+  display: grid;
+  gap: 1.25rem;
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.handoff > li::marker {
+  font-weight: 600;
+  color: var(--color-ink-soft);
+}
+
+.handoff__step {
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.pr-body {
+  max-height: 16rem;
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+}
+
+.pr-url-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 36rem;
+}
+
+.pr-url-form .field-input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.changeset-abandon {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The number beside Changeset in the nav: how many items wait. */
+.nav-count {
+  display: inline-block;
+  min-width: 1.25rem;
+  margin-left: 0.125rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25rem;
+  text-align: center;
+  background: var(--color-surface-subtle);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
+}

@@ -234,6 +234,13 @@ en:
       plugins_catalog:
         title: "No plugins are loaded on this node"
         body: "The list comes from the plugins this Kong node has loaded. If you expected some, log in again so Kongsole reads the node once more."
+      # R8.9: a PR-mode connection's changes collect in a changeset.
+      changesets:
+        title: "Nothing collected yet"
+        body: "On a PR-mode environment every change you propose waits in one changeset. Submit it to push one branch for the team to review as one pull request."
+      changeset_items:
+        title: "Nothing in this changeset yet"
+        body: "Changes you propose on %{env} collect here, from the Entities pages or from an agent. Nothing reaches git until you submit."
       change_plans:
         title: "No pull requests proposed yet"
         body: "On a pr connection, every change you review becomes a branch here for the team to review and merge."
@@ -289,6 +296,10 @@ en:
       # R1.14: shown instead of the write controls (KongConnection#write_block_reason).
       # The fix differs by where the env is defined: a local env is edited in
       # the UI, a registry env only in config/connections.yml.
+      # R8.9: git or Kong moved under a changeset (Kong::ChangesetDrift).
+      changeset_drift:
+        title: "Something changed since this changeset began"
+        body: "The diff below is rendered on the latest config repo and checked against Kong as it is now. Read it again before you submit."
       write_blocked:
         apply_mode_unset:
           title: "Nothing can be written to %{env}"
@@ -404,6 +415,14 @@ en:
         intro: "Pick a plugin loaded on this node, then set its configuration."
       change_plans_index:
         intro: "Changes proposed on this connection and their pull requests."
+      # R8.9
+      changesets_index:
+        intro: "Each changeset leaves Kongsole as one branch and one pull request."
+      changeset_show:
+        intro: "What will go into one branch for %{env}, in the order it will be written. Remove what should not go; review the diff before you submit."
+        submitted: "Pushed as one branch. Kong does not change until the pull request is approved and merged, and CI syncs it."
+      changeset_preview:
+        intro: "The config file as it will be pushed, rendered on the latest config repo, with decK's check against Kong and the CI gate. Nothing is pushed until you submit."
       change_plan_show:
         intro: "Check exactly what will change before it reaches Kong."
       audit_events:

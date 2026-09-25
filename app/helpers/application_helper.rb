@@ -304,6 +304,7 @@ module ApplicationHelper
   PRIMARY_NAV_CONTROLLERS = {
     connections: %w[connections sessions],
     entities: %w[entities plugins certificates change_plans],
+    changesets: %w[changesets changeset_items],
     audit: %w[audit_events],
     tokens: %w[personal_access_tokens],
     health: %w[health]

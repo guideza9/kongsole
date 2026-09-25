@@ -1,66 +1,152 @@
-<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
+<%# R8.9: one changeset. Open: what is collected, in the order it will be
+    written, each removable, and the way to the review (preview), which is
+    where it is submitted. Pushed: the hand-over to the git host -- the
+    branch, the PR description to copy, and a place for the PR's URL. The
+    summary strip is the review page's (UI-DESIGN.md, Review page). %>
 <% content_for :title, "Changeset ##{@changeset.id}" %>
-<p class="text-sm mb-2"><%= link_to "All changesets", changesets_path %></p>
-<h1 class="page-title mb-2">Changeset #<%= @changeset.id %> · <%= current_connection.name %></h1>
-<p class="text-sm mb-6">Status: <%= @changeset.status %></p>
+<% open = @changeset.open? %>
+<% items = open ? @items.to_a : @changeset.change_plans.where(status: "applied").order(:position).to_a %>
 
-<% if @changeset.failure_reason.present? && @changeset.open? %>
-  <p class="text-sm mb-4">Last submit failed: <%= @changeset.failure_reason %></p>
+<p class="page-back"><%= link_to "All changesets", changesets_path %></p>
+
+<div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 mb-1">
+  <h1 class="page-title">Changeset #<%= @changeset.id %></h1>
+  <% if open && items.any? %>
+    <%= link_to "Review and submit", preview_changeset_path(@changeset), class: "btn btn-primary shrink-0" %>
+  <% end %>
+</div>
+<p class="text-sm mb-5 text-ink-soft">
+  Started by <%= @changeset.actor_username %><%= " (#{@changeset.actor_operator})" if @changeset.actor_operator.present? %>
+  · <%= plan_timestamp(@changeset.created_at) %>
+</p>
+
+<% if open && @changeset.failure_reason.present? %>
+  <%= render layout: "shared/notice", locals: { tone: :danger, class: "risk-notice mb-5" } do %>
+    <p class="risk-notice__title">The last submit did not go through. Nothing was pushed.</p>
+    <p class="risk-notice__body font-mono text-xs whitespace-pre-wrap"><%= @changeset.failure_reason %></p>
+  <% end %>
 <% end %>
 
-<% items = @changeset.open? ? @items : @changeset.change_plans.where(status: "applied").order(:position) %>
-<% if items.empty? %>
-  <p class="text-sm">No items yet. Changes proposed on <%= current_connection.name %> collect here.</p>
-<% else %>
-  <table class="w-full text-sm mb-6">
-    <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Type</th><th scope="col">Name</th><th scope="col"></th></tr></thead>
-    <tbody>
-      <% items.each do |item| %>
-        <tr>
-          <td><%= item.position %></td>
-          <td><%= item.operation %></td>
-          <td><%= item.entity_type %></td>
-          <td><%= link_to item.entity_label, change_plan_path(item) %></td>
-          <td>
-            <% if @changeset.open? %>
-              <%= button_to "Remove", changeset_item_path(@changeset, item), method: :delete %>
-            <% end %>
-          </td>
-        </tr>
+<div class="grid grid-cols-[minmax(0,1fr)] gap-5">
+  <dl class="plan-summary" aria-label="Changeset summary">
+    <div class="plan-summary__cell<%= " env-strip #{current_connection.env_tone}" if current_connection.protected_env? %>">
+      <dt>Target</dt>
+      <% if current_connection.protected_env? %>
+        <dd class="plan-summary__value env-strip__env"><%= current_connection.env %></dd>
+      <% else %>
+        <dd class="plan-summary__value"><%= env_badge(current_connection) %></dd>
       <% end %>
-    </tbody>
-  </table>
-<% end %>
+      <dd class="plan-summary__note">PR mode <span aria-hidden="true">→</span> one branch, one pull request</dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Items</dt>
+      <dd class="plan-summary__value"><span class="plan-summary__num"><%= items.size %></span> <%= items.size == 1 ? "change" : "changes" %></dd>
+      <dd class="plan-summary__note"><%= items.any? ? changeset_operations_summary(items) : "Nothing collected yet" %></dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Status</dt>
+      <dd class="plan-summary__value"><%= changeset_status_label(@changeset) %></dd>
+      <dd class="plan-summary__note">
+        <% if @changeset.status == "submitted" %>
+          Pushed <%= plan_timestamp(@changeset.submitted_at) %> by <%= @changeset.submitted_by %>
+        <% elsif open %>
+          Waiting for a person to submit it
+        <% else %>
+          Nothing was pushed
+        <% end %>
+      </dd>
+    </div>
+  </dl>
 
-<% if @changeset.open? && items.any? %>
-  <p class="mb-4"><%= link_to "Preview YAML diff", preview_changeset_path(@changeset) %></p>
-
-  <%= form_with url: submit_changeset_path(@changeset), method: :post, local: true do %>
-    <% if current_connection.protected_env? %>
-      <label>Type <%= current_connection.name %> to confirm <input type="text" name="confirm_env_name" autocomplete="off"></label>
-    <% end %>
-    <% if current_connection.rank >= Reauthentication::REAUTH_RANK_THRESHOLD %>
-      <label>Password <input type="password" name="password" autocomplete="current-password"></label>
-    <% end %>
-    <label><input type="checkbox" name="acknowledge_drift" value="1"> I have looked at what changed in git or Kong since this began</label>
-    <label><input type="checkbox" name="acknowledge_env_vars" value="1"> The environment variables these certificates read are set on every Kong node</label>
-    <button type="submit">Submit changeset</button>
-  <% end %>
-
-  <%= button_to "Abandon changeset", abandon_changeset_path(@changeset), method: :post %>
-<% end %>
-
-<% if @changeset.status == "submitted" %>
-  <p class="mb-2">Branch:
-    <% if @changeset.branch_url %><%= link_to @changeset.branch, @changeset.branch_url, target: "_blank", rel: "noopener" %><% else %><code><%= @changeset.branch %></code><% end %>
+  <p class="text-sm text-ink-soft">
+    <%= @changeset.status == "submitted" ? t("hints.pages.changeset_show.submitted") : t("hints.pages.changeset_show.intro", env: current_connection.name) %>
   </p>
-  <h2 class="section-label">PR description</h2>
-  <pre class="text-xs whitespace-pre-wrap mb-4"><%= @changeset.pr_body %></pre>
-  <% if @changeset.pr_url.present? %>
-    <p>Pull request: <%= link_to @changeset.pr_url, @changeset.pr_url, target: "_blank", rel: "noopener" %></p>
+
+  <% if items.empty? %>
+    <% if open %>
+      <%= empty_state(:changeset_items, env: current_connection.name) do %>
+        <%= link_to "Go to Entities", entities_path, class: "btn-sm btn-secondary" %>
+      <% end %>
+    <% end %>
+  <% else %>
+    <section class="panel" aria-labelledby="changeset-items-heading">
+      <h2 id="changeset-items-heading" class="section-label px-4 pt-3 pb-2">Items, in the order they are written</h2>
+      <div class="changeset-items-wrap">
+        <table class="changeset-items">
+          <thead>
+            <tr>
+              <th scope="col" class="changeset-items__pos">#</th>
+              <th scope="col">Operation</th>
+              <th scope="col">Type</th>
+              <th scope="col">Name</th>
+              <th scope="col">Proposed by</th>
+              <% if open %><th scope="col"><span class="sr-only">Remove</span></th><% end %>
+            </tr>
+          </thead>
+          <tbody>
+            <% items.each do |item| %>
+              <tr>
+                <td class="changeset-items__pos"><%= item.position %></td>
+                <td><span class="tag"><%= item.operation %></span></td>
+                <td><%= item.entity_type %></td>
+                <td class="changeset-items__name"><%= link_to item.entity_label, change_plan_path(item) %></td>
+                <td class="text-ink-soft"><%= actor_summary(item) %></td>
+                <% if open %>
+                  <td class="changeset-items__remove">
+                    <%= button_to "Remove", changeset_item_path(@changeset, item), method: :delete,
+                          class: "btn-sm btn-text-danger bg-transparent",
+                          aria: { label: "Remove item #{item.position}, #{item.entity_label}" },
+                          form: { data: { turbo_confirm: "Take item #{item.position} (#{item.operation} #{item.entity_type} #{item.entity_label}) out of this changeset? It stays on record as cancelled." } } %>
+                  </td>
+                <% end %>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
   <% end %>
-  <%= form_with url: pr_url_changeset_path(@changeset), method: :patch, local: true do %>
-    <label>Pull request URL <input type="url" name="pr_url" value="<%= @changeset.pr_url %>"></label>
-    <button type="submit">Save</button>
+
+  <% if @changeset.status == "submitted" %>
+    <section class="panel p-4 grid gap-4" aria-labelledby="handoff-heading">
+      <h2 id="handoff-heading" class="section-label">Open the pull request</h2>
+      <ol class="handoff">
+        <li>
+          <p class="handoff__step">Open the branch on the git host</p>
+          <p class="text-sm">
+            <% if @changeset.branch_url %><a href="<%= @changeset.branch_url %>" class="font-mono underline underline-offset-2" target="_blank" rel="noopener"><%= @changeset.branch %><span class="sr-only"> (opens the branch in the config repo, in a new tab)</span></a><% else %><code class="font-mono"><%= @changeset.branch %></code><% end %>
+            <% if @changeset.commit_sha.present? %><span class="text-ink-soft">· commit <code class="font-mono"><%= @changeset.commit_sha.first(8) %></code></span><% end %>
+          </p>
+        </li>
+        <li data-controller="copy" data-copy-done-value="PR description copied." data-copy-failed-value="Could not copy -- the text is selected; copy it with your keyboard.">
+          <p class="handoff__step">Start a pull request from it with this description</p>
+          <pre class="pr-body font-mono text-xs" tabindex="0" aria-label="PR description" data-copy-target="source"><%= @changeset.pr_body %></pre>
+          <div class="flex flex-wrap items-center gap-3 mt-2">
+            <button type="button" class="btn-sm btn-secondary" data-action="copy#copy">Copy PR description</button>
+            <span class="text-xs text-ink-soft" role="status" data-copy-target="status"></span>
+          </div>
+        </li>
+        <li>
+          <p class="handoff__step">Paste the pull request's URL here, so this changeset links to it</p>
+          <% if @changeset.pr_url.present? %>
+            <p class="text-sm mb-2">Recorded: <a href="<%= @changeset.pr_url %>" class="underline underline-offset-2 break-all" target="_blank" rel="noopener"><%= @changeset.pr_url %></a></p>
+          <% end %>
+          <%= form_with url: pr_url_changeset_path(@changeset), method: :patch, local: true, class: "pr-url-form" do %>
+            <label for="pr_url" class="sr-only">Pull request URL</label>
+            <input type="url" id="pr_url" name="pr_url" value="<%= @changeset.pr_url %>" required class="field-input text-sm"
+                   placeholder="https://…/pull/1">
+            <button type="submit" class="btn-sm btn-secondary"><%= @changeset.pr_url.present? ? "Update" : "Save" %></button>
+          <% end %>
+        </li>
+      </ol>
+    </section>
   <% end %>
-<% end %>
+
+  <% if open %>
+    <div class="changeset-abandon">
+      <%= button_to "Abandon changeset", abandon_changeset_path(@changeset), method: :post,
+            class: "btn-sm btn-text-danger bg-transparent",
+            form: { data: { turbo_confirm: "Abandon changeset ##{@changeset.id}? Its items are cancelled and nothing is pushed to git." } } %>
+    </div>
+  <% end %>
+</div>

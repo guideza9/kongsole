@@ -37,7 +37,12 @@
           <%= nav_link_to "Connections", connections_path, current: primary_nav_current?(:connections), class: "topbar-action hover:text-ink transition-colors" %>
           <% if signed_in? %>
             <%= nav_link_to "Entities", entities_path, current: primary_nav_current?(:entities), class: "topbar-action hover:text-ink transition-colors" %>
-            <%= nav_link_to "Pending PRs", change_plans_path, current: primary_nav_current?(:pending), class: "topbar-action hover:text-ink transition-colors" %>
+            <%# R8.9: a PR-mode connection collects its changes in one changeset;
+                a direct one has nothing waiting, so the entry is not offered. %>
+            <% if current_connection.apply_mode == "pr" %>
+              <%= nav_link_to changeset_nav_label(current_open_changeset), changeset_nav_path(current_open_changeset),
+                    current: primary_nav_current?(:changesets), class: "topbar-action hover:text-ink transition-colors" %>
+            <% end %>
             <%= nav_link_to "Audit", audit_events_path, current: primary_nav_current?(:audit), class: "topbar-action hover:text-ink transition-colors" %>
             <%= nav_link_to "Tokens", personal_access_tokens_path, current: primary_nav_current?(:tokens), class: "topbar-action hover:text-ink transition-colors" %>
           <% end %>

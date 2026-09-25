@@ -578,10 +578,10 @@ end
 
 **คำสั่ง:** `/impeccable shape changeset review page` (ยึด `UI-DESIGN.md` §Review page: summary strip, diff table/`.disclosure`, action bar sticky, env loudness) → `/impeccable onboard` (changeset ว่าง: "Changes to <project/env> collect here…") → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): หน้า show มี (ก) รายการเรียงตามลำดับพร้อม operation/type/name และปุ่ม Remove ต่อแถว, (ข) ลิงก์ "Preview YAML diff", (ค) ถ้ามี drift แสดง `hints.risks.changeset_drift.title` และ checkbox acknowledge, (ง) ผล CiGate เป็นคำ (`Clear` / `Blocked`), (จ) หลัง submit: ลิงก์ branch, ปุ่ม "Copy PR description", ฟอร์ม PR URL
-- [ ] **Step 2:** FAIL → ทำ UI · YAML diff แสดงเป็น `<pre>` ที่แยกบรรทัด +/− ด้วยสัญลักษณ์และสี (ไม่ใช่สีอย่างเดียว) · action bar ใช้ `.btn-env` ที่ rank ≥ 2
-- [ ] **Step 3:** PASS · snapshots: changeset-empty, changeset-open, changeset-preview, changeset-blocked, changeset-submitted · detect · ภาพหน้าจอ 390/1280
-- [ ] **Step 4:** Commit `feat(R8.9): changeset review page with diff preview, drift, gate and PR hand-off`
+- [x] **Step 1:** assertion (ก่อน): หน้า show มี (ก) รายการเรียงตามลำดับพร้อม operation/type/name และปุ่ม Remove ต่อแถว, (ข) ลิงก์ "Preview YAML diff", (ค) ถ้ามี drift แสดง `hints.risks.changeset_drift.title` และ checkbox acknowledge, (ง) ผล CiGate เป็นคำ (`Clear` / `Blocked`), (จ) หลัง submit: ลิงก์ branch, ปุ่ม "Copy PR description", ฟอร์ม PR URL
+- [x] **Step 2:** FAIL → ทำ UI · YAML diff แสดงเป็น `<pre>` ที่แยกบรรทัด +/− ด้วยสัญลักษณ์และสี (ไม่ใช่สีอย่างเดียว) · action bar ใช้ `.btn-env` ที่ rank ≥ 2
+- [x] **Step 3:** PASS · snapshots: changeset-empty, changeset-open, changeset-preview, changeset-blocked, changeset-submitted · detect · ภาพหน้าจอ 390/1280
+- [x] **Step 4:** Commit `feat(R8.9): changeset review page with diff preview, drift, gate and PR hand-off`
 
 **เกณฑ์ detect:** ไม่มี finding หลักเพิ่มจาก baseline
 

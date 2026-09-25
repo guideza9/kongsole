@@ -1,4 +1,5 @@
 require "rails_helper"
+require Rails.root.join("spec/support/bare_git_repo")
 
 # The console says the same thing the same way: times as one local stamp,
 # states as one badge, and "pick one of these" as one tab. These read the
@@ -551,6 +552,104 @@ RSpec.describe "Console consistency", type: :request do
         [ "New upstream", "New global plugin", "New certificate", "New CA certificate", "Edit", "Delete", "Add target", "Apply" ]
       )
       expect(seen.values.flat_map { |v| v[:notices] }).to be_empty
+    end
+  end
+  # R8.9: the changeset pages. The changeset page lists what is collected and
+  # leads to the review; the review (preview) shows the YAML diff, the gate
+  # and any drift, and carries the submit; after the push the changeset page
+  # hands the change over to the git host.
+  describe "changeset pages" do
+    include BareGitRepo
+
+    let(:repo) { bare_git_repo(path: "uat/kong.yaml", select_tags: %w[managed-by-kongctl]) }
+    let(:pr) do
+      pr_connection_for(repo, path: "uat/kong.yaml", select_tags: %w[managed-by-kongctl]).tap { _1.update!(admin_url: "https://kong-cs.test") }
+    end
+    let(:changeset) { create(:changeset, kong_connection: pr, base_git_sha: head_sha(repo)) }
+
+    def item(name, position, operation: "create")
+      create(:change_plan, changeset: changeset, kong_connection: pr, position: position, apply_mode: "pr", operation: operation,
+        entity_type: "service", provisional_kong_id: SecureRandom.uuid, target_kong_id: nil, before: {}, diff: { "operation" => "create" },
+        after: { "name" => name, "host" => "#{name}.internal", "tags" => %w[managed-by-kongctl] })
+    end
+
+    before do
+      sign_in_to(pr, access: :ro)
+      allow(Kong::DeckCli).to receive(:validate).and_return(true)
+      allow(Kong::DeckCli).to receive(:diff).and_return({ "changes" => { "creating" => [ { "kind" => "service", "name" => "billing" } ], "updating" => [], "deleting" => [] } })
+    end
+
+    it "lists the items in order with what each does, a Remove on each, and the way to the review" do
+      item("billing", 1)
+      item("ledger", 2)
+      get changeset_path(changeset)
+
+      rows = page.css("main table tbody tr")
+      expect(rows.map { |r| r.css("td").map { |c| c.text.squish }.first(4) }).to eq([
+        [ "1", "create", "service", "billing" ], [ "2", "create", "service", "ledger" ]
+      ])
+      expect(rows.map { |r| r.at_css("button")&.[]("aria-label") }).to eq([ "Remove item 1, billing", "Remove item 2, ledger" ])
+      expect(page.css("main a").map { |a| [ a.text.squish, a["href"] ] }).to include([ "Review and submit", preview_changeset_path(changeset) ])
+    end
+
+    it "explains an open changeset with nothing in it yet" do
+      get changeset_path(changeset)
+      expect(page.at_css("main").text).to include(I18n.t("hints.empty_states.changeset_items.title"))
+      expect(page.css("main a").map { |a| a.text.squish }).not_to include("Review and submit")
+    end
+
+    it "reviews the diff line by line, marked by sign as well as colour, with the gate in words" do
+      item("billing", 1)
+      get preview_changeset_path(changeset)
+
+      added = page.css("main .yaml-diff .yaml-diff__line--add").map(&:text)
+      expect(added).to include(a_string_starting_with("+").and(include("name: billing")))
+      expect(page.at_css("main .plan-summary").text.squish).to include("CI gate", "Clear")
+      expect(page.at_css("form#submit-changeset-form")).to be_present
+    end
+
+    it "says git moved since the changeset began, and asks the person to look before submitting" do
+      item("billing", 1)
+      push_empty_commit(repo)
+      get preview_changeset_path(changeset)
+
+      expect(page.at_css("main").text).to include(I18n.t("hints.risks.changeset_drift.title"))
+      box = page.at_css("input[type=checkbox][name='acknowledge_drift']")
+      expect(box["form"]).to eq("submit-changeset-form")
+      expect(box.key?("required")).to be(true)
+    end
+
+    it "offers no submit when the gate blocks, and says why" do
+      pr.project_env.project.update!(delete_threshold: 1)
+      allow(Kong::DeckCli).to receive(:diff).and_return({ "changes" => { "creating" => [], "updating" => [],
+        "deleting" => [ { "kind" => "service", "name" => "a" }, { "kind" => "service", "name" => "b" } ] } })
+      item("billing", 1)
+      get preview_changeset_path(changeset)
+
+      expect(page.at_css("main .plan-summary").text.squish).to include("Blocked")
+      expect(page.at_css("main").text).to include("over the threshold of 1")
+      expect(page.at_css("form#submit-changeset-form")).to be_nil
+    end
+
+    it "hands a pushed changeset over: the branch, the PR description to copy, and a place for the PR's URL" do
+      pr.project_env.project.update!(git_web_url: "https://git.example/team/repo/tree/{branch}")
+      pr.save!
+      changeset.update!(status: "submitted", branch: "kongctl/changeset-#{changeset.id}", commit_sha: "a" * 40,
+        pr_body: "## #{pr.name}: 1 change", submitted_at: Time.current, submitted_by: "alice")
+      get changeset_path(changeset)
+
+      expect(page.css("main a").map { |a| a["href"] }).to include("https://git.example/team/repo/tree/kongctl/changeset-#{changeset.id}")
+      copy = page.at_css("main button[data-action~='copy#copy']")
+      expect(copy.text.squish).to eq("Copy PR description")
+      expect(page.at_css("main form input[name='pr_url']")).to be_present
+    end
+
+    it "names the open changeset, and how much is in it, in the nav of a PR-mode connection only" do
+      item("billing", 1)
+      get changeset_path(changeset)
+      link = page.at_css("nav[aria-label='Primary'] a[href='#{changeset_path(changeset)}']")
+      expect(link.text.squish).to eq("Changeset 1")
+      expect(page.at_css("nav[aria-label='Primary']").text).not_to include("Pending PRs")
     end
   end
 end

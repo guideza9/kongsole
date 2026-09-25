@@ -1,5 +1,6 @@
 require "rails_helper"
 require Rails.root.join("spec/support/ui_snapshots")
+require Rails.root.join("spec/support/bare_git_repo")
 
 # Renders real pages to tmp/ui-snapshots/*.html so `npx impeccable detect`
 # (which cannot read .erb) has something to scan. Writes only when
@@ -273,6 +274,59 @@ RSpec.describe "UI snapshots", type: :request do
       sign_in
       get expiring_certificates_path
       snapshot!("certificates-expiring")
+    end
+  end
+  # R8.9: the changeset pages in each state.
+  describe "changesets" do
+    include BareGitRepo
+    include SignInHelper
+
+    let(:repo) { bare_git_repo(path: "uat/kong.yaml", select_tags: %w[managed-by-kongctl]) }
+    let(:pr) do
+      pr_connection_for(repo, path: "uat/kong.yaml", select_tags: %w[managed-by-kongctl]).tap { _1.update!(admin_url: "https://kong-uat.test") }
+    end
+    let(:changeset) { create(:changeset, kong_connection: pr, base_git_sha: head_sha(repo), actor_operator: "somchai@example.com") }
+
+    def item(name, position, operation: "create", actor_kind: "human")
+      create(:change_plan, changeset: changeset, kong_connection: pr, position: position, apply_mode: "pr", operation: operation,
+        actor_kind: actor_kind, entity_type: "service", provisional_kong_id: SecureRandom.uuid, target_kong_id: nil, before: {},
+        diff: { "operation" => "create" }, after: { "name" => name, "host" => "#{name}.internal", "tags" => %w[managed-by-kongctl] })
+    end
+
+    before do
+      sign_in_to(pr, access: :ro)
+      allow(Kong::DeckCli).to receive(:validate).and_return(true)
+      allow(Kong::DeckCli).to receive(:diff).and_return({ "changes" => { "creating" => [ { "kind" => "service", "name" => "billing" } ], "updating" => [], "deleting" => [] } })
+    end
+
+    it "empty, open, preview, blocked and pushed" do
+      get changeset_path(changeset)
+      snapshot!("changeset-empty")
+
+      item("billing", 1)
+      item("ledger-reconciliation-service-for-business-customers", 2, actor_kind: "agent")
+      get changeset_path(changeset)
+      snapshot!("changeset-open")
+
+      push_empty_commit(repo)
+      get preview_changeset_path(changeset)
+      snapshot!("changeset-preview")
+
+      pr.project_env.project.update!(delete_threshold: 1)
+      allow(Kong::DeckCli).to receive(:diff).and_return({ "changes" => { "creating" => [], "updating" => [],
+        "deleting" => [ { "kind" => "service", "name" => "a" }, { "kind" => "service", "name" => "b" } ] } })
+      get preview_changeset_path(changeset)
+      snapshot!("changeset-blocked")
+
+      pr.project_env.project.update!(git_web_url: "https://git.example/team/kong-config/tree/{branch}")
+      pr.save!
+      changeset.update!(status: "submitted", branch: "kongctl/changeset-#{changeset.id}", commit_sha: "3f9c2a7b" * 5,
+        submitted_at: Time.current, submitted_by: "kong-admin",
+        pr_body: Kong::PrBody.markdown(changeset, deck_diff: { "changes" => { "creating" => [ {} ], "updating" => [], "deleting" => [] } },
+          gate: Kong::CiGate::Result.new(passed: true, reasons: []), operator: "somchai@example.com"))
+      changeset.change_plans.update_all(status: "applied")
+      get changeset_path(changeset)
+      snapshot!("changeset-submitted")
     end
   end
 end

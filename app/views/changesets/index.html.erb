@@ -1,21 +1,41 @@
-<%# R8.8: minimal starting view; R8.9 (/impeccable) shapes it. %>
+<%# R8.9: a PR-mode connection's changesets -- the open one first, then what
+    was pushed, newest first. Each row says where it stands and where its
+    branch went. %>
 <% content_for :title, "Changesets" %>
-<h1 class="page-title mb-6">Changesets</h1>
+
+<h1 class="page-title mb-1">Changesets</h1>
+<p class="text-sm mb-6 text-ink-soft"><%= t("hints.pages.changesets_index.intro") %> On <%= current_connection.name %>.</p>
 
 <% if @changesets.empty? %>
-  <p class="text-sm text-ink-soft">Nothing collected for <%= current_connection.name %> yet.</p>
+  <%= empty_state(:changesets) do %>
+    <%= link_to "Go to Entities", entities_path, class: "btn-sm btn-secondary" %>
+  <% end %>
 <% else %>
-  <table class="w-full text-sm">
-    <thead><tr><th scope="col">Changeset</th><th scope="col">Status</th><th scope="col">Items</th><th scope="col">Branch</th></tr></thead>
-    <tbody>
-      <% @changesets.each do |changeset| %>
+  <div class="panel changeset-items-wrap">
+    <table class="changeset-items">
+      <thead>
         <tr>
-          <td><%= link_to "##{changeset.id}", changeset_path(changeset) %></td>
-          <td><%= changeset.status %></td>
-          <td><%= changeset.open? ? changeset.items.count : changeset.change_plans.where(status: "applied").count %></td>
-          <td class="font-mono"><%= changeset.branch %></td>
+          <th scope="col">Changeset</th>
+          <th scope="col">Status</th>
+          <th scope="col">Items</th>
+          <th scope="col">Started</th>
+          <th scope="col">Branch</th>
         </tr>
-      <% end %>
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        <% @changesets.each do |changeset| %>
+          <% count = changeset.open? ? changeset.items.count : changeset.change_plans.where(status: "applied").count %>
+          <tr>
+            <td class="changeset-items__name"><%= link_to "##{changeset.id}", changeset_path(changeset) %></td>
+            <td><span class="tag"><%= changeset_status_label(changeset) %></span></td>
+            <td><%= changeset_items_label(count) %></td>
+            <td class="text-ink-soft whitespace-nowrap"><%= plan_timestamp(changeset.created_at) %></td>
+            <td class="font-mono text-xs">
+              <% if changeset.branch_url %><a href="<%= changeset.branch_url %>" class="underline underline-offset-2" target="_blank" rel="noopener"><%= changeset.branch %></a><% else %><%= changeset.branch.presence || "—" %><% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
 <% end %>
