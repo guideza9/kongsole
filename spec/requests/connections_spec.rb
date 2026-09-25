@@ -68,7 +68,7 @@ RSpec.describe "Connections", type: :request do
     row = Nokogiri::HTML(response.body).at_css(".row-card")
     remove = row.at_xpath(".//button[normalize-space()='Remove']")
     expect(remove.ancestors("div").first["class"]).to include("border-l")
-    expect(row.css("a").map { |a| a.text.strip }).to eq([ "Log in", "Edit" ])
+    expect(row.css("a").map { |a| a.text.strip }).to eq([ "Log in", "Edit environment", "Edit connection" ])
   end
 
   it "has no rank input and ignores a submitted rank" do

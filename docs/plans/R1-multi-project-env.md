@@ -882,12 +882,12 @@ end
 
 **คำสั่ง:** `/impeccable layout app/views/connections/_env_row.html.erb` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): แถว env `source: "local"` ที่มี connection มีลิงก์ไป `edit_project_env_path(env)` และลิงก์ไป `edit_connection_path(connection)`
+- [x] **Step 1:** assertion (ก่อน): แถว env `source: "local"` ที่มี connection มีลิงก์ไป `edit_project_env_path(env)` และลิงก์ไป `edit_connection_path(connection)`
   ที่แยกกันด้วย accessible name (`Edit environment <project/env>` / `Edit connection <project/env>`) · แถว env `registry` ไม่มีทั้งสองลิงก์ ·
   หน้า `connections/show` ของ connection local มีลิงก์ไปแก้ env ของมัน
-- [ ] **Step 2:** FAIL → ทำ UI: Remove ยังเป็น action ทำลายอันเดียวที่อยู่อีกฝั่งของเส้นคั่น · 390px ปุ่มไม่ล้นแถว
-- [ ] **Step 3:** PASS · snapshot `connections-index-projects` อัปเดต · detect ไม่เพิ่ม
-- [ ] **Step 4:** Commit `feat(R1.15): a connected env can be edited from its row`
+- [x] **Step 2:** FAIL → ทำ UI: Remove ยังเป็น action ทำลายอันเดียวที่อยู่อีกฝั่งของเส้นคั่น · 390px ปุ่มไม่ล้นแถว
+- [x] **Step 3:** PASS · snapshot `connections-index-projects` อัปเดต · detect ไม่เพิ่ม
+- [x] **Step 4:** Commit `feat(R1.15): a connected env can be edited from its row`
 
 ---
 

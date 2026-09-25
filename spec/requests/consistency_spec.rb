@@ -293,6 +293,25 @@ RSpec.describe "Console consistency", type: :request do
       expect(section("Project X").css("a, button").map { |n| n.text.strip }).to include("Edit", "Remove")
     end
 
+    # R1.15: a connected env's rank, apply mode and colour stay editable.
+    it "links a connected local env to its own edit page and to its connection's, and neither on a registry env" do
+      local_env = create(:project_env, source: "local", project: create(:project, key: "local-p", name: "Local P", source: "local"))
+      local_conn = create(:kong_connection, project_env: local_env)
+      get connections_path
+
+      row = page.css(".env-row").find { |r| r["data-env-name"] == local_env.name }
+      hrefs = row.css("a").map { |a| a["href"] }
+      expect(hrefs).to include(edit_project_env_path(local_env), edit_connection_path(local_conn))
+      expect(section("Project A").css("a").map { |a| a["href"] }.grep(%r{/edit\z})).to be_empty
+    end
+
+    it "links a local connection's page to its env's edit page (R1.15)" do
+      env = create(:project_env, source: "local", project: create(:project, source: "local"))
+      connection = create(:kong_connection, project_env: env)
+      get connection_path(connection)
+      expect(page.css("main a").map { |a| a["href"] }).to include(edit_project_env_path(env))
+    end
+
     it "explains a project with no envs yet" do
       get connections_path
       expect(section("Empty Project").text).to include(I18n.t("hints.empty_states.project_envs.title"))

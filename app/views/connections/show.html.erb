@@ -54,6 +54,8 @@
   <%= link_to "Log in", login_connection_path(@connection), class: "btn btn-primary" %>
   <% if @connection.editable_in_ui? %>
     <%= link_to "Edit", edit_connection_path(@connection), class: "btn btn-secondary" %>
+    <%# R1.15: rank, apply mode and colour belong to the env. %>
+    <%= link_to "Edit environment", edit_project_env_path(@connection.project_env), class: "btn btn-text" %>
   <% end %>
   <%= link_to "Back", connections_path, class: "btn btn-text" %>
 </div>

@@ -1697,6 +1697,7 @@ html:has(.action-bar) {
 
 .env-row__actions {
   display: flex;
+  flex-wrap: wrap; /* R1.15: four actions on a local connected env; a narrow row wraps them */
   align-items: center;
   gap: 0.5rem;
   font-size: 0.875rem;

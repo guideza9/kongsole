@@ -362,4 +362,19 @@ RSpec.describe "Accessibility semantics", type: :request do
       expect(sit.at_css("[aria-disabled='true']")).to be_present
     end
   end
+
+  # R1.15: two edit links on one row, told apart by name, not by position.
+  describe "a connected env's edit links" do
+    it "names each link after what it edits and which env" do
+      env = create(:project_env, name: "nonprod", rank: 0, source: "local",
+        project: create(:project, key: "pay", name: "Pay", source: "local"))
+      connection = create(:kong_connection, project_env: env)
+      get connections_path
+      doc = Nokogiri::HTML(response.body)
+
+      names = doc.css("a[href='#{edit_project_env_path(env)}'], a[href='#{edit_connection_path(connection)}']")
+        .map { |a| a["aria-label"] || a.text.squish }
+      expect(names).to contain_exactly("Edit environment pay/nonprod", "Edit connection pay/nonprod")
+    end
+  end
 end

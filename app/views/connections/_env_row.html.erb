@@ -35,7 +35,11 @@
     <% if connection %>
       <%= link_to "Log in", login_connection_path(connection), class: "btn-sm btn-secondary" %>
       <% if connection.editable_in_ui? %>
-        <%= link_to "Edit", edit_connection_path(connection), class: "btn-sm btn-text", aria: { label: "Edit #{connection.name}" } %>
+        <%# R1.15: the env (rank, apply mode, colour) and its connection (URL,
+            TLS, credential) are edited apart -- two links, named for what
+            each one edits. %>
+        <%= link_to "Edit environment", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit environment #{env.qualified_name}" } %>
+        <%= link_to "Edit connection", edit_connection_path(connection), class: "btn-sm btn-text", aria: { label: "Edit connection #{env.qualified_name}" } %>
         <%# Remove is the only destructive action on the row: it gets its own
             side of a hairline, so a slip aimed at Log in or Edit cannot land on it. %>
         <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
