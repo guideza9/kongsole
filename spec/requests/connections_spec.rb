@@ -17,7 +17,7 @@ RSpec.describe "Connections", type: :request do
         credential_mode: "session", auth_type: "basic"
       }
     }
-    expect(response).to redirect_to(connections_path)
+    expect(response).to redirect_to(project_path(local_env.project))
     expect(KongConnection.find_by(name: "project-x/sit")).to be_present
   end
 
@@ -108,11 +108,21 @@ RSpec.describe "Connections", type: :request do
     expect(KongConnection.count).to eq(0)
   end
 
-  it "removes a connection from the registry" do
+  it "removes a local connection from this machine and goes back to its project" do
     connection = create(:kong_connection, name: "old")
     delete connection_path(connection)
-    expect(response).to redirect_to(connections_path)
+    expect(response).to redirect_to(project_path(connection.project))
+    expect(flash[:notice]).to eq("Connection \"#{connection.name}\" removed from this machine.")
     expect(KongConnection.exists?(connection.id)).to be(false)
+  end
+
+  # R1.18: the filter works without JavaScript, as a plain GET.
+  it "filters projects with ?q=" do
+    create(:project, key: "payments", name: "Payments")
+    create(:project, key: "card", name: "Card Switch")
+    get connections_path(q: "pay")
+    expect(response.body).to include("Payments")
+    expect(response.body).not_to include("Card Switch")
   end
 end
 

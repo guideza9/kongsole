@@ -10,8 +10,15 @@ class ConnectionsController < ApplicationController
   before_action :refuse_registry_connection, only: %i[edit update destroy]
 
   # R1: grouped by project, envs in each project's own order.
+  # R1.18: ?q= narrows the list to the projects it names (ProjectFilter), so
+  # the filter works without JavaScript. @project_count is the unfiltered
+  # total, which decides whether the page offers the filter at all.
   def index
-    @projects = Project.includes(project_envs: :kong_connection).order(:name)
+    projects = Project.includes(project_envs: :kong_connection).order(:name)
+    @query = params[:q].to_s.strip
+    @project_count = projects.size
+    @rows = ProjectFilter.new(projects, @query).call
+    @projects = @rows.map(&:project)
   end
 
   def show
@@ -27,7 +34,7 @@ class ConnectionsController < ApplicationController
     return refuse_registry("Environment #{env.qualified_name}") if env && env.source != "local"
 
     if @connection.save
-      redirect_to connections_path, notice: "Connection \"#{@connection.name}\" added."
+      redirect_to project_path(@connection.project), notice: "Connection \"#{@connection.name}\" added."
     else
       render :new, status: :unprocessable_entity
     end
@@ -42,7 +49,7 @@ class ConnectionsController < ApplicationController
     return refuse_registry("Environment #{env.qualified_name}") if env && env.source != "local"
 
     if @connection.save
-      redirect_to connections_path, notice: "Connection \"#{@connection.name}\" updated."
+      redirect_to project_path(@connection.project), notice: "Connection \"#{@connection.name}\" updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -50,8 +57,9 @@ class ConnectionsController < ApplicationController
 
   def destroy
     name = @connection.name
+    project = @connection.project
     @connection.destroy
-    redirect_to connections_path, notice: "Connection \"#{name}\" removed from the registry."
+    redirect_to project_path(project), notice: "Connection \"#{name}\" removed from this machine."
   end
 
   private

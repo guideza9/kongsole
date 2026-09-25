@@ -26,7 +26,7 @@ class ProjectEnvsController < ApplicationController
     return refuse_pr unless apply_mode_allowed?
 
     if @project_env.save
-      redirect_to connections_path, notice: "Environment #{@project_env.qualified_name} added."
+      redirect_to project_path(project), notice: "Environment #{@project_env.qualified_name} added."
     else
       render :new, status: :unprocessable_entity
     end
@@ -42,7 +42,7 @@ class ProjectEnvsController < ApplicationController
     if @project_env.save
       # The connection keeps a copy of rank and apply_mode (KongConnection#copy_policy_from_env).
       @project_env.kong_connection&.save!
-      redirect_to connections_path, notice: "Environment #{@project_env.qualified_name} updated."
+      redirect_to project_path(@project_env.project), notice: "Environment #{@project_env.qualified_name} updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -51,9 +51,9 @@ class ProjectEnvsController < ApplicationController
   def destroy
     name = @project_env.qualified_name
     if @project_env.destroy
-      redirect_to connections_path, notice: "Environment #{name} removed."
+      redirect_to project_path(@project_env.project), notice: "Environment #{name} removed."
     else
-      redirect_to connections_path, alert: "#{name} still has a connection -- remove the connection first."
+      redirect_to project_path(@project_env.project), alert: "#{name} still has a connection -- remove the connection first."
     end
   end
 

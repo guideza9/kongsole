@@ -1,10 +1,14 @@
 # R1.5: local projects -- the ones Kongsole creates. Projects from
-# config/connections.yml are edited there (RegistryGuard).
+# config/connections.yml are edited there (RegistryGuard), but every project
+# has a page (R1.18): its envs, connections and what edits them.
 class ProjectsController < ApplicationController
   include RegistryGuard
 
-  before_action :set_project, only: %i[edit update]
+  before_action :set_project, only: %i[show edit update]
   before_action :refuse_registry_project, only: %i[edit update]
+
+  def show
+  end
 
   def new
     @project = Project.new
@@ -13,7 +17,7 @@ class ProjectsController < ApplicationController
   def create
     @project = Project.new(project_params.merge(key: params.dig(:project, :key), source: "local"))
     if @project.save
-      redirect_to connections_path, notice: "Project \"#{@project.name}\" added."
+      redirect_to project_path(@project), notice: "Project \"#{@project.name}\" added."
     else
       render :new, status: :unprocessable_entity
     end
@@ -24,7 +28,7 @@ class ProjectsController < ApplicationController
 
   def update
     if @project.update(project_params)
-      redirect_to connections_path, notice: "Project \"#{@project.name}\" updated."
+      redirect_to project_path(@project), notice: "Project \"#{@project.name}\" updated."
     else
       render :edit, status: :unprocessable_entity
     end

@@ -5,6 +5,7 @@ RSpec.describe "Project envs", type: :request do
 
   it "creates a local direct env with a chosen rank for an 'other' name" do
     post project_envs_path, params: { project_env: { project_id: project.id, name: "nonprod", position: 1, rank: 1, apply_mode: "direct" } }
+    expect(response).to redirect_to(project_path(project))
     expect(ProjectEnv.find_by!(name: "nonprod")).to have_attributes(rank: 1, apply_mode: "direct", source: "local")
   end
 
@@ -43,7 +44,7 @@ RSpec.describe "Project envs", type: :request do
   it "edits a local env, and can set its apply_mode back to not set" do
     env = create(:project_env, project: project, name: "pt", rank: 1, apply_mode: "direct")
     patch project_env_path(env), params: { project_env: { apply_mode: "" } }
-    expect(response).to redirect_to(connections_path)
+    expect(response).to redirect_to(project_path(project))
     expect(env.reload.apply_mode).to be_nil
   end
 
@@ -51,12 +52,14 @@ RSpec.describe "Project envs", type: :request do
     env = create(:project_env, project: project)
     create(:kong_connection, project_env: env)
     delete project_env_path(env)
+    expect(response).to redirect_to(project_path(project))
     expect(ProjectEnv.exists?(env.id)).to be(true)
   end
 
   it "deletes a local env with no connection" do
     env = create(:project_env, project: project)
     delete project_env_path(env)
+    expect(response).to redirect_to(project_path(project))
     expect(ProjectEnv.exists?(env.id)).to be(false)
   end
 end

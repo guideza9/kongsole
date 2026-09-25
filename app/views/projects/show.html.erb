@@ -1,0 +1,6 @@
+<%# R1.18: minimal project page -- the project's envs and what edits them,
+    reusing the connections section. R1.20 (/impeccable) shapes it. %>
+<% content_for :title, @project.name %>
+<p class="text-sm mb-2"><%= link_to "All connections", connections_path, class: "underline underline-offset-2" %></p>
+<h1 class="page-title mb-6"><%= @project.name %></h1>
+<%= render "connections/project", project: @project %>

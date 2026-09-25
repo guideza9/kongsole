@@ -1006,7 +1006,7 @@ end
 
 **ทำไม:** คำตัดสินข้อ 1 · และปิดข้อสังเกต 2 ของ clarify/harden (flash `removed from the registry` ของ connection local)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/project_filter_spec.rb
@@ -1057,14 +1057,14 @@ it "says a removed local connection left this machine, not the registry" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement:
+- [x] **Step 2:** FAIL → implement:
   - route `resources :projects, param: :key, only: %i[new create edit update show]` · `ProjectsController#show` เปิดได้ทั้ง local และ registry (ไม่ผ่าน `refuse_registry_project`)
   - `ProjectFilter` (PORO, ในหน่วยความจำ — project หลักสิบ): แยก query ตามช่องว่าง, ทุก term ต้องตรง name/key ของ project หรือชื่อ env ใดก็ได้; คืน `Struct(:project, :matched_env_ids)`
   - `ConnectionsController#index`: `@query = params[:q].to_s.strip` · `@rows = ProjectFilter.new(…, @query).call` · `@project_count` (จำนวนทั้งหมด ก่อนกรอง ใช้ตัดสินว่าจะแสดงช่องกรอง)
   - redirect หลัง create/update/destroy ของ project, env, connection → `project_path(project)` แทน `connections_path` (ยกเว้น project ที่ถูกลบไม่ได้ → ไม่มี destroy อยู่แล้ว)
   - flash ของ `ConnectionsController#destroy` → `Connection "<name>" removed from this machine.`
   - spec เดิมที่ `expect(response).to redirect_to(connections_path)` หลังเขียน project/env/connection → แก้เป็น `project_path(...)` (เปลี่ยน expectation ตามคำตัดสินข้อ 1)
-- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R1.18): each project has its own page; the connections list can be filtered`
+- [x] **Step 3:** PASS · suite **1069/0** · Commit `feat(R1.18): each project has its own page; the connections list can be filtered`
 
 ---
 
