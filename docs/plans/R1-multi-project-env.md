@@ -769,6 +769,8 @@ end
 - [x] detect บน snapshot: **59 findings บน 40 หน้า** (R3 ปิดที่ 46 บน 34) · หน้าที่มีทั้งสองรอบ 46 → 43 ·
   หน้าใหม่ของ R1 = 16 (cramped-padding 14, side-tab 1 ที่ `header-switcher`, flat-type-hierarchy 1 ที่ `connection-show-registry`)
 - [x] `bin/rails hints:todo` เหลือ 2 (`errors.forbidden.next_step`, `errors.upstream_unavailable.next_step`) — ของ R3.7 ไม่มี key ใหม่ของ R1
+- [x] เก็บกวาด DB dev: ลบ project `r1check` (env `nonprod`, `broken`), connection 2 ตัว และ PAT `r1.12 check` (revoke แล้ว) ใน transaction เดียว ·
+  ไม่มี audit event / change plan ผูกอยู่ · หลังลบไม่มี connection ที่ apply_mode ว่าง (`db:rollback` ไม่ถูกบล็อก)
 
 **ข้อค้าง (รอเจ้าของงานตัดสิน):**
 
