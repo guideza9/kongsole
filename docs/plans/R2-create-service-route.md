@@ -65,7 +65,7 @@
 
 **Interfaces:** `ServiceForm.new(params_hash)`; `#valid?`; `#to_attributes(select_tags:) -> Hash` (string keys, พร้อมส่ง ChangePlanner)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -111,8 +111,8 @@ RSpec.describe ServiceForm do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (`include ActiveModel::Model, ActiveModel::Attributes`) → PASS
-- [ ] **Step 3:** Commit `feat(R2.1): service form object validates and builds Kong's service body`
+- [x] **Step 2:** FAIL → implement (`include ActiveModel::Model, ActiveModel::Attributes`) → PASS
+- [x] **Step 3:** Commit `feat(R2.1): service form object validates and builds Kong's service body`
 
 ---
 
@@ -122,7 +122,7 @@ end
 
 **Interfaces:** `RouteForm.new(params_hash)`; `#to_attributes(select_tags:, service_kong_id:) -> Hash` (ใส่ `"service" => {"id" => service_kong_id}`); `#hosts_list`, `#paths_list`, `#methods_list`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -169,7 +169,7 @@ RSpec.describe RouteForm do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.2): route form object validates matching rules and builds Kong's route body`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.2): route form object validates matching rules and builds Kong's route body`
 
 ---
 
@@ -179,7 +179,7 @@ end
 
 **Interfaces:** `Kong::RouteOverlap.check(connection:, hosts:, paths:, methods:, changeset: nil, exclude_kong_id: nil) -> Array<Hash>` (hash keys: `:route_name, :service_name, :reason`)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -242,7 +242,7 @@ RSpec.describe Kong::RouteOverlap do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.3): warn when a new route overlaps an existing one`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R2.3): warn when a new route overlaps an existing one`
 
 ---
 
@@ -252,7 +252,7 @@ end
 - Create: `app/controllers/services_controller.rb`, `app/controllers/routes_controller.rb`, `app/views/services/new.html.erb`, `app/views/routes/new.html.erb` (ขั้นต่ำ: field + label + errors), `spec/requests/services_spec.rb`, `spec/requests/routes_spec.rb`
 - Modify: `config/routes.rb`, `app/services/kong/change_planner.rb` (`with_select_tags` สำหรับทุก create), `app/controllers/application_controller.rb` (`can_propose_writes?`), `app/controllers/change_plans_controller.rb` (`@route_overlaps` เมื่อ plan เป็น route create), `spec/services/kong/change_planner_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/services_spec.rb
@@ -364,8 +364,8 @@ RSpec.describe "Create route", type: :request do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (planner: `attributes["tags"] = (connection.select_tags + Array(attributes["tags"])).uniq` เมื่อ create และ select_tags มีค่า — spec ใน `change_planner_spec.rb` สำหรับ agent create ด้วย)
-- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R2.4): create services and routes through the plan or changeset pipeline`
+- [x] **Step 2:** FAIL → implement (planner: `attributes["tags"] = (connection.select_tags + Array(attributes["tags"])).uniq` เมื่อ create และ select_tags มีค่า — spec ใน `change_planner_spec.rb` สำหรับ agent create ด้วย)
+- [x] **Step 3:** PASS · suite 0 failures · Commit `feat(R2.4): create services and routes through the plan or changeset pipeline`
 
 ---
 
@@ -375,10 +375,10 @@ end
 
 **คำสั่ง:** `/impeccable shape service create form` → `/impeccable onboard` → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): ทุก input มี `aria-describedby` ไปยัง hint; มีตัวอย่างค่า; timeout 3 ช่องอยู่ใน `.disclosure` "Timeouts and retries" (ค่า default แสดง); ปุ่มหลัก "Review change" (direct) / "Add to changeset" (pr)
-- [ ] **Step 2:** FAIL → ทำ UI (client-side validation ด้วย attribute: `required`, `pattern`, `min`/`max` ตรงกับ ServiceForm; server ยังเป็นผู้ตัดสิน)
-- [ ] **Step 3:** PASS · snapshot direct/pr/errors · detect · ภาพ 390/1280
-- [ ] **Step 4:** Commit `feat(R2.5): service form with hints and inline validation`
+- [x] **Step 1:** assertion (ก่อน): ทุก input มี `aria-describedby` ไปยัง hint; มีตัวอย่างค่า; timeout 3 ช่องอยู่ใน `.disclosure` "Timeouts and retries" (ค่า default แสดง); ปุ่มหลัก "Review change" (direct) / "Add to changeset" (pr)
+- [x] **Step 2:** FAIL → ทำ UI (client-side validation ด้วย attribute: `required`, `pattern`, `min`/`max` ตรงกับ ServiceForm; server ยังเป็นผู้ตัดสิน)
+- [x] **Step 3:** PASS · snapshot direct/pr/errors · detect · ภาพ 390/1280
+- [x] **Step 4:** Commit `feat(R2.5): service form with hints and inline validation`
 
 ---
 
@@ -388,10 +388,10 @@ end
 
 **คำสั่ง:** `/impeccable shape route create form` → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): หน้า new route แสดงชื่อ service; หน้า review plan ของ route create ที่มี overlap แสดงชื่อ route ที่ทับและเหตุผลเป็นคำ (`Same path`, `Path prefix`, `Can't tell (regex)`)
-- [ ] **Step 2:** FAIL → ทำ UI · preview ของ request line ใช้ mark `.route-match` เดิม (`UI-DESIGN.md` Kong-native marks)
-- [ ] **Step 3:** PASS · snapshot (มี/ไม่มี overlap) · detect
-- [ ] **Step 4:** Commit `feat(R2.6): route form under its service, with live overlap warnings`
+- [x] **Step 1:** assertion (ก่อน): หน้า new route แสดงชื่อ service; หน้า review plan ของ route create ที่มี overlap แสดงชื่อ route ที่ทับและเหตุผลเป็นคำ (`Same path`, `Path prefix`, `Can't tell (regex)`)
+- [x] **Step 2:** FAIL → ทำ UI · preview ของ request line ใช้ mark `.route-match` เดิม (`UI-DESIGN.md` Kong-native marks)
+- [x] **Step 3:** PASS · snapshot (มี/ไม่มี overlap) · detect
+- [x] **Step 4:** Commit `feat(R2.6): route form under its service, with live overlap warnings`
 
 ---
 
@@ -401,9 +401,9 @@ end
 
 **คำสั่ง:** `/impeccable clarify app/views/entities` (ข้อความเมื่อเขียนไม่ได้: "This credential is read-only on a direct-apply environment…" / "Apply mode isn't set for <project/env>…")
 
-- [ ] **Step 1:** assertion (ก่อน): Services tab มี "New service" เมื่อ `can_propose_writes?`; หน้า service มี "Add route"; ไม่มีทั้งสองเมื่อเขียนไม่ได้ และมีประโยคบอกเหตุผลแทน; ปุ่มเขียนที่มีอยู่เดิม (New upstream, New certificate, New global plugin, Edit, Delete) ใช้กฎเดียวกัน
-- [ ] **Step 2:** FAIL → แก้ view · PASS · detect
-- [ ] **Step 3:** Commit `feat(R2.7): write buttons follow one rule, and say why when hidden`
+- [x] **Step 1:** assertion (ก่อน): Services tab มี "New service" เมื่อ `can_propose_writes?`; หน้า service มี "Add route"; ไม่มีทั้งสองเมื่อเขียนไม่ได้ และมีประโยคบอกเหตุผลแทน; ปุ่มเขียนที่มีอยู่เดิม (New upstream, New certificate, New global plugin, Edit, Delete) ใช้กฎเดียวกัน
+- [x] **Step 2:** FAIL → แก้ view · PASS · detect
+- [x] **Step 3:** Commit `feat(R2.7): write buttons follow one rule, and say why when hidden`
 
 ---
 
@@ -411,13 +411,26 @@ end
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R2.1–R2.7
 
-- [ ] `local/dev` (rw): สร้าง service `echo` → review → apply → สร้าง route `/echo` → apply → `curl -i localhost:8000/echo` ได้ 200 จาก upstream
-- [ ] สร้าง route `/echo/v1` → เห็นคำเตือน prefix ทั้งตอนกรอกและในหน้า review
-- [ ] `local/dev-ro` (ro, direct): ไม่เห็นปุ่มสร้าง มีประโยคบอกเหตุผล
-- [ ] `local/uat` (pr): สร้าง service + route → อยู่ใน changeset เดียวกัน, preview diff ถูก nest; ไม่มี request เขียนใน log ของ Kong
-- [ ] error: หยุด `kong-1` แล้วสร้างบน dev → เห็นคำอธิบาย `upstream_unavailable` (cause + next step)
-- [ ] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้
-- [ ] ภาพหน้าจอ 390/1280
+- [x] `local/dev` (rw): สร้าง service `echo` → review → apply → สร้าง route `/echo` → apply → ผ่าน Kong ไปถึง upstream ได้ 200
+  (upstream = dev server ของ Kongsole `host.docker.internal:3000/up`; `GET /echo` ได้ 403 **จาก upstream** เพราะ Rails host authorization
+  ไม่รับ Host `host.docker.internal` → เพิ่ม route `echo-host` ติ๊ก "Preserve the client's Host header" แล้ว `HEAD /echo-host` ได้ **200** จาก Rails ·
+  `GET /echo-host` ยังเข้า `echo-route` เพราะ router ของ Kong ให้ route ที่มี method + path มาก่อน route ที่มีแค่ path — ตรงกับคำเตือน overlap ที่ฟอร์มแสดง)
+- [x] สร้าง route `/echo/v1` → เห็นคำเตือน prefix ทั้งตอนกรอก (live region: "echo-route on echo · Path prefix") และในหน้า review (ไม่ได้ apply, plan ถูกยกเลิก)
+- [x] `local/dev-ro` (ro, direct): ไม่เห็นปุ่มสร้าง มีประโยคบอกเหตุผล ("This credential can only read local/dev-ro …") · `/services/new` ส่งกลับรายการพร้อมเหตุผล
+- [x] `local/uat` (pr): สร้าง service `r2-echo` + route (จากลิงก์ "Add route" ของรายการใน changeset) → อยู่ใน changeset เดียวกัน,
+  route มี `parent_kong_id` = provisional id ของ service, tag `managed-by-kongctl` ครบ · YAML ที่ render จาก git (renderer ตัวเดียวกัน, เฉพาะ 2 รายการนี้)
+  nest `r2-echo-route` ใต้ `r2-echo` ถูก · preview เต็มของ changeset #4 ล้มที่รายการ update ของเจ้าของงานเอง (entity ไม่อยู่ใน git — ข้อจำกัดที่บันทึกใน R8) ·
+  log ของ Kong ช่วงนั้น: non-GET มีแค่ access probe ตอน login (PATCH → router 404) · เอา 2 รายการออกด้วยปุ่ม Remove แล้ว (รายการของเจ้าของงานไม่แตะ)
+- [x] error: หยุด `kong-1` แล้ว apply create บน dev → plan ขึ้น Failed "Kong Admin API unreachable at http://kong-admin.internal:8000 (refused)"
+  พร้อมขั้นต่อไป "Check the service in Kong before proposing this again…" · **ไม่มี** คำอธิบายแบบ R3 (cause + next step + network note)
+  เพราะ `ChangePlansController#apply` ตั้งใจไม่ flash (กัน banner ซ้อน) — ส่งให้ final review ตัดสิน · start `kong-1` กลับ healthy แล้ว
+- [ ] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้ — **รอเจ้าของงาน** (ต้องมีคนจริงใช้งาน)
+- [x] ภาพหน้าจอ 390/1280: `tmp/shots/r28-*.png` (ฟอร์ม service/route, review ที่มี overlap, dev-ro, uat changeset, Kong ล่ม) + `service-new*`, `route-new*`, `change-plan-route-overlap*`
+
+**ข้อสังเกตจากการตรวจจริง (ส่งเจ้าของงาน):** route ที่ไม่มี host จะ "ทับ" route ของ admin path (`admin-api-rw` / `admin-api-ro` มีแค่ host ไม่มี path)
+เสมอ ตามนิยามใน spec (host ว่าง = ทุก host) — ถูกต้องเชิงพฤติกรรม (request ไปที่ host ของ admin จะเข้า admin route) แต่จะขึ้นในทุกฟอร์ม route ที่ไม่ใส่ host
+
+ล้างข้อมูลทดสอบ: service `echo` + route `echo-route`/`echo-host` ลบจาก Kong dev และ read-model แล้ว · plan/audit เก็บไว้เป็นบันทึก
 
 ## เกณฑ์ปิดงาน R2
 
