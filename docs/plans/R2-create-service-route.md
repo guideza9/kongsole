@@ -424,11 +424,11 @@ end
 - [x] error: หยุด `kong-1` แล้ว apply create บน dev → plan ขึ้น Failed "Kong Admin API unreachable at http://kong-admin.internal:8000 (refused)"
   พร้อมขั้นต่อไป "Check the service in Kong before proposing this again…" · **ไม่มี** คำอธิบายแบบ R3 (cause + next step + network note)
   เพราะ `ChangePlansController#apply` ตั้งใจไม่ flash (กัน banner ซ้อน) — ส่งให้ final review ตัดสิน · start `kong-1` กลับ healthy แล้ว
-- [ ] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้ — **รอบที่ 1 (เจ้าของงาน, 2026-09-26):** uat เห็นปุ่มและสร้างได้ ·
+- [x] ทำ **R3.7** (ทดสอบกับคนจริง) ตอนนี้ — **รอบที่ 1 (เจ้าของงาน, 2026-09-26):** uat เห็นปุ่มและสร้างได้ ·
   "ไม่เห็นปุ่มสร้าง service" คือ `default/dev-readonly` (direct + credential อ่านอย่างเดียว) — ถูกต้องตามกฎ (เจ้าของงานยืนยัน) ·
   "ข้อความเยอะเกินไปทุกหน้า" → hint เป็นแบบกระชับโดยค่าเริ่มต้น (`d635930`) + distill หน้า R2 ผ่าน `/impeccable shape → distill → clarify` (`18960df`):
   ใต้ช่องไม่มีข้อความ (ตัวอย่างอยู่ใน placeholder "e.g. …"), ตัดประโยคใต้หัวข้อและใต้ปุ่ม, overlap เหลือหัวข้อนับจำนวน + รายการ ·
-  ปุ่มเล็กในช่อง → เอา spinner ของช่องตัวเลขออก, select วาด chevron เอง · hosts/paths → แถวละค่า + Add/Remove · **รอรอบถัดไป**
+  ปุ่มเล็กในช่อง → เอา spinner ของช่องตัวเลขออก, select วาด chevron เอง · hosts/paths → แถวละค่า + Add/Remove · เจ้าของงานยืนยันปิด R2
 - [x] ภาพหน้าจอ 390/1280: `tmp/shots/r28-*.png` (ฟอร์ม service/route, review ที่มี overlap, dev-ro, uat changeset, Kong ล่ม) + `service-new*`, `route-new*`, `change-plan-route-overlap*`
 
 **ข้อสังเกตจากการตรวจจริง (ส่งเจ้าของงาน):** route ที่ไม่มี host จะ "ทับ" route ของ admin path (`admin-api-rw` / `admin-api-ro` มีแค่ host ไม่มี path)
@@ -450,9 +450,9 @@ Minor ที่เลื่อนไว้: error ตอน apply ไม่ม�
 
 ## เกณฑ์ปิดงาน R2
 
-- [ ] เกณฑ์ใน `R2-create-service-route.md` (ฉบับแก้ §C3) ครบ พร้อมหลักฐาน — **ครบยกเว้น 2 จุด:** "ผ่านเกณฑ์ของ R3" รอ R3.7 ·
+- [x] เกณฑ์ใน `R2-create-service-route.md` (ฉบับแก้ §C3) ครบ พร้อมหลักฐาน — เจ้าของงานยืนยันปิด 2026-09-26 · หมายเหตุ 2 จุด: "ผ่านเกณฑ์ของ R3" (R3.7 รอบที่ 1 บันทึกแล้ว) ·
   "direct: error จาก Kong แสดงตาม error mapping 6 แบบ" ตอน apply แสดงข้อความที่จำแนกแล้ว (เช่น `(refused)`) + ขั้นต่อไป แต่ยังไม่มีคำอธิบายแบบ R3 (Minor ที่เลื่อนไว้)
 - [x] test "PR mode ไม่เรียก Admin API แบบเขียน" ผ่าน (request: services_spec, routes_spec · planner: change_planner_spec) · compose: non-GET มีแค่ access probe ตอน login
 - [x] `bundle exec rspec` **1238/0** · vitest **31/31** · detect: 84 → 108 ทั้งหมดอยู่บนหน้าใหม่ (service-new ×3, route-new ×2, change-plan-route-overlap) เป็นชนิดที่ baseline มี ·
   `hints:todo`: ไม่มี key ใหม่ (เหลือ 5: 3 key `git_auth_failed` จาก R8 + 2 `next_step` เดิมจาก R3)
-- [ ] R3.7 บันทึกผลแล้ว — **รอเจ้าของงาน**
+- [x] R3.7 บันทึกผลแล้ว (รอบที่ 1 ใน R2.8 และใน `R3-onboarding-hints.md`)
