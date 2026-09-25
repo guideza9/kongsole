@@ -59,6 +59,12 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("health")
     end
 
+    it "connections index" do
+      create(:kong_connection, name: "dev-1")
+      get connections_path
+      snapshot!("connections-index")
+    end
+
     it "connections new" do
       get new_connection_path
       snapshot!("connections-new")
