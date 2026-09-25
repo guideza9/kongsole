@@ -957,13 +957,30 @@ end
 **ข้อสังเกต (ยังไม่แก้):** หน้า plan ที่เสนอไว้ตอน env ยังเขียนได้ แสดงการ์ด "Direct apply → live write to Kong" (จาก `plan.apply_mode` ตอนเสนอ) และ "Guardrails: All clear"
 (`ChangePlansController#show` คำนวณตอนเปิดหน้า แต่ดูแค่ `access_level` ไม่ดู apply_mode) อยู่เหนือ notice "Nothing can be written"
 — ข้อมูลขัดกันบนหน้าเดียว (server ปฏิเสธถูกต้อง) · ทางแก้ที่น่าจะเล็กที่สุด: การ์ด guardrail ใช้ `write_block_reason`
-·
-**ต้องทำเพิ่ม:** ไม่มี `/impeccable` ใน session นี้ — notice ของ R1.14 และแถวของ R1.15 ยังไม่ผ่าน `/impeccable clarify` / `harden`
+
+### `/impeccable clarify` + `harden` ของ R1.14 / R1.15 (2026-09-25, compose ในเครื่อง, Edge headless)
+
+- [x] **clarify — notice:** `apply_mode_unset` เดิมบอกทุก env ว่า "set Direct apply on the Connections page" ซึ่งทำไม่ได้กับ env `registry` →
+  แยก `body_local` (ลิงก์ตรง `Edit environment <project/env>`) / `body_registry` (ให้ใส่ `apply_mode` ใน `config/connections.yml` แล้ว `kong:load_connections`, ไม่มีลิงก์) ·
+  `read_only` เพิ่มลิงก์ `Log in to <project/env> again` · spec ใหม่ 2 ข้อใน `consistency_spec`
+- [x] **clarify — แถว env:** "Remove" ในแถวที่มี connection → "Remove connection" (env ยังอยู่) · แถวว่าง "Edit"/"Remove" → "Edit environment"/"Remove environment" ·
+  ข้อความยืนยันย้ายเข้า `hints.risks.remove_connection` / `remove_environment` และบอกว่า credential ที่บันทึกไว้ถูกลบด้วย
+- [x] **harden** (project ชื่อไทยยาว, key/env 40 ตัวอักษร, admin URL ยาว, network_note ยาว):
+  390px หน้า Connections กว้าง 713px เพราะ grid item `min-width: auto` + URL บรรทัดเดียว → `.project-list`/`.env-list` `minmax(0, 1fr)` (URL ยาวจริงก็โดน) ·
+  640–1024px ปุ่มกิน 528px เหลือรายละเอียด env 257px → ปุ่มไม่เกินครึ่งแถวและ wrap ภายใน ·
+  390px header กว้าง 814px เพราะ env chip `nowrap` → ชื่อ project ย่อ (ellipsis, ชื่อเต็มใน title) ชื่อ env ไม่ย่อ + กลุ่มขวาของ header `min-w-0 max-w-full` ·
+  URL ในแถวมี `title` แสดงเต็ม · หลังแก้: 390/640/800/1024/1280 ไม่มี horizontal scroll · ลบข้อมูลทดสอบแล้ว (project, 2 env, connection)
+- [x] rspec **1060/0** · vitest **30/30** · detect **62** (เท่า R1.17; finding ของหน้าที่แก้เป็นของเดิม ไม่อยู่ที่ notice) · `hints:todo` เหลือ 2 ของ R3.7 ไม่มี key ของ R1 ·
+  `log/development.log` ช่วงตรวจไม่มี `Authorization` / `Basic <b64>` / password
+
+**ข้อสังเกตนอกชั้น UI (ยังไม่แก้ รอเจ้าของงานตัดสิน):**
+1. การ์ด "Direct apply → live write" + "Guardrails: All clear" บนหน้า plan ที่ env เขียนไม่ได้แล้ว (ข้อสังเกตของ R1.17) — ต้องแก้ `ChangePlansController#show` (backend)
+2. flash หลังลบ connection local ว่า `removed from the registry` (`ConnectionsController#destroy`) — "registry" ใน R1 หมายถึง `connections.yml` จึงขัดกับป้าย "Local only"
 
 ## เกณฑ์ปิดงาน R1
 
-- [ ] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน
-- [ ] migration 4 ตัว up/down ผ่านบน DB สำเนา
-- [ ] `bundle exec rspec` 0 failures · `cd mcp && npm test` ผ่าน · detect ไม่เพิ่ม
-- [ ] `hints:todo` ของ key ใหม่รายงานแล้ว
-- [ ] ไม่มี credential หลุด: `log_filtering_spec` ผ่าน; API connections ไม่มี `auth_secret`
+- [x] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน (ผลตรวจ R1.12, R1.17 และ clarify/harden ข้างบน)
+- [x] migration 4 ตัว up/down ผ่านบน DB สำเนา (R1.12, R1.17)
+- [x] `bundle exec rspec` 0 failures (1060) · `cd mcp && npm test` ผ่าน (30) · detect ไม่เพิ่ม (62 = R1.17)
+- [x] `hints:todo` ของ key ใหม่รายงานแล้ว (ไม่มี key `To Edit:` ของ R1; เหลือ 2 ของ R3.7)
+- [x] ไม่มี credential หลุด: `log_filtering_spec` ผ่าน; API connections ไม่มี `auth_secret`
