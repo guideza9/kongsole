@@ -1,5 +1,21 @@
 {
   "enabledPlugins": {
-    "fullstack-dev-skills@fullstack-dev-skills": true
+    "fullstack-dev-skills@fullstack-dev-skills": true,
+    "superpowers@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/script/cloud-setup.sh\"",
+            "timeout": 900,
+            "statusMessage": "Preparing cloud session"
+          }
+        ]
+      }
+    ]
   }
 }
