@@ -158,7 +158,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - [x] T0 — `docs/plans/T0-security-and-tooling.md` (ปิด 2026-09-25: rspec 889/0, vitest 28/28, PAT revoke แล้ว — เจ้าของงานยืนยัน)
 - [ ] R3 — `docs/plans/R3-onboarding-hints.md` (R3.1–R3.6 เสร็จ · ตรวจเกณฑ์ 2026-09-25: rspec 951/0, ต่อมา 952/0, detect ไม่เพิ่มจาก baseline · ข้อค้าง 2 ข้อแก้แล้ว · เหลือ R3.7 ซึ่งทำหลัง R2)
 - [x] R1 — `docs/plans/R1-multi-project-env.md` (ปิด 2026-09-25: R1.1–R1.21 เสร็จ, rspec 1085/0, vitest 30/30, detect 60 (R1.17 = 62), migration 4 ตัว up/down บนสำเนา DB — เจ้าของงานยืนยัน)
-- [ ] R8 — `docs/plans/R8-pr-mode-changeset.md`
+- [ ] R8 — `docs/plans/R8-pr-mode-changeset.md` (R8.1–R8.10 + final review เสร็จ 2026-09-25: rspec 1174/0, vitest 31/31 · รอเจ้าของงาน: ตัดสิน "แก้รายการ" (#5) แล้วยืนยันปิด)
 - [ ] R2 — `docs/plans/R2-create-service-route.md`
 - [ ] R4 — `docs/plans/R4-plugins.md`
 - [ ] R5 — `docs/plans/R5-project-understanding.md`

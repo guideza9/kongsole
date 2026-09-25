@@ -622,10 +622,26 @@ end
 (3) นอก R8 (M5c): update service ที่ YAML เขียนแค่ `url` ทำให้ไฟล์ได้ field ที่ Kong ขยายเพิ่ม (`host`/`port`/timeouts) มาด้วย ·
 (4) หน้า review ของ changeset ที่ submit แล้วยังเปิดได้ (แสดง drift โดยไม่มีรายการ)
 
+## Final review (2026-09-25, reviewer แยก บน Opus)
+
+ไม่มี Critical · Important 6 ข้อ + ยกระดับ 2 ข้อจาก Minor → แก้ในรอบเดียว (commit `fix(R8 review #1)` และ `fix(R8 review)`), ทุกข้อมี test ที่เห็น RED ก่อน:
+#1 update เขียนเฉพาะ field ที่เปลี่ยนและปฏิเสธ field ที่ git เปลี่ยนไปแล้ว · #2 lock แถว changeset ตอน submit / เพิ่ม / ลบ / abandon และ PR body ตรงกับ YAML ·
+#3 lock working copy ต่อ connection (advisory lock) + ไม่ prefetch หน้า review · #4 delete ที่ rank ≥ 2 หรือ protected ต้องพิมพ์ชื่อ entity อีกครั้ง ·
+#6 placeholder `DECK_` ในไฟล์เพิ่มของ env · #9 อ่าน head ของ repo นอก transaction + timeout 15 วินาที · #14 ขั้นตอน rollback ของ migration R8 ใน `00-roadmap.md`
+
+**ยังไม่ได้ทำ — รอเจ้าของงานตัดสิน:** #5 "แก้รายการ" (ฟอร์มที่ส่ง `replaces_plan_id`) — ต้องมีฟอร์มต่อชนิด entity ซึ่งฟอร์ม service/route เป็นของ R2 ·
+ตอนนี้ข้อความปฏิเสธบอกทางที่ใช้ได้จริง: "remove that item first, then propose the change again"
+Minor ที่เลื่อนไว้: parent ใน attributes ข้าม admin-path check (ปลอดภัยเพราะ admin service ไม่อยู่ใน git) · submit ไม่ตรวจซ้ำว่ายังเป็น PR mode ·
+ล้มหลัง push แล้วบอก "Nothing was pushed" · `pr_url` รับบน changeset ที่ไม่ได้ submit และ remove/abandon/pr_url ไม่มี audit ·
+audit ของ submit ปน actor_kind ของผู้เสนอกับชื่อผู้ submit · หน้า review ของ changeset ที่ submit แล้วยังเปิดได้ · strip 3 ช่องที่ 390px เหลือช่องว่าง ·
+หัวข้อ hint network_* บอก "Kong did not answer" แม้เป็น git host
+
 ## เกณฑ์ปิดงาน R8
 
-- [ ] เกณฑ์ใน `R8-pr-mode-changeset.md` (ฉบับแก้ §C9) ครบ พร้อมหลักฐาน
-- [ ] migration 2 ตัว up/down ผ่าน
-- [ ] test "no write call" ผ่านทั้ง planner และ submitter
-- [ ] `bundle exec rspec` 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · `hints:todo` รายงาน
-- [ ] ไม่มี credential หลุด: `failure_reason`/`pr_body` ไม่มี `Basic `, token ใน git URL, PEM
+- [ ] เกณฑ์ใน `R8-pr-mode-changeset.md` (ฉบับแก้ §C9) ครบ พร้อมหลักฐาน — **ครบยกเว้น "แก้รายการ"** (ดู, ลบ, ยังอยู่หลังปิด browser, preview diff, block admin path + threshold,
+  PR body + `Changed-by:`, ตรวจ drift, ลิงก์ branch + คัดลอก PR body + วาง URL, CiGate ก่อน push, round-trip byte-exact, R3 — มีหลักฐานใน R8.1–R8.10) · "แก้" รอคำตัดสิน #5
+- [x] migration 2 ตัว up/down ผ่าน (R8.1: migrate → rollback STEP=2 → migrate) · ขั้นตอน rollback ใน `00-roadmap.md` #5, #6
+- [x] test "no write call" ผ่านทั้ง planner และ submitter · compose: request ที่ไม่ใช่ GET จาก `ro-kongctl` มีแค่ access probe ตอน login (router 404)
+- [x] `bundle exec rspec` **1174/0** · vitest **31/31** · detect: หน้าเดิมไม่เพิ่ม (60 → 74 ทั้งหมดอยู่ใน 5 หน้าใหม่ และเป็นชนิดที่ baseline มีจาก component เดิม) ·
+  `hints:todo`: เพิ่ม 3 key `hints.errors.git_auth_failed.*` (To Edit) + 2 เดิมของ R3.7
+- [x] ไม่มี credential หลุด: `failure_reason`/`pr_body` scrub PEM + token ใน git URL (test) · log dev + server ช่วง R8.10 ไม่มี `Authorization` / `Basic <b64>` / password / PEM
