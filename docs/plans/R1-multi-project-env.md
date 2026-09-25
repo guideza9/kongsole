@@ -977,8 +977,151 @@ end
 1. การ์ด "Direct apply → live write" + "Guardrails: All clear" บนหน้า plan ที่ env เขียนไม่ได้แล้ว (ข้อสังเกตของ R1.17) — ต้องแก้ `ChangePlansController#show` (backend)
 2. flash หลังลบ connection local ว่า `removed from the registry` (`ConnectionsController#destroy`) — "registry" ใน R1 หมายถึง `connections.yml` จึงขัดกับป้าย "Local only"
 
+---
+
+## หน้า Connections เมื่อมีหลาย project (คำตัดสินของเจ้าของงาน 2026-09-25 รอบ 2)
+
+**ปัญหา:** 10 project × 5–6 env = การ์ด env 50–60 ใบ (~110px ต่อใบบน desktop, ~250px บนมือถือ) → หน้ายาว ~7,000px / >13,000px
+เพราะหน้าเดียวทำสองงาน: เลือก env เพื่อ login (ทำบ่อย) กับจัดการ project/env/connection (ทำนานๆ ครั้ง)
+
+**คำตัดสิน:**
+
+| ข้อ | คำตัดสิน |
+|---|---|
+| 1 | แยกงาน: หน้า Connections = ที่เลือก env (หนึ่ง project หนึ่งแถว) · การจัดการย้ายไปหน้า project `/projects/:key` |
+| 2 | chip ของ env ไม่แสดง write policy — แสดงเฉพาะสิ่งที่สำคัญที่สุด ที่เหลือซ่อนในเมนูของแต่ละ project (แนวคิด hamburger) |
+| 3 | ถอดปุ่ม "Add connection" ออกจากหน้า Connections — connection สร้างผ่าน env ของ project ("Connect" ในหน้า project) · ปุ่มหลักคือ "New project" ปุ่มเดียว |
+
+**สิ่งที่หน้า Connections แสดง (ไม่มีอย่างอื่น):** ชื่อ project (ลิงก์ไปหน้า project) · chip ของ env ตาม `position` (chip = ลิงก์ login) ·
+เครื่องหมายสถานะบน chip **เฉพาะเมื่อมีปัญหา** (`last_status` ไม่ใช่ `ok`/nil) · ปุ่มเมนูของ project · ช่องกรองเมื่อมี ≥ 6 project
+**ย้ายไปหน้า project:** admin URL, write policy, access level, credential, rank label, `network_note`, git repo, ป้าย Local only / From connections.yml, Edit/Remove ทั้งหมด
+
+---
+
+### Task R1.18: หน้า project + กรองหน้า Connections + redirect กลับหน้า project (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R1.17 · **ไฟล์ที่แก้ได้:** `config/routes.rb`, `app/controllers/projects_controller.rb`, `app/controllers/project_envs_controller.rb`,
+`app/controllers/connections_controller.rb`, `app/services/project_filter.rb` (create), `app/views/projects/show.html.erb` (create, view ตั้งต้นขั้นต่ำ: render `connections/_project`),
+`spec/services/project_filter_spec.rb` (create), `spec/requests/projects_spec.rb`, `spec/requests/project_envs_spec.rb`, `spec/requests/connections_spec.rb`
+
+**ทำไม:** คำตัดสินข้อ 1 · และปิดข้อสังเกต 2 ของ clarify/harden (flash `removed from the registry` ของ connection local)
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/services/project_filter_spec.rb
+RSpec.describe ProjectFilter do
+  let!(:pay)  { create(:project, key: "payments", name: "Payments") }
+  let!(:card) { create(:project, key: "card-switch", name: "Card Switch") }
+  before do
+    %w[dev sit uat].each_with_index { |n, i| create(:project_env, project: pay, name: n, position: i + 1) }
+    %w[nonprod pt].each_with_index { |n, i| create(:project_env, project: card, name: n, position: i + 1) }
+  end
+  def run(q) = described_class.new(Project.includes(:project_envs).order(:name), q).call
+
+  it("keeps every project and marks no env when the query is blank") { expect(run(" ").map(&:project)).to eq([ card, pay ]) }
+  it("matches a project by name or key, case-insensitive") { expect(run("PAY").map(&:project)).to eq([ pay ]) }
+  it "needs every term to match the project or one of its envs, and marks the envs a term named" do
+    result = run("pay uat")
+    expect(result.map(&:project)).to eq([ pay ])
+    expect(result.first.matched_env_ids).to eq([ pay.project_envs.find_by!(name: "uat").id ])
+  end
+  it("returns nothing when a term matches nowhere") { expect(run("pay nonprod")).to be_empty }
+end
+```
+
+```ruby
+# spec/requests/projects_spec.rb — เพิ่ม
+it "shows a project, local or from connections.yml, with its envs in order" do
+  project = create(:project, key: "pay", name: "Pay", source: "registry")
+  create(:project_env, project: project, name: "uat", position: 2, source: "registry")
+  create(:project_env, project: project, name: "dev", position: 1, source: "registry")
+  get project_path(project)
+  expect(response).to have_http_status(:ok)
+  expect(response.body.index("pay/dev")).to be < response.body.index("pay/uat")
+end
+
+# spec/requests/connections_spec.rb — เพิ่ม
+it "filters projects with ?q= without JavaScript" do
+  create(:project, key: "payments", name: "Payments"); create(:project, key: "card", name: "Card")
+  get connections_path(q: "pay")
+  expect(response.body).to include("Payments")
+  expect(response.body).not_to include(">Card<")
+end
+
+it "says a removed local connection left this machine, not the registry" do
+  connection = create(:kong_connection)
+  delete connection_path(connection)
+  expect(response).to redirect_to(project_path(connection.project))
+  expect(flash[:notice]).to eq("Connection \"#{connection.name}\" removed from this machine.")
+end
+```
+
+- [ ] **Step 2:** FAIL → implement:
+  - route `resources :projects, param: :key, only: %i[new create edit update show]` · `ProjectsController#show` เปิดได้ทั้ง local และ registry (ไม่ผ่าน `refuse_registry_project`)
+  - `ProjectFilter` (PORO, ในหน่วยความจำ — project หลักสิบ): แยก query ตามช่องว่าง, ทุก term ต้องตรง name/key ของ project หรือชื่อ env ใดก็ได้; คืน `Struct(:project, :matched_env_ids)`
+  - `ConnectionsController#index`: `@query = params[:q].to_s.strip` · `@rows = ProjectFilter.new(…, @query).call` · `@project_count` (จำนวนทั้งหมด ก่อนกรอง ใช้ตัดสินว่าจะแสดงช่องกรอง)
+  - redirect หลัง create/update/destroy ของ project, env, connection → `project_path(project)` แทน `connections_path` (ยกเว้น project ที่ถูกลบไม่ได้ → ไม่มี destroy อยู่แล้ว)
+  - flash ของ `ConnectionsController#destroy` → `Connection "<name>" removed from this machine.`
+  - spec เดิมที่ `expect(response).to redirect_to(connections_path)` หลังเขียน project/env/connection → แก้เป็น `project_path(...)` (เปลี่ยน expectation ตามคำตัดสินข้อ 1)
+- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R1.18): each project has its own page; the connections list can be filtered`
+
+---
+
+### Task R1.19: หน้า Connections เป็นที่เลือก env — หนึ่ง project หนึ่งแถว (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.18 · **ไฟล์ที่แก้ได้:** `app/views/connections/index.html.erb`, `app/views/connections/_project_row.html.erb` (create),
+`app/views/connections/_project_menu.html.erb` (create), `app/javascript/controllers/project_filter_controller.js` (create),
+`app/helpers/application_helper.rb` (`env_launch_chip(env)`), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`,
+`spec/requests/consistency_spec.rb` (assertion), `spec/requests/accessibility_spec.rb` (assertion), `spec/requests/ui_snapshots_spec.rb`
+
+**คำสั่ง:** `/impeccable layout app/views/connections/index.html.erb` → `/impeccable harden`
+
+- [ ] **Step 1:** assertion (ก่อน):
+  - ไม่มี "Add connection" · `.btn-primary` มีแค่ "New project"
+  - หนึ่งแถวต่อ project: ชื่อ project เป็นลิงก์ไป `project_path` · chip env เรียงตาม `position` · env ที่มี connection = ลิงก์ไป `login_connection_path` ชื่อสำหรับ screen reader `Log in to <project/env>` ·
+    env ไม่มี connection = `<span aria-disabled="true">` · chip env ที่ `last_status` ไม่ใช่ `ok`/nil มีเครื่องหมายและชื่อเข้าถึงได้รวม `status_label` · `ok`/nil ไม่มีเครื่องหมาย
+  - หน้า index **ไม่มี** admin URL, write policy tag, access level, credential kind, `network_note`, git repo, Edit/Remove
+  - เมนูของ project เป็น native `<details>` (แบบเดียวกับ env switcher) summary ชื่อเข้าถึงได้ `Actions for <project name>` · รายการ: `Open project` ทุก project ·
+    `Add environment`, `Edit project details` เฉพาะ local
+  - ช่องกรอง: `<form method="get">` input `q` มี `<label>` "Filter projects and environments" · แสดงเมื่อ `@project_count >= 6` หรือมี `q` ·
+    ไม่มีผลลัพธ์ → empty state + ลิงก์ "Clear filter" · แถวของ project ปัจจุบันมีคำว่า "Current" ที่มองเห็นได้
+- [ ] **Step 2:** FAIL → ทำ UI: แถวบรรทัดเดียวบน desktop (ชื่อ · chip · เมนู) บนมือถือ chip ขึ้นบรรทัดใต้ชื่อ · `project_filter_controller.js` กรองทันทีที่พิมพ์ (ซ่อนแถวที่ไม่ตรง, env ที่ไม่ตรง term จางลง, ไม่ส่ง request) · ไม่มี JS ใช้ปุ่ม Filter ส่ง `?q=`
+- [ ] **Step 3:** PASS · snapshot `connections-launcher`, `connections-launcher-filtered` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [ ] **Step 4:** Commit `feat(R1.19): the connections page is a list of projects to log in from`
+
+---
+
+### Task R1.20: หน้า project รับการจัดการทั้งหมด (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.18 · **ไฟล์ที่แก้ได้:** `app/views/projects/show.html.erb`, `app/views/connections/_project.html.erb`, `app/views/connections/_env_row.html.erb`,
+`app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/consistency_spec.rb` (assertion — ย้ายของ "connections by project" มาที่หน้านี้),
+`spec/requests/accessibility_spec.rb` (assertion), `spec/requests/connections_spec.rb` (assertion ของแถว env), `spec/requests/ui_snapshots_spec.rb`
+
+**คำสั่ง:** `/impeccable layout app/views/projects/show.html.erb` → `/impeccable clarify`
+
+- [ ] **Step 1:** assertion (ก่อน): assertion ของแถว env ที่ตรวจบน `connections_path` ทั้งหมด (R1.8, R1.15, clarify/harden) ย้ายมาตรวจบน `project_path` โดยไม่ลดเงื่อนไข ·
+  หน้า project มี heading ชื่อ project, key (mono), ป้าย source, `network_note`, git repo · local: `Add environment`, `Edit project details` · registry: "Edit this project in config/connections.yml" ไม่มีปุ่มแก้ ·
+  ลิงก์กลับ "All connections" · project ไม่มี env → empty state เดิม (`empty_state(:project_envs)`)
+- [ ] **Step 2:** FAIL → ทำ UI: ใช้แถว env ที่มีอยู่ (ไม่ออกแบบใหม่) · ปุ่มหลักของหน้า = `Add environment` (local) · registry ไม่มีปุ่มหลัก
+- [ ] **Step 3:** PASS · snapshot `project-show-local`, `project-show-registry` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [ ] **Step 4:** Commit `feat(R1.20): a project's page holds its envs, connections and everything that edits them`
+
+---
+
+### Task R1.21: ตรวจกับ 10 project (verification)
+
+**ชั้น:** — · **ต้องเสร็จก่อน:** R1.18–R1.20
+
+- [ ] DB dev (compose, rank 0): สร้างชั่วคราว 10 project × 1–8 env (มี registry + local, env ไม่มี connection, สถานะ `unreachable`/`unavailable`, ชื่อไทยยาว, key/env 40 ตัวอักษร, project ไม่มี env 1 ตัว)
+- [ ] หน้า Connections ที่ 1280: ความสูงรวมไม่เกิน ~2 หน้าจอ · 390: ไม่มี horizontal scroll · วัดความสูงก่อน/หลัง
+- [ ] กรอง `pay uat` (มี JS และไม่มี JS) · เมนู project เปิด/ปิดด้วยคีย์บอร์ด · chip → หน้า login ของ env ถูกตัว · "Open project" → จัดการ env ได้ครบเหมือนก่อน (Edit environment / Edit connection / Remove connection / Connect)
+- [ ] สร้าง project → env → connection ผ่าน UI โดยไม่ผ่านปุ่ม "Add connection" · ทุก redirect กลับหน้า project
+- [ ] ภาพหน้าจอ 390/1280: launcher, launcher กรองแล้ว, เมนูเปิด, หน้า project local/registry · rspec 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ลบข้อมูลทดสอบ
+
 ## เกณฑ์ปิดงาน R1
 
+- [ ] R1.18–R1.21 เสร็จ (หน้า Connections เมื่อมีหลาย project)
 - [x] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน (ผลตรวจ R1.12, R1.17 และ clarify/harden ข้างบน)
 - [x] migration 4 ตัว up/down ผ่านบน DB สำเนา (R1.12, R1.17)
 - [x] `bundle exec rspec` 0 failures (1060) · `cd mcp && npm test` ผ่าน (30) · detect ไม่เพิ่ม (62 = R1.17)
