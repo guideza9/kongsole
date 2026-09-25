@@ -450,5 +450,5 @@ Minor ที่เลื่อนไว้: error ตอน apply ไม่ม�
   "direct: error จาก Kong แสดงตาม error mapping 6 แบบ" ตอน apply แสดงข้อความที่จำแนกแล้ว (เช่น `(refused)`) + ขั้นต่อไป แต่ยังไม่มีคำอธิบายแบบ R3 (Minor ที่เลื่อนไว้)
 - [x] test "PR mode ไม่เรียก Admin API แบบเขียน" ผ่าน (request: services_spec, routes_spec · planner: change_planner_spec) · compose: non-GET มีแค่ access probe ตอน login
 - [x] `bundle exec rspec` **1238/0** · vitest **31/31** · detect: 84 → 108 ทั้งหมดอยู่บนหน้าใหม่ (service-new ×3, route-new ×2, change-plan-route-overlap) เป็นชนิดที่ baseline มี ·
-  `hints:todo`: ไม่มี key ใหม่ (เหลือ 3 key `git_auth_failed` จาก R8)
+  `hints:todo`: ไม่มี key ใหม่ (เหลือ 5: 3 key `git_auth_failed` จาก R8 + 2 `next_step` เดิมจาก R3)
 - [ ] R3.7 บันทึกผลแล้ว — **รอเจ้าของงาน**
