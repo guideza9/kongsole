@@ -260,13 +260,35 @@ RSpec.describe "Console consistency", type: :request do
       create(:project, key: "empty", name: "Empty Project", source: "local")
     end
 
+    # R1.20: the project is the page -- its name is the page's h1.
     def section(name)
-      page.css("section").find { |s| s.at_css("h2")&.text&.strip == name }
+      main = page.at_css("main")
+      main if main.at_css("h1")&.text&.strip == name
+    end
+
+    it "names the project once, as the page's heading, with the way back to all connections" do
+      get project_path(project_a)
+      expect(page.css("main h1").map { |h| h.text.strip }).to eq([ "Project A" ])
+      expect(page.css("main h2, main h3").map { |h| h.text.strip }).not_to include("Project A")
+      expect(page.css("main a").map { |a| [ a.text.strip, a["href"] ] }).to include([ "All connections", connections_path ])
+    end
+
+    it "offers a local project's edits, Add environment first" do
+      get project_path(project_x)
+      expect(page.css("main .btn-primary").map { |n| n.text.strip }).to eq([ "Add environment" ])
+      expect(page.css("main a").map { |a| [ a.text.strip, a["href"] ] }).to include([ "Edit project details", edit_project_path(project_x) ])
+    end
+
+    it "offers no edit on a project from connections.yml, and says where it is changed" do
+      get project_path(project_a)
+      expect(page.css("main .btn-primary")).to be_empty
+      expect(page.css("main a").map { |a| a["href"] }).not_to include(edit_project_path(project_a), new_project_env_path(project_id: project_a.id))
+      expect(page.at_css("main").text.squish).to include(I18n.t("hints.pages.project_show.registry"))
     end
 
     it "gives the project a heading and lists its envs in the project's order" do
       get project_path(project_a)
-      expect(page.css("section h2").map { |h| h.text.strip }).to include("Project A")
+      expect(page.css("main h1").map { |h| h.text.strip }).to eq([ "Project A" ])
       envs = section("Project A").css("[data-env-name]").map { |row| row["data-env-name"] }
       expect(envs).to eq(%w[dev uat])
     end
@@ -296,7 +318,7 @@ RSpec.describe "Console consistency", type: :request do
       get project_path(project_a)
       expect(edit_or_remove.call("Project A")).to be_empty
       get project_path(project_x)
-      expect(edit_or_remove.call("Project X")).to include("Edit", a_string_starting_with("Remove "))
+      expect(edit_or_remove.call("Project X")).to include("Edit project details", a_string_starting_with("Edit "), a_string_starting_with("Remove "))
     end
 
     # R1.15: a connected env's rank, apply mode and colour stay editable.

@@ -1,6 +1,50 @@
-<%# R1.18: minimal project page -- the project's envs and what edits them,
-    reusing the connections section. R1.20 (/impeccable) shapes it. %>
 <% content_for :title, @project.name %>
-<p class="text-sm mb-2"><%= link_to "All connections", connections_path, class: "underline underline-offset-2" %></p>
-<h1 class="page-title mb-6"><%= @project.name %></h1>
-<%= render "connections/project", project: @project %>
+<%# R1.20: a project's page -- everything that edits it, its envs and their
+    connections, moved off the connections page (which only picks an env to
+    log in to). The project is the page: its name is the h1, its facts sit
+    under it, its envs follow in the project's own order. Only a local
+    project is edited here; one from config/connections.yml says where it is. %>
+<% local = @project.source == "local" %>
+
+<p class="page-back"><%= link_to "All connections", connections_path %></p>
+
+<div class="flex flex-wrap items-end justify-between gap-4 mb-2">
+  <div class="min-w-0">
+    <h1 class="page-title project-page__title"><%= @project.name %></h1>
+    <p class="project-page__facts">
+      <span class="font-mono"><%= @project.key %></span>
+      <%= source_badge(@project.source) %>
+    </p>
+  </div>
+  <% if local %>
+    <div class="flex flex-wrap items-center gap-2 shrink-0">
+      <%= link_to "Edit project details", edit_project_path(@project), class: "btn btn-text" %>
+      <%= link_to "Add environment", new_project_env_path(project_id: @project.id), class: "btn btn-primary" %>
+    </div>
+  <% end %>
+</div>
+
+<p class="text-sm text-ink-soft mb-4"><%= t("hints.pages.project_show.#{local ? "local" : "registry"}") %></p>
+
+<% if @project.git_repo.present? || @project.network_note.present? %>
+  <dl class="project__meta mb-6">
+    <% if @project.git_repo.present? %>
+      <div><dt>Config repo</dt><dd class="font-mono"><%= @project.git_repo %><%= " @ #{@project.git_branch}" if @project.git_branch.present? %></dd></div>
+    <% end %>
+    <% if @project.network_note.present? %>
+      <div><dt>Network</dt><dd><%= @project.network_note %></dd></div>
+    <% end %>
+  </dl>
+<% end %>
+
+<section aria-labelledby="project-envs-heading">
+  <h2 id="project-envs-heading" class="section-label mb-2">Environments</h2>
+  <% if @project.project_envs.empty? %>
+    <%# Add environment is the page's primary action, just above. %>
+    <%= empty_state(:project_envs) %>
+  <% else %>
+    <ol class="env-list">
+      <%= render partial: "connections/env_row", collection: @project.project_envs.includes(:kong_connection), as: :env %>
+    </ol>
+  <% end %>
+</section>

@@ -93,6 +93,18 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("connections-launcher-filtered")
     end
 
+    it "a project's page, local and from connections.yml (R1.20)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      KongConnection.find_by!(name: "project-a/uat").update!(last_status: "ok", access_level: "ro", credential_kind: "shared")
+      get project_path(Project.find_by!(key: "project-a"))
+      snapshot!("project-show-registry")
+      local = create(:project, key: "payments", name: "Payments", source: "local", network_note: "Reachable from the office network")
+      create(:kong_connection, project_env: create(:project_env, project: local, name: "dev", position: 1), admin_url: "http://localhost:8101", last_status: "unreachable")
+      create(:project_env, project: local, name: "sit", position: 2, apply_mode: nil)
+      get project_path(local)
+      snapshot!("project-show-local")
+    end
+
     it "project and env forms (R1.9)" do
       project = create(:project, key: "payments", name: "Payments", source: "local")
       get new_project_path

@@ -365,6 +365,10 @@ en:
         project_without_envs: "No environments yet."
         filter_label: "Filter projects and environments"
         filter_placeholder: "e.g. payments uat"
+      # R1.20: a project's page, by where the project is defined.
+      project_show:
+        local: "This project lives on this machine only. Log in to an environment from its row, or connect one to its Kong node."
+        registry: "This project comes from config/connections.yml and is shared with the team. Change it there, then run bin/rails kong:load_connections."
       projects_new:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:

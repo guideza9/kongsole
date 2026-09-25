@@ -97,14 +97,14 @@ module ApplicationHelper
     if env.rank.to_i >= KongConnection::PROTECTED_RANK
       tone = env.rank.to_i >= KongConnection::PROD_RANK ? "env-prod" : "env-uat"
       label = content_tag(:span, env.name, class: "chip-env__label")
-      return content_tag(:span, safe_join([ content_tag(:span, "", class: "chip-dot"), label ]), class: "chip chip-lg chip-env #{tone}")
+      return content_tag(:span, safe_join([ content_tag(:span, "", class: "chip-dot"), label ]), class: "chip chip-lg chip-env #{tone}", title: env.name)
     end
 
     tone = COLOR_TAG_TONES.fetch(env.color_tag.to_s, "neutral")
     # The name in its own span so a long one can end in an ellipsis where the
     # chip runs out of room (R1.19), as the uat/prod label does.
     content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), content_tag(:span, env.name, class: "chip__name") ]),
-      class: "chip chip-lg chip-#{tone}"
+      class: "chip chip-lg chip-#{tone}", title: env.name
   end
 
   def env_display_name(connection)

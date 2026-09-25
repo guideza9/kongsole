@@ -1104,12 +1104,17 @@ harden: ชื่อ env 40 ตัวอักษรตัดด้วย ellips
 
 **คำสั่ง:** `/impeccable layout app/views/projects/show.html.erb` → `/impeccable clarify`
 
-- [ ] **Step 1:** assertion (ก่อน): assertion ของแถว env ที่ตรวจบน `connections_path` ทั้งหมด (R1.8, R1.15, clarify/harden) ย้ายมาตรวจบน `project_path` โดยไม่ลดเงื่อนไข ·
+- [x] **Step 1:** assertion (ก่อน): assertion ของแถว env ที่ตรวจบน `connections_path` ทั้งหมด (R1.8, R1.15, clarify/harden) ย้ายมาตรวจบน `project_path` โดยไม่ลดเงื่อนไข ·
   หน้า project มี heading ชื่อ project, key (mono), ป้าย source, `network_note`, git repo · local: `Add environment`, `Edit project details` · registry: "Edit this project in config/connections.yml" ไม่มีปุ่มแก้ ·
   ลิงก์กลับ "All connections" · project ไม่มี env → empty state เดิม (`empty_state(:project_envs)`)
-- [ ] **Step 2:** FAIL → ทำ UI: ใช้แถว env ที่มีอยู่ (ไม่ออกแบบใหม่) · ปุ่มหลักของหน้า = `Add environment` (local) · registry ไม่มีปุ่มหลัก
-- [ ] **Step 3:** PASS · snapshot `project-show-local`, `project-show-registry` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
-- [ ] **Step 4:** Commit `feat(R1.20): a project's page holds its envs, connections and everything that edits them`
+- [x] **Step 2:** FAIL → ทำ UI: ใช้แถว env ที่มีอยู่ (ไม่ออกแบบใหม่) · ปุ่มหลักของหน้า = `Add environment` (local) · registry ไม่มีปุ่มหลัก
+- [x] **Step 3:** PASS · snapshot `project-show-local`, `project-show-registry` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [x] **Step 4:** Commit `feat(R1.20): a project's page holds its envs, connections and everything that edits them`
+
+**ผล (2026-09-25):** rspec **1085/0** · detect **60** (R1.17 = 62; 2 finding ที่ `project-show-local` คือเส้นคั่นของ Remove เดิมตั้งแต่ R1.15 ย้ายมาพร้อมแถว) ·
+390/1280 ไม่มี horizontal scroll (project ชื่อไทยยาว, env 40 ตัวอักษร → ellipsis + ชื่อเต็มใน title ของ chip, project ไม่มี env) ·
+ชื่อ project เป็น h1 ครั้งเดียว (ไม่มี h2 ซ้ำ) · ลบ `connections/_project.html.erb` และ CSS ที่ไม่มีใครใช้ (`.project-list`, `.project__head` …) ·
+assertion "Edit" ของ project ในสเปกเดิม → "Edit project details" (ชื่อเดียวกับในเมนู) · empty state ไม่มีปุ่มซ้ำ (Add environment เป็นปุ่มหลักด้านบนแล้ว)
 
 ---
 
