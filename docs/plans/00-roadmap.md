@@ -132,6 +132,13 @@ R2, R3, R5, R7, T0 ไม่มี migration
   "Direct apply → live write to Kong" และ "Guardrails: All clear" เหนือ notice "Nothing can be written" (server ปฏิเสธถูกต้อง) ·
   ทางแก้ที่น่าจะเล็กที่สุด: `ChangePlansController#show` ใช้ `write_block_reason` ตอนคำนวณการ์ด guardrail (backend) · ยังไม่ตัดสิน — หยุดถามก่อนทำ
 
+### งานต่อที่รอ (จากเจ้าของงานทดสอบ R8 เอง, ตัดสิน 2026-09-25)
+
+- **changeset แก้ / ลบ entity ที่ไม่อยู่ใน git ไม่ได้** — env PR mode ที่ Kong มี entity แต่ YAML ใน git ยังไม่มี (เช่น uat ที่ seed git ว่าง)
+  เสนอได้แต่หน้า review ล้ม "This changeset could not be rendered" · ต้องมีการดึง baseline จาก Kong เข้า git ก่อน
+  (`docs/DESIGN.md` M6 "`deck` import") ซึ่งยังไม่อยู่ใน R ใด · เจ้าของงานเลือก "ยังไม่แก้ บันทึกเป็นข้อจำกัด" —
+  รายละเอียดใน `R8-pr-mode-changeset.md` "ข้อจำกัดที่รู้แล้ว" · หยุดถามก่อนทำ
+
 ## ข้อความที่จะแก้ในไฟล์ requirement
 
 อยู่ใน `docs/plans/design-amendments.md` §C (อนุมัติแล้ว — แก้ไฟล์จริงเป็น task แรกของช่วงที่ 2: `T0.0` พร้อม `CLAUDE.md` §B) · §A (DESIGN.md) เป็นร่างให้ทีมแก้เอง

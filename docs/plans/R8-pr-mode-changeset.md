@@ -636,6 +636,18 @@ Minor ที่เลื่อนไว้: parent ใน attributes ข้า�
 audit ของ submit ปน actor_kind ของผู้เสนอกับชื่อผู้ submit · หน้า review ของ changeset ที่ submit แล้วยังเปิดได้ · strip 3 ช่องที่ 390px เหลือช่องว่าง ·
 หัวข้อ hint network_* บอก "Kong did not answer" แม้เป็น git host
 
+## ข้อจำกัดที่รู้แล้ว (เจ้าของงานตัดสิน 2026-09-25: "ยังไม่แก้ บันทึกเป็นข้อจำกัด")
+
+- **update / delete entity ที่มีใน Kong แต่ไม่มีใน YAML ของ git** เสนอเข้า changeset ได้ แต่หน้า review ล้มด้วยหัวข้อกลาง
+  "This changeset could not be rendered, so nothing can be submitted." และข้อความของ renderer เช่น
+  `the service auth-api isn't in this YAML, so nothing can be nested under it` หรือ `no service … in this YAML` —
+  renderer ปฏิเสธถูกตามกฎข้อ 2 (render จาก git เท่านั้น) · หน้า review แสดงเฉพาะรายการแรกที่ล้ม
+- เจอตอนเจ้าของงานทดสอบเอง: changeset #5 บน `default/uat` (update route `auth-api-route`, service `search-worker`) —
+  entity เป็น fixture tag `m1-fixture` ที่ใส่เข้า Kong ตรง ส่วน `uat/kong.yaml` ใน git มีแค่ "Seed empty decK config"
+- ทางเลี่ยงตอนนี้: เอารายการนั้นออก · create entity ใหม่ใช้ได้ครบ
+- ทางแก้จริงรอการดึง baseline จาก Kong เข้า git (`docs/DESIGN.md` M6: "`deck` import: ดูด YAML ที่มีอยู่เข้ามาเป็น baseline") ซึ่งยังไม่อยู่ใน R ใด ·
+  ทางที่ไม่เลือก: (ก) เครื่องหมายบนรายการ + ข้อความบอกทางไปต่อ · (ข) planner ปฏิเสธตอนเสนอ (ต้อง pull git ทุกครั้ง)
+
 ## เกณฑ์ปิดงาน R8
 
 - [ ] เกณฑ์ใน `R8-pr-mode-changeset.md` (ฉบับแก้ §C9) ครบ พร้อมหลักฐาน — **ครบยกเว้น "แก้รายการ"** (ดู, ลบ, ยังอยู่หลังปิด browser, preview diff, block admin path + threshold,
