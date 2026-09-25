@@ -485,7 +485,7 @@ end
 - [x] ลบ / rank ≥ 2 / admin path มีคำอธิบายผลกระทบก่อนยืนยัน
 - [x] error 6 แบบ (+ unexpected, connection_failed, network_* 4 ชนิด) มี cause + next step · ปัญหาเครือข่ายไม่ถูกรายงานเป็น "Admin API ล่ม"
 - [x] ปิด hint แล้วยังปิดหลัง reload (request spec)
-- [ ] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง) — grep ผ่าน แต่ดูข้อค้างด้านล่าง
+- [x] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง)
 - [x] `bundle exec rspec` 0 failures · detect ไม่เพิ่มจาก baseline · ภาพหน้าจอแนบ
 - [ ] R3.7 ทำหลัง R2 (บันทึกผลใน plan นี้)
 
@@ -507,9 +507,9 @@ end
 - `bin/rails hints:todo`: เหลือ 4 รายการ (`connection.name.detail`, `connection.select_tags_raw.detail`,
   `errors.forbidden.next_step`, `errors.upstream_unavailable.next_step`) — รอเจ้าของงานใน R3.7
 
-**ข้อค้าง (รอเจ้าของงานตัดสิน):**
+**ข้อค้าง (เจ้าของงานตัดสิน 2026-09-25):**
 
-1. `hints.risks.rank_2_apply` มีใน `hints.en.yml` แต่ไม่มี view ไหนใช้ — คำเตือน rank ≥ 2 ตอน apply ในหน้า plan review
-   เขียนตรงใน `app/views/change_plans/show.html.erb` ("This writes to %{env} now." / "Pushes a branch — nothing in %{env} changes yet.")
-   ผลกระทบแสดงครบแล้ว แต่ไม่ได้มาจากไฟล์ hint — ต้องเพิ่ม UI task ย้ายข้อความเข้า `hints.en.yml` หรือลบ key ที่ไม่ใช้
-2. เพิ่ม `connections-index` กลับเข้า `tmp/ui-snapshots` เพื่อให้ detect เห็นหน้า Connections (test tooling)
+1. `hints.risks.rank_2_apply` มีใน `hints.en.yml` แต่ไม่มี view ไหนใช้ (คำเตือน rank ≥ 2 ตอน apply เขียนใน
+   `change_plans/show.html.erb` อยู่แล้ว) → **ลบ key ที่ไม่ใช้** · `fix(R3.review)`
+2. `connections-index` หลุดจาก `tmp/ui-snapshots` → **เพิ่มกลับ** · `test(R3.review)` · detect หลังเพิ่ม: **46 findings บน 34 หน้า**
+   (connections-index 2 = baseline) · หน้าที่มีทั้งสองรอบ 44 → 41 · rspec 952/0
