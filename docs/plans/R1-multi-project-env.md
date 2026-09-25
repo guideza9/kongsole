@@ -1122,17 +1122,28 @@ assertion "Edit" ของ project ในสเปกเดิม → "Edit proj
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R1.18–R1.20
 
-- [ ] DB dev (compose, rank 0): สร้างชั่วคราว 10 project × 1–8 env (มี registry + local, env ไม่มี connection, สถานะ `unreachable`/`unavailable`, ชื่อไทยยาว, key/env 40 ตัวอักษร, project ไม่มี env 1 ตัว)
-- [ ] หน้า Connections ที่ 1280: ความสูงรวมไม่เกิน ~2 หน้าจอ · 390: ไม่มี horizontal scroll · วัดความสูงก่อน/หลัง
-- [ ] กรอง `pay uat` (มี JS และไม่มี JS) · เมนู project เปิด/ปิดด้วยคีย์บอร์ด · chip → หน้า login ของ env ถูกตัว · "Open project" → จัดการ env ได้ครบเหมือนก่อน (Edit environment / Edit connection / Remove connection / Connect)
-- [ ] สร้าง project → env → connection ผ่าน UI โดยไม่ผ่านปุ่ม "Add connection" · ทุก redirect กลับหน้า project
-- [ ] ภาพหน้าจอ 390/1280: launcher, launcher กรองแล้ว, เมนูเปิด, หน้า project local/registry · rspec 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ลบข้อมูลทดสอบ
+- [x] DB dev (compose, rank 0): สร้างชั่วคราว 10 project × 1–8 env (มี registry + local, env ไม่มี connection, สถานะ `unreachable`/`unavailable`, ชื่อไทยยาว, key/env 40 ตัวอักษร, project ไม่มี env 1 ตัว)
+- [x] หน้า Connections ที่ 1280: ความสูงรวมไม่เกิน ~2 หน้าจอ · 390: ไม่มี horizontal scroll · วัดความสูงก่อน/หลัง
+- [x] กรอง `pay uat` (มี JS และไม่มี JS) · เมนู project เปิด/ปิดด้วยคีย์บอร์ด · chip → หน้า login ของ env ถูกตัว · "Open project" → จัดการ env ได้ครบเหมือนก่อน (Edit environment / Edit connection / Remove connection / Connect)
+- [x] สร้าง project → env → connection ผ่าน UI โดยไม่ผ่านปุ่ม "Add connection" · ทุก redirect กลับหน้า project
+- [x] ภาพหน้าจอ 390/1280: launcher, launcher กรองแล้ว, เมนูเปิด, หน้า project local/registry · rspec 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ลบข้อมูลทดสอบ
+
+### ผลตรวจ R1.21 (2026-09-25, compose ในเครื่อง, Edge headless)
+
+- [x] ข้อมูลทดสอบ `r1demo-*` 10 project × 0–8 env (+ project เดิม 3 = 13–14): สถานะ ok / unreachable / unavailable / unauthorized / never, env ไม่มี connection, ชื่อไทยยาว, env 40 ตัวอักษร, project ไม่มี env, project ชื่อซ้ำ
+- [x] ความสูงหน้า Connections (14 project): 1280px **~7,220 → 1,234px** · 390px **~11,500 → 2,234px** ("ก่อน" = ผลรวมของ section ในหน้า project ทุกหน้า ซึ่งคือแถวชุดเดิม) · ไม่มี horizontal scroll ที่ 390/800/1280
+- [x] กรอง `pay uat`: สด (JS) และ `?q=` (ไม่มี JS) ได้ 2 project เดียวกัน · env ที่ไม่ตรงจาง · ไม่มีผล → ข้อความ + Clear filter · เมนูเปิดด้วย Enter
+- [x] สร้างผ่าน UI: New project → Add environment → Connect (env ถูกเลือกไว้แล้ว) → ทุกขั้นกลับ `/projects/r1demo-check` พร้อม flash · หน้า Connections ไม่มี "Add connection"
+- [x] chip `Log in to r1demo-check/dev` → `/connections/41/login` → login แล้ว header `R1 Check · dev` และแถวมี "Current" · chip `local/uat` → หน้า login topbar `env-uat`
+- [x] เมนู → Open project → Edit environment / Edit connection / Remove connection / Log in ครบ
+- [x] rspec **1085/0** · vitest **30/30** · detect **60** (R1.17 = 62) · `hints:todo` ไม่มี key ใหม่ · `log/development.log` ไม่มี `Authorization` / `Basic <b64>` / password
+- [x] ลบข้อมูลทดสอบ: 11 project `r1demo-*`, env และ connection 28 ตัว (ไม่มี audit / plan / PAT ผูก) ใน transaction เดียว
 
 ## เกณฑ์ปิดงาน R1
 
-- [ ] R1.18–R1.21 เสร็จ (หน้า Connections เมื่อมีหลาย project)
+- [x] R1.18–R1.21 เสร็จ (หน้า Connections เมื่อมีหลาย project)
 - [x] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน (ผลตรวจ R1.12, R1.17 และ clarify/harden ข้างบน)
 - [x] migration 4 ตัว up/down ผ่านบน DB สำเนา (R1.12, R1.17)
-- [x] `bundle exec rspec` 0 failures (1060) · `cd mcp && npm test` ผ่าน (30) · detect ไม่เพิ่ม (62 = R1.17)
+- [x] `bundle exec rspec` 0 failures (1085) · `cd mcp && npm test` ผ่าน (30) · detect ไม่เพิ่ม (60, R1.17 = 62)
 - [x] `hints:todo` ของ key ใหม่รายงานแล้ว (ไม่มี key `To Edit:` ของ R1; เหลือ 2 ของ R3.7)
 - [x] ไม่มี credential หลุด: `log_filtering_spec` ผ่าน; API connections ไม่มี `auth_secret`
