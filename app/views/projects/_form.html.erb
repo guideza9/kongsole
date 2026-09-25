@@ -18,6 +18,10 @@
       <%= f.text_field :name, class: "field-input mt-1" %>
     </div>
     <div>
+      <%= f.label :network_note, class: "block text-sm font-medium text-ink" %>
+      <%= f.text_field :network_note, maxlength: Project::NETWORK_NOTE_MAX, class: "field-input mt-1" %>
+    </div>
+    <div>
       <%= f.label :git_repo, class: "block text-sm font-medium text-ink" %>
       <%= f.text_field :git_repo, class: "field-input mt-1 font-mono text-sm" %>
     </div>

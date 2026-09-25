@@ -672,7 +672,7 @@ end
 
 **ทำไม:** แต่ละ project ใช้คนละ network (ตัดสินรอบ 2 ข้อ 4) — ผู้ใช้ต้องรู้ทันทีว่า "เข้าไม่ถึงเพราะยังไม่ต่อ VPN ของ project นี้" ไม่ใช่ "Kong ล่ม"
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/connection_login_spec.rb — เพิ่ม
@@ -711,8 +711,8 @@ it "reads network_note per project" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → เพิ่ม `network_note: Reachable from the NONPROD VPN only` ให้ project-a ใน fixture → implement → PASS
-- [ ] **Step 3:** suite 0 failures · Commit `feat(R1.11): each project says which network reaches it; unreachable is told apart from Kong being down`
+- [x] **Step 2:** FAIL → เพิ่ม `network_note: Reachable from the NONPROD VPN only` ให้ project-a ใน fixture → implement → PASS
+- [x] **Step 3:** suite 0 failures · Commit `feat(R1.11): each project says which network reaches it; unreachable is told apart from Kong being down`
 
 ---
 

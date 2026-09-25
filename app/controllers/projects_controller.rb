@@ -43,6 +43,6 @@ class ProjectsController < ApplicationController
   # The key names every connection in the project (project/env), so it is
   # set once, at create.
   def project_params
-    params.require(:project).permit(:name, :git_repo, :git_branch, :git_web_url)
+    params.require(:project).permit(:name, :git_repo, :git_branch, :git_web_url, :network_note)
   end
 end

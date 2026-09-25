@@ -96,7 +96,7 @@ class EntitiesController < ApplicationController
     explain_kong_error(e, now: true)
     # Not "Kong rejected": a network failure never reached Kong. The form shows
     # the explanation's cause and next step under this title (R3).
-    render_new_with_error(Kong::ErrorExplanation.for(e).title)
+    render_new_with_error(explain_error(e).title)
   end
 
   def edit
@@ -282,7 +282,7 @@ class EntitiesController < ApplicationController
 
   # R3: the cause and next step behind the alert (Kong::ErrorExplanation).
   def explain_kong_error(error, now: false)
-    (now ? flash.now : flash)[:error_explanation] = Kong::ErrorExplanation.for(error).to_flash
+    (now ? flash.now : flash)[:error_explanation] = explain_error(error).to_flash
   end
 
   def render_new_with_error(message)

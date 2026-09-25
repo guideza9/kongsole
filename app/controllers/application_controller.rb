@@ -45,6 +45,12 @@ class ApplicationController < ActionController::Base
       end
   end
 
+  # R1.11: every Kong/network error explained with the project's network note
+  # on a network problem -- "join the NONPROD VPN", not "Kong is down".
+  def explain_error(error, connection: current_connection)
+    Kong::ErrorExplanation.for(error, network_note: connection&.network_note)
+  end
+
   def current_operator
     session[:operator]
   end

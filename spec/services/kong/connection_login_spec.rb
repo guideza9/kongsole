@@ -73,8 +73,8 @@ RSpec.describe Kong::ConnectionLogin do
     expect(connection.reload.last_status).to eq("unauthorized")
   end
 
-  # R3.2 keeps the stored status as before; R1.11 splits out "unreachable".
-  it "still records an unreachable network as unavailable, and hands back the error for explaining" do
+  # R3.2 introduced the error; R1.11 records it as "unreachable".
+  it "records an unreachable network as unreachable, and hands back the error for explaining" do
     stub_request(:get, "https://kong-admin.test/")
       .to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
 
@@ -82,6 +82,23 @@ RSpec.describe Kong::ConnectionLogin do
 
     expect(result.exception).to be_a(Kong::Client::NetworkUnreachable)
     expect(result.exception.kind).to eq(:dns)
-    expect(connection.reload.last_status).to eq("unavailable")
+    expect(connection.reload.last_status).to eq("unreachable")
+  end
+
+  describe "a Kong this machine cannot reach (R1.11)" do
+    it "records it as unreachable, not unavailable" do
+      connection = create(:kong_connection, admin_url: "https://kong-a-uat.internal")
+      stub_request(:get, "https://kong-a-uat.internal/")
+        .to_raise(Faraday::ConnectionFailed.new(SocketError.new("getaddrinfo: Name or service not known")))
+      described_class.new(connection: connection, username: "a", secret: "b").call
+      expect(connection.reload.last_status).to eq("unreachable")
+    end
+
+    it "still records a 502 from the loopback service as unavailable" do
+      connection = create(:kong_connection, admin_url: "https://kong.test")
+      stub_request(:get, "https://kong.test/").to_return(status: 502, body: "{}")
+      described_class.new(connection: connection, username: "a", secret: "b").call
+      expect(connection.reload.last_status).to eq("unavailable")
+    end
   end
 end

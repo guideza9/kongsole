@@ -58,7 +58,8 @@ module Kong
         project.assign_attributes(
           name: entry["name"].presence || entry["key"],
           source: "registry",
-          git_repo: entry["git_repo"], git_branch: entry["git_branch"], git_web_url: entry["git_web_url"]
+          git_repo: entry["git_repo"], git_branch: entry["git_branch"], git_web_url: entry["git_web_url"],
+          network_note: entry["network_note"].presence # R1.11: which network reaches it
         )
         project.save!
         load_envs(project, Array(entry["envs"]))

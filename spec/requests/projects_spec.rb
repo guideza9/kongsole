@@ -25,4 +25,10 @@ RSpec.describe "Projects", type: :request do
     expect(response).to have_http_status(:forbidden)
     expect(project.reload.name).to eq("Project A")
   end
+
+  it "sets a local project's network note (R1.11)" do
+    project = create(:project, key: "project-x", source: "local")
+    patch project_path(project), params: { project: { network_note: "Reachable from the NONPROD VPN only" } }
+    expect(project.reload.network_note).to eq("Reachable from the NONPROD VPN only")
+  end
 end

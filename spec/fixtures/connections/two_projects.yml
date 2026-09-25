@@ -2,6 +2,7 @@ projects:
   - key: project-a
     name: Project A
     git_repo: /tmp/project-a.git
+    network_note: Reachable from the NONPROD VPN only
     envs:
       - { name: dev, apply_mode: direct, admin_url: "http://localhost:8001" }
       - { name: sit, apply_mode: direct, admin_url: "http://localhost:8011" }

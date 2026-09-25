@@ -107,6 +107,11 @@ RSpec.describe Kong::ConnectionsConfigLoader do
       expect(Project.count).to eq(0)
     end
 
+    it "reads network_note per project" do
+      described_class.call(path: path)
+      expect(Project.find_by!(key: "project-a").network_note).to eq("Reachable from the NONPROD VPN only")
+    end
+
     it "keeps a stored credential when the file is loaded again" do
       described_class.call(path: path)
       KongConnection.find_by!(name: "project-a/dev").update!(credential_mode: "stored", auth_username: "u", auth_secret: "s")

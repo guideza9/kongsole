@@ -11,7 +11,10 @@ class KongConnection < ApplicationRecord
   ACCESS_LEVELS = %w[rw ro].freeze
   APPLY_MODES = %w[direct pr].freeze
   AUTH_TYPES = %w[basic none header].freeze
-  STATUSES = %w[ok unauthorized forbidden route_not_matched not_found rate_limited unavailable error].freeze
+  # "unreachable" = this machine cannot reach Kong at all (DNS, refused, timeout,
+  # TLS -- usually the project's network is not joined); "unavailable" = Kong
+  # answered 502/503 (R1.11).
+  STATUSES = %w[ok unauthorized forbidden route_not_matched not_found rate_limited unavailable unreachable error].freeze
 
   encrypts :auth_secret
 
@@ -45,6 +48,11 @@ class KongConnection < ApplicationRecord
   # from this project on save.
   def project
     project_env&.project
+  end
+
+  # R1.11: which network reaches this connection's project, or nil.
+  def network_note
+    project&.network_note
   end
 
   # "project-a/uat" -- how the API, MCP and the UI name a connection.
