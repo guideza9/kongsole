@@ -25,7 +25,9 @@
       <%= link_to "Expiring soon", expiring_certificates_path, class: "btn-sm btn-text" %>
       <%= link_to(@type == "certificate" ? "CA certificates" : "Certificates", entities_path(type: @type == "certificate" ? "ca_certificate" : "certificate"), class: "btn-sm btn-text") %>
     <% end %>
-    <% if @type == "plugin" %>
+    <% if write_block_reason %>
+      <%# R1.14: nothing to offer -- the notice below says why. %>
+    <% elsif @type == "plugin" %>
       <%= link_to "New global plugin", new_plugin_path, class: "btn-primary btn" %>
     <% elsif @type == "upstream" %>
       <%= link_to "New upstream", new_entity_path(type: "upstream"), class: "btn-primary btn" %>
@@ -34,6 +36,10 @@
     <% end %>
   </div>
 </div>
+
+<% if write_block_reason %>
+  <%= render "shared/write_blocked", class: "mb-4" %>
+<% end %>
 
 <nav aria-label="Entity types" class="tab-nav tab-nav--rule mb-6">
   <% %w[service route consumer plugin upstream certificate].each do |type| %>

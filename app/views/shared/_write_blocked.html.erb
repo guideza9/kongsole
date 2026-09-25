@@ -1,0 +1,12 @@
+<%# shared/_write_blocked -- R1.14: why nothing can be written from this page,
+    and how to change that. Shown instead of the write controls it replaces,
+    once per page, when ApplicationController#write_block_reason is set.
+    A plain banner (no live role): it is there when the page opens, not news. %>
+<% reason = write_block_reason %>
+<%= render layout: "shared/notice", locals: { tone: :warning, class: ["risk-notice", "write-blocked", local_assigns[:class]].compact.join(" ") } do %>
+  <p class="risk-notice__title"><%= t("hints.risks.write_blocked.#{reason}.title", env: current_connection.qualified_name || current_connection.name) %></p>
+  <p class="risk-notice__body"><%= t("hints.risks.write_blocked.#{reason}.body") %></p>
+  <% if reason == :apply_mode_unset %>
+    <p class="risk-notice__body"><%= link_to t("hints.risks.write_blocked.apply_mode_unset.action"), connections_path, class: "underline underline-offset-2" %></p>
+  <% end %>
+<% end %>

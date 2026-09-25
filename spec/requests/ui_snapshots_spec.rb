@@ -127,6 +127,16 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("entity-show")
     end
 
+    it "entities index and entity show where nothing can be written (R1.14)" do
+      unset = create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil, credential_mode: "session")
+      sign_in(unset)
+      upstream = create(:kong_entity, kong_connection: unset, entity_type: "upstream", name: "payments-up")
+      get entities_path(type: "upstream")
+      snapshot!("entities-index-write-blocked")
+      get entity_path(upstream)
+      snapshot!("entity-show-write-blocked")
+    end
+
     %w[upstream certificate ca_certificate].each do |type|
       it "entities new: #{type}" do
         sign_in

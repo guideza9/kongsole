@@ -282,6 +282,15 @@ en:
       env_var_certificate:
         title: "The key must already be on every Kong node"
         body: "This certificate reads its private key from an environment variable. If any node lacks it, TLS on that node fails as soon as the change is applied."
+      # R1.14: shown instead of the write controls (KongConnection#write_block_reason).
+      write_blocked:
+        apply_mode_unset:
+          title: "Nothing can be written to %{env}"
+          body: "Its apply mode is not set, so Kongsole only reads here. To make changes, set the environment to Direct apply on the Connections page, or to PR mode in config/connections.yml."
+          action: "Go to Connections"
+        read_only:
+          title: "This credential can only read %{env}"
+          body: "Kong lets this credential read the Admin API but not change it. Log in with a credential that can write to make changes here."
 
     # Kong::ErrorExplanation. network_* and connection_failed get the network
     # note of the project appended to next_step (R1).

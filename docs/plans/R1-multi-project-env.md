@@ -864,13 +864,13 @@ end
 
 **คำสั่ง:** `/impeccable clarify write-blocked notice` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): เมื่อ `write_block_reason` ไม่ใช่ nil — `entities/index` ไม่มี "New upstream" / "New global plugin" / "New certificate" / "New CA certificate";
+- [x] **Step 1:** assertion (ก่อน): เมื่อ `write_block_reason` ไม่ใช่ nil — `entities/index` ไม่มี "New upstream" / "New global plugin" / "New certificate" / "New CA certificate";
   `entities/show` ไม่มี Edit / Delete / Add plugin / Add target / Add SNI; `change_plans/show` ไม่มีปุ่ม Apply / Push branch;
   ทุกหน้านั้นมี notice เดียวที่ใช้ข้อความจาก `hints.risks.write_blocked.<reason>` · เมื่อ `nil` ทุกปุ่มยังอยู่ครบ (กันการซ่อนเกิน)
-- [ ] **Step 2:** FAIL → ทำ UI: notice เงียบ (ไม่ใช่ danger) บอกว่า "ทำไมเขียนไม่ได้" + "แก้อย่างไร"
+- [x] **Step 2:** FAIL → ทำ UI: notice เงียบ (ไม่ใช่ danger) บอกว่า "ทำไมเขียนไม่ได้" + "แก้อย่างไร"
   (`apply_mode_unset` → ตั้งเป็น Direct apply ที่หน้า Connections หรือ PR mode ใน `config/connections.yml`; `read_only` → login ด้วย credential ที่เขียนได้) · ปุ่มอ่านอย่างเดียว (Sync now, Filter, Expiring soon) ไม่แตะ
-- [ ] **Step 3:** PASS · snapshot `entities-index-write-blocked`, `entity-show-write-blocked` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
-- [ ] **Step 4:** Commit `feat(R1.14): write buttons stay hidden where nothing can be written, and the page says why`
+- [x] **Step 3:** PASS · snapshot `entities-index-write-blocked`, `entity-show-write-blocked` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [x] **Step 4:** Commit `feat(R1.14): write buttons stay hidden where nothing can be written, and the page says why`
 
 ---
 

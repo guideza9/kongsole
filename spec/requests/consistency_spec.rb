@@ -307,4 +307,62 @@ RSpec.describe "Console consistency", type: :request do
       ApplicationController.helpers.write_policy_label(policy)
     end
   end
+
+  # R1.14: where nothing can be written (KongConnection#write_block_reason),
+  # the write controls are not offered, and one notice says why and how to
+  # change it. Where it can, every control is still there.
+  describe "write controls" do
+    WRITE_CONTROLS = [ "New upstream", "New global plugin", "New certificate", "New CA certificate",
+                       "Edit", "Delete", "Add plugin", "Add target", "Add SNI", "Apply", "Push branch" ].freeze
+
+    def offered_controls
+      page.css("main a, main button, main input[type=submit]").map { |e| (e["value"] || e.text).squish } & WRITE_CONTROLS
+    end
+
+    def notices
+      page.css("main .write-blocked")
+    end
+
+    def visit_write_pages(connection)
+      upstream = create(:kong_entity, kong_connection: connection, entity_type: "upstream", name: "pay-up")
+      create(:kong_entity, kong_connection: connection, entity_type: "target", name: "10.0.0.1:80", parent_kong_id: upstream.kong_id)
+      plan = create(:change_plan, kong_connection: connection)
+      [ entities_path(type: "upstream"), entities_path(type: "plugin"), entities_path(type: "certificate"),
+        entities_path(type: "ca_certificate"), entity_path(upstream), change_plan_path(plan) ].to_h do |path|
+        get path
+        [ path, { controls: offered_controls, notices: notices.map { |n| n.text.squish } } ]
+      end
+    end
+
+    it "offers none of them where the env's apply mode is not set, and says why once per page" do
+      unset = create(:kong_connection, admin_url: "https://kong-unset.test", apply_mode: nil)
+      sign_in_to(unset)
+      title = I18n.t("hints.risks.write_blocked.apply_mode_unset.title", env: unset.qualified_name)
+
+      visit_write_pages(unset).each do |path, seen|
+        expect(seen[:controls]).to be_empty, "#{path} still offers #{seen[:controls].inspect}"
+        expect(seen[:notices].size).to eq(1), "#{path} has #{seen[:notices].size} write-blocked notices"
+        expect(seen[:notices].first).to include(title)
+      end
+    end
+
+    it "says a read-only credential on a direct env is why, with its own words" do
+      ro = create(:kong_connection, admin_url: "https://kong-ro.test", apply_mode: "direct")
+      sign_in_to(ro, access: :ro)
+
+      get entities_path(type: "upstream")
+      expect(offered_controls).to be_empty
+      expect(notices.text.squish).to include(I18n.t("hints.risks.write_blocked.read_only.title", env: ro.qualified_name))
+    end
+
+    it "keeps every one of them, and no notice, where the env can be written" do
+      sign_in
+      seen = visit_write_pages(connection)
+
+      expect(seen.values.flat_map { |v| v[:controls] }.uniq).to match_array(
+        [ "New upstream", "New global plugin", "New certificate", "New CA certificate", "Edit", "Delete", "Add target", "Apply" ]
+      )
+      expect(seen.values.flat_map { |v| v[:notices] }).to be_empty
+    end
+  end
 end

@@ -9,6 +9,10 @@
 <p class="text-sm mb-6 text-ink-soft"><%= entity_type_label(@entity.entity_type, count: 1).downcase %> · <%= current_connection.name %></p>
 
 <div class="max-w-2xl grid gap-4">
+  <% if write_block_reason %>
+    <%= render "shared/write_blocked" %>
+  <% end %>
+
   <%# The one entity Kongsole cannot afford to lose says so before anything
       else on the page, and says what that means for delete and for decK. %>
   <% if @entity.is_admin_path? %>
@@ -65,7 +69,9 @@
         <h2 class="section-label">
           <%= label %>
         </h2>
-        <% if label == "Plugins" %>
+        <% if write_block_reason %>
+          <%# R1.14: no Add where nothing can be written. %>
+        <% elsif label == "Plugins" %>
           <%= link_to "Add plugin", new_plugin_path(scope_type: @entity.entity_type, scope_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
         <% elsif label == "Targets" %>
           <%= link_to "Add target", new_entity_path(type: "target", parent_kong_id: @entity.kong_id), class: "btn-text px-2 py-1 text-xs" %>
@@ -89,7 +95,7 @@
     <p class="text-sm text-ink-soft">
       Read-only — this plugin fronts the connection's own admin path and can't be edited or deleted here.
     </p>
-  <% else %>
+  <% elsif !write_block_reason %>
     <%= link_to "Edit", edit_entity_path(@entity), class: "btn-sm btn-secondary" %>
     <%= button_to "Delete", entity_path(@entity), method: :delete, class: "btn-sm btn-text-danger bg-transparent" %>
   <% end %>

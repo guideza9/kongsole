@@ -307,7 +307,11 @@
     <% end %>
   </section>
 
-  <% if @actionable %>
+  <% if @actionable && write_block_reason %>
+    <%# R1.14: the env stopped being writable after this was proposed; the
+        server would refuse, so the bar is not offered. %>
+    <%= render "shared/write_blocked" %>
+  <% elsif @actionable %>
     <%# Every name typed into the bar gates the button (see env-confirm). %>
     <% gated = @requires_env_name || @requires_confirmation_name %>
     <% action_label = plan.apply_mode == "pr" ? "Push branch" : "Apply" %>
