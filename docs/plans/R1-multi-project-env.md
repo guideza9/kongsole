@@ -739,6 +739,50 @@ end
 - [ ] **ต้องทำบนเครื่องที่มี compose:** login `local/dev` + switcher → uat; สร้าง project/env `nonprod` + connection แล้ว login;
   ตั้ง apply_mode = Not set แล้ว `kong_plan` ต้อง 403; `https://kong.nonexistent.invalid` → `network_dns_failed` + note;
   `docker compose stop kong-1 kong-2` → `network_refused`; ภาพหน้าจอจากแอปจริง (ตอนนี้มีจาก snapshot)
+  → ทำแล้วบนเครื่อง compose ดูข้างล่าง
+
+### ผลตรวจ R1.12 บนเครื่องที่มี compose (2026-09-25, Ruby 3.4.8, Kong 3.7.1 × 2 node, Edge headless ผ่าน playwright-core)
+
+- [x] login `local/dev` → header `Local · dev`; switcher `<nav aria-label="Environments of Local">` มี dev (`aria-current="page"`), dev-ro (`Other · rank 0`), sit, UAT;
+  เปิดด้วยคีย์บอร์ด (Enter) ได้; คลิก UAT → `/connections/8/login` topbar `env-uat` (`--env: #8a3b86`)
+- [x] สร้าง project `r1check` (network_note "Reachable from the NONPROD VPN only") + env `nonprod` ผ่าน UI: พิมพ์ `uat` → "Rank 2, fixed for this name." select ถูกปิด;
+  พิมพ์ `nonprod` → select rank ว่าง + `required`; ส่งแบบไม่เลือก rank (ถอด `required` ฝั่ง browser) → server ROLLBACK ไม่สร้าง env ·
+  apply_mode มีแค่ `Not set (read only)` / `Direct apply`
+- [x] connection `r1check/nonprod` → `http://localhost:8001` (UI สร้าง `http://` ได้เฉพาะ localhost ตาม `admin_url_must_be_https_unless_localhost`;
+  route loopback ต้องใช้ Host `kong-admin.internal` จึงชี้ route ไม่ได้จาก UI) · login (session mode) สำเร็จ
+- [x] apply_mode = Not set → หน้า connection แสดง "Apply mode not set — nothing can be written"; ส่งฟอร์ม New upstream →
+  alert "r1check/nonprod: apply mode is not set -- nothing can be written until …" (ไม่มีอะไรถึง Kong)
+- [x] API จริงด้วย PAT: `kong_connections` → `r1check/nonprod` (ไม่มี `auth_secret`); `kong_plan` → **403** ข้อความเดียวกับข้างบน;
+  `connection=nonprod` → 401 "is not a project/env name"; connection ที่ PAT ไม่ได้ผูก → 401 · revoke PAT แล้ว
+- [x] DNS: `r1check/broken` → `https://kong.nonexistent.invalid` → login แสดง `network_dns_failed` (cause + next step) + "Reachable from the NONPROD VPN only";
+  หน้า Connections แสดง "Unreachable from this machine"
+- [x] `docker stop` kong-1 + kong-2 → login `local/dev` แสดง `network_refused` ไม่ใช่ "Admin API down"; row แสดง "Unreachable from this machine" ·
+  start กลับ healthy, admin route 200, login ใหม่ → Ok
+- [x] migration บนสำเนา DB dev (`pg_dump` → `kong_integration_r1check`, 10 connection, 2 env apply_mode ว่าง):
+  rollback STEP=4 → ปฏิเสธ "set apply_mode on r1check/nonprod, r1check/broken first" ไม่ revert อะไร ·
+  ตั้ง apply_mode แล้ว rollback STEP=4 → สำเร็จ · migrate → **ปฏิเสธ** `LegacyProjectBackfill::ConflictingRepos` (ดูข้อค้าง 3) ·
+  ทำให้ git_repo ของ PR ทั้งสองเท่ากันบนสำเนา → migrate สำเร็จ ชื่อเป็น `default/<เดิม>` เช่น `default/local-dev` · drop สำเนาแล้ว
+- [x] ภาพหน้าจอ 390 + 1280 จากแอปจริง: connections, header + switcher, login uat, project form, env form, entities (unset), write refused,
+  login dns/refused — แนบในรายงาน ไม่ commit · 390px ไม่มี horizontal scroll ในหน้าของ R1
+- [x] `bundle exec rspec` **1033 examples, 0 failures** (Ruby 3.4.8) · MCP vitest **30/30**
+- [x] credential: `log/development.log` และ stdout ของ server ไม่มี `Authorization` / `Basic <b64>` / password; มีแค่ `token_prefix` + digest ของ PAT
+- [x] detect บน snapshot: **59 findings บน 40 หน้า** (R3 ปิดที่ 46 บน 34) · หน้าที่มีทั้งสองรอบ 46 → 43 ·
+  หน้าใหม่ของ R1 = 16 (cramped-padding 14, side-tab 1 ที่ `header-switcher`, flat-type-hierarchy 1 ที่ `connection-show-registry`)
+- [x] `bin/rails hints:todo` เหลือ 2 (`errors.forbidden.next_step`, `errors.upstream_unavailable.next_step`) — ของ R3.7 ไม่มี key ใหม่ของ R1
+
+**ข้อค้าง (รอเจ้าของงานตัดสิน):**
+
+1. **"ปุ่มเขียนหาย" ไม่มี task ไหนทำ** — R1.12 คาดไว้แต่ R1.3 ปิดที่ backend เท่านั้น · `entities/index` แสดง "New upstream" / "New global plugin" /
+   "New certificate" และ `entities/show` แสดง Edit / Add plugin / Add target ทุกกรณี (ไม่ดู apply_mode และไม่ดู `read_only?`) · การเขียนถูกปฏิเสธถูกต้องทุกทาง
+2. **แก้ env ที่มี connection แล้วใน UI ไม่ได้** — `_env_row` แสดง Edit ของ connection เท่านั้น ไม่มีลิงก์ไป `edit_project_env_path` ที่ไหนเลย
+   → เปลี่ยน apply_mode / rank / สีของ env ที่ต่อแล้วต้องพิมพ์ URL `/project_envs/:id/edit` เอง (ข้อ R1.12 ทำผ่าน URL ตรง)
+3. **migrate ใหม่หลัง rollback ทั้ง 4 ล้มเมื่อมี PR connection หลาย repo** — ข้อความบอก "split them into projects in config/connections.yml before migrating"
+   แต่ตอนนั้น `kong:load_connections` ใช้ไม่ได้ (`column kong_connections.project_env_id does not exist`) · Postgres ถอย migration นั้นให้ ไม่เสียข้อมูล ·
+   เครื่องนี้เจอเพราะ `default/uat` กับ `local/uat` ชี้ `storage/config_repos/uat.git` คนละ checkout (main กับ worktree ใช้ DB dev เดียวกัน)
+4. **login connection `stored` ใน development ไม่ได้บนเครื่องนี้** — ไม่มี `config/master.key` → `ActiveRecord::Encryption::Errors::Configuration` (500)
+   · เป็นเรื่องสภาพแวดล้อม (T0.4 แก้เฉพาะ test) · ข้อ R1.12 ใช้ session mode แทนตอน login และสลับเป็น stored ตอนออก PAT
+5. นอก R1: หน้า Health ที่ 390px เลื่อนแนวนอนได้ถึง 889px เพราะ `<span class="sr-only">Actions</span>` (absolute) หลุดจาก `.overflow-x-auto` — มีตั้งแต่ `682cb0c`
+6. นอก R1: หน้า login ที่ 390px ตัด "PR mode" กลางคำ เพราะ `break-all` ครอบทั้งบรรทัด admin URL + apply mode
 
 ## เกณฑ์ปิดงาน R1
 
