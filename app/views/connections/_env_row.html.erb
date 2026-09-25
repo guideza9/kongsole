@@ -45,6 +45,7 @@
         </div>
       <% end %>
     <% elsif env.source == "local" %>
+      <%= link_to "Connect", new_connection_path(project_env_id: env.id), class: "btn-sm btn-secondary", aria: { label: "Connect #{env.qualified_name} to its Kong node" } %>
       <%= link_to "Edit", edit_project_env_path(env), class: "btn-sm btn-text", aria: { label: "Edit #{env.qualified_name}" } %>
       <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
         <%= button_to "Remove", project_env_path(env), method: :delete,

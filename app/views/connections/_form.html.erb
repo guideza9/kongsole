@@ -22,7 +22,7 @@
     <div class="grid gap-4">
       <div>
         <%= f.label :project_env_id, "Environment", class: "block text-sm font-medium text-ink" %>
-        <%= f.select :project_env_id, grouped_options_for_select(env_choices, connection.project_env_id), { include_blank: true }, class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :project_env_id) } %>
+        <%= f.select :project_env_id, grouped_options_for_select(env_choices, connection.project_env_id || params[:project_env_id].to_i.nonzero?), { include_blank: true }, class: "field-input mt-1", aria: { describedby: hint_describedby(:connection, :project_env_id) } %>
         <%= field_hint(:connection, :project_env_id) %>
       </div>
     </div>

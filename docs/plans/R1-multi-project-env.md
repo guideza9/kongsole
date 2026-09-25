@@ -645,11 +645,11 @@ end
 
 **คำสั่ง:** `/impeccable shape project and env forms` → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** env form: ช่อง name; ถ้าชื่อเป็น dev/sit/uat/prod แสดง "Rank N (fixed for this name)" ไม่มี select; ชื่ออื่นแสดง select rank ที่ **ไม่มีค่าเลือกไว้** (`include_blank: "Choose how careful to be…"`, `required`) — `env_rank_controller.js` สลับทันทีที่พิมพ์ (fallback no-JS: server validation แสดง error); apply_mode select: `Not set (read only)` / `Direct apply`; คำอธิบายว่า PR mode ตั้งใน `connections.yml` พร้อมตัวอย่าง YAML
-- [ ] **Step 1b:** project form: ช่อง `network_note` พร้อม hint และตัวอย่าง "Reachable from the NONPROD VPN only" (registry แสดงอ่านอย่างเดียว)
-- [ ] **Step 2:** connection form: เลือก env (grouped by project), admin_url, TLS, credential_mode — hint ทุก field
-- [ ] **Step 3:** registry rows: หน้า show แสดงค่าแบบอ่านอย่างเดียว + "Edit this in config/connections.yml"
-- [ ] **Step 4:** snapshot + detect · Commit `feat(R1.9): forms for local projects, envs and connections with hints`
+- [x] **Step 1:** env form: ช่อง name; ถ้าชื่อเป็น dev/sit/uat/prod แสดง "Rank N (fixed for this name)" ไม่มี select; ชื่ออื่นแสดง select rank ที่ **ไม่มีค่าเลือกไว้** (`include_blank: "Choose how careful to be…"`, `required`) — `env_rank_controller.js` สลับทันทีที่พิมพ์ (fallback no-JS: server validation แสดง error); apply_mode select: `Not set (read only)` / `Direct apply`; คำอธิบายว่า PR mode ตั้งใน `connections.yml` พร้อมตัวอย่าง YAML
+- [x] **Step 1b:** project form: ช่อง `network_note` พร้อม hint และตัวอย่าง "Reachable from the NONPROD VPN only" (registry แสดงอ่านอย่างเดียว)
+- [x] **Step 2:** connection form: เลือก env (grouped by project), admin_url, TLS, credential_mode — hint ทุก field
+- [x] **Step 3:** registry rows: หน้า show แสดงค่าแบบอ่านอย่างเดียว + "Edit this in config/connections.yml"
+- [x] **Step 4:** snapshot + detect · Commit `feat(R1.9): forms for local projects, envs and connections with hints`
 
 ---
 

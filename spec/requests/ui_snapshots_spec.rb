@@ -78,6 +78,23 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("connections-index-projects")
     end
 
+    it "project and env forms (R1.9)" do
+      project = create(:project, key: "payments", name: "Payments", source: "local")
+      get new_project_path
+      snapshot!("projects-new")
+      get new_project_env_path(project_id: project.id)
+      snapshot!("project-envs-new")
+      env = create(:project_env, project: project, name: "uat", position: 3, apply_mode: nil)
+      get edit_project_env_path(env)
+      snapshot!("project-envs-edit-known")
+    end
+
+    it "a registry connection's page (R1.9)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      get connection_path(KongConnection.find_by!(name: "project-a/uat"))
+      snapshot!("connection-show-registry")
+    end
+
     it "connections new" do
       get new_connection_path
       snapshot!("connections-new")

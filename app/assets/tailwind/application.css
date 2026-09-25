@@ -1716,3 +1716,17 @@ html:has(.action-bar) {
   color: var(--color-caution-ink);
   border-color: color-mix(in srgb, var(--color-caution) 35%, transparent);
 }
+
+/* R1.9 -- a short config sample inside a form's explanation (the PR-mode
+   YAML): the code surface, a hairline, scrolling sideways rather than
+   wrapping YAML indentation on a phone. */
+.code-sample {
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  padding: 0.625rem 0.75rem;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--color-ink);
+  overflow-x: auto;
+}

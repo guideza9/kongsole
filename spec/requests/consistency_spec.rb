@@ -63,6 +63,39 @@ RSpec.describe "Console consistency", type: :request do
       expect(undescribed_fields).to eq([])
     end
 
+    it "describes every field on the project form (R1.9)" do
+      get new_project_path
+      expect(undescribed_fields).to eq([])
+    end
+
+    it "describes every field on the env form, fixing a known name's rank and asking for any other (R1.9)" do
+      project = create(:project, source: "local")
+      get new_project_env_path(project_id: project.id)
+      expect(undescribed_fields).to eq([])
+      rank = page.at_css("select[name='project_env[rank]']")
+      expect(rank["required"]).to be_present
+      expect(rank.at_css("option[selected]")).to be_nil
+      expect(page.css("select[name='project_env[apply_mode]'] option").map { |o| o["value"] }).to eq([ "", "direct" ])
+
+      env = create(:project_env, project: project, name: "uat", apply_mode: nil)
+      get edit_project_env_path(env)
+      expect(page.text).to include(I18n.t("hints.fields.project_env.rank_fixed", rank: 2))
+      expect(page.at_css("select[name='project_env[rank]']")&.[]("disabled")).to be_present
+    end
+
+    it "shows a registry connection read-only, pointing at connections.yml (R1.9)" do
+      connection = create(:kong_connection, project_env: create(:project_env, source: "registry", apply_mode: "pr"))
+      get connection_path(connection)
+      expect(page.text).to include("config/connections.yml")
+      expect(page.css("a").map { |a| a.text.strip }).not_to include("Edit")
+    end
+
+    it "preselects the env a Connect link came from (R1.9)" do
+      env = create(:project_env, source: "local", project: create(:project, source: "local"))
+      get new_connection_path(project_env_id: env.id)
+      expect(page.at_css("select[name='kong_connection[project_env_id]'] option[selected]")&.[]("value")).to eq(env.id.to_s)
+    end
+
     it "describes the JSON editor on a create form and the plugin config step" do
       sign_in
       get new_entity_path(type: "upstream")

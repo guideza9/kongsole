@@ -7,12 +7,24 @@
 </div>
 <p class="text-sm mb-8 text-ink-soft"><%= t("hints.pages.connection_show.intro") %></p>
 
+<% unless @connection.editable_in_ui? %>
+  <div class="panel max-w-xl mb-6 p-4 text-sm">
+    <p class="font-semibold text-ink">From config/connections.yml</p>
+    <p class="mt-0.5 text-ink-soft">The team registry sets this connection and its environment. Edit it in <span class="font-mono">config/connections.yml</span> and run <span class="font-mono">bin/rails kong:load_connections</span>.</p>
+  </div>
+<% end %>
+
 <div class="max-w-xl grid gap-4">
   <section class="panel p-4">
     <h2 class="section-label mb-3">Connectivity &amp; policy</h2>
     <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+      <dt class="text-ink-soft">Project</dt><dd><%= @connection.project&.name %></dd>
+      <dt class="text-ink-soft">Environment</dt><dd class="font-mono"><%= @connection.name %></dd>
+      <% if @connection.project_env %>
+        <dt class="text-ink-soft">Rank</dt><dd><%= rank_label(@connection.project_env) %></dd>
+      <% end %>
       <dt class="text-ink-soft">Admin URL</dt><dd class="font-mono"><%= @connection.admin_url %></dd>
-      <dt class="text-ink-soft">Apply mode</dt><dd><%= apply_mode_label(@connection.apply_mode) %></dd>
+      <dt class="text-ink-soft">Apply mode</dt><dd><%= @connection.project_env ? write_policy_label(@connection.project_env.write_policy) : apply_mode_label(@connection.apply_mode) %></dd>
       <dt class="text-ink-soft">Credential mode</dt><dd><%= @connection.credential_mode %></dd>
     </dl>
   </section>
@@ -40,6 +52,8 @@
 
 <div class="mt-6 flex gap-2">
   <%= link_to "Log in", login_connection_path(@connection), class: "btn btn-primary" %>
-  <%= link_to "Edit", edit_connection_path(@connection), class: "btn btn-secondary" %>
+  <% if @connection.editable_in_ui? %>
+    <%= link_to "Edit", edit_connection_path(@connection), class: "btn btn-secondary" %>
+  <% end %>
   <%= link_to "Back", connections_path, class: "btn btn-text" %>
 </div>
