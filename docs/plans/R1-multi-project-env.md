@@ -954,8 +954,9 @@ end
   390px ไม่มี horizontal scroll ในหน้าที่เปลี่ยน · ภาพหน้าจอ 390/1280 แนบในรายงาน ไม่ commit
 - [x] ลบข้อมูลทดสอบ (project `r1check`, env, connection, plan pending #48) · Kong ไม่มี upstream `r1check-up` (404)
 
-**ข้อสังเกต (ยังไม่แก้):** หน้า plan ที่เสนอไว้ตอน env ยังเขียนได้ แสดงการ์ด "Direct apply → live write to Kong" และ "Guardrails: All clear"
-ซึ่งคำนวณตอนเสนอ อยู่เหนือ notice "Nothing can be written" — ข้อมูลขัดกันบนหน้าเดียว (server ปฏิเสธถูกต้อง)
+**ข้อสังเกต (ยังไม่แก้):** หน้า plan ที่เสนอไว้ตอน env ยังเขียนได้ แสดงการ์ด "Direct apply → live write to Kong" (จาก `plan.apply_mode` ตอนเสนอ) และ "Guardrails: All clear"
+(`ChangePlansController#show` คำนวณตอนเปิดหน้า แต่ดูแค่ `access_level` ไม่ดู apply_mode) อยู่เหนือ notice "Nothing can be written"
+— ข้อมูลขัดกันบนหน้าเดียว (server ปฏิเสธถูกต้อง) · ทางแก้ที่น่าจะเล็กที่สุด: การ์ด guardrail ใช้ `write_block_reason`
 ·
 **ต้องทำเพิ่ม:** ไม่มี `/impeccable` ใน session นี้ — notice ของ R1.14 และแถวของ R1.15 ยังไม่ผ่าน `/impeccable clarify` / `harden`
 
