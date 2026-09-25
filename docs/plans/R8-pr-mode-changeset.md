@@ -591,13 +591,36 @@ end
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R8.1–R8.9 · ต้องติดตั้ง decK (1.51.1 หรือ 1.66.1) หรือตั้ง `DECK_BIN`
 
-- [ ] `bin/rails kong:seed_config_repo` (repo ของ `local/uat`) → login `local/uat` (ro)
-- [ ] เพิ่ม 3 รายการ: update tag ของ service ที่มีใน YAML, create service ใหม่, create route ใต้ service ใหม่ (หลัง R2) → ปิด browser → เปิดใหม่ รายการยังอยู่
-- [ ] Remove 1 รายการ → Preview: diff ถูก, gate Clear · push commit ว่างเข้า repo แล้ว preview อีกครั้ง → drift แสดง "1 commit"
-- [ ] Submit (พิมพ์ชื่อ + รหัสผ่าน + ยืนยัน drift) → branch `kongctl/changeset-<id>` มี commit เดียว, trailer ถูก, YAML round-trip (`bundle exec rails runner 'Kong::DeckDocument.verify_input!(File.read(...))'`)
-- [ ] ลอง item ที่ลบ 4 service → Blocked ด้วย threshold 3, ไม่มี branch
-- [ ] ยืนยัน compose Kong ไม่มี request เขียนจาก Kongsole: `docker compose logs kong-1 | grep -E '"(POST|PATCH|PUT|DELETE)'` ช่วงทดสอบ = ว่าง
-- [ ] ภาพหน้าจอทุกสถานะ
+- [x] `bin/rails kong:seed_config_repo` (repo ของ `local/uat`) → login `local/uat` (ro)
+- [x] เพิ่ม 3 รายการ: update tag ของ service ที่มีใน YAML, create service ใหม่, create route ใต้ service ใหม่ (หลัง R2) → ปิด browser → เปิดใหม่ รายการยังอยู่
+- [x] Remove 1 รายการ → Preview: diff ถูก, gate Clear · push commit ว่างเข้า repo แล้ว preview อีกครั้ง → drift แสดง "1 commit"
+- [x] Submit (พิมพ์ชื่อ + รหัสผ่าน + ยืนยัน drift) → branch `kongctl/changeset-<id>` มี commit เดียว, trailer ถูก, YAML round-trip (`bundle exec rails runner 'Kong::DeckDocument.verify_input!(File.read(...))'`)
+- [x] ลอง item ที่ลบ 4 service → Blocked ด้วย threshold 3, ไม่มี branch
+- [x] ยืนยัน compose Kong ไม่มี request เขียนจาก Kongsole: `docker compose logs kong-1 | grep -E '"(POST|PATCH|PUT|DELETE)'` ช่วงทดสอบ = ว่าง
+- [x] ภาพหน้าจอทุกสถานะ
+
+### ผลตรวจ R8.10 (2026-09-25, compose ในเครื่อง: Kong 3.7.1 × 2 node, decK จริง, Edge headless)
+
+- [x] `kong:seed_config_repo` → `storage/config_repos/uat.git` · baseline: service `r8-orders` (tag `managed-by-kongctl`) ใน Kong ผ่าน `local/dev` และใน YAML
+- [x] login `local/uat` ด้วย `ro-kongctl` (`jakkapat` ไม่อยู่ใน ACL ของ route ro — ถูกต้อง) · Sync (GET) · แก้ tag ของ `r8-orders` ผ่าน UI → "In changeset #2 as item 1", หน้า plan ไม่มี Apply ·
+  เพิ่มผ่าน planner แบบ agent (เส้นทางเดียวกับ `kong_plan`): create `r8-billing`, create route `r8-billing-v1` ใต้ provisional id ของ `r8-billing`, create `r8-scratch` ·
+  เสนอแก้ `r8-orders` ซ้ำ → ถูกปฏิเสธ "already in this changeset" (R8.2 จริง)
+- [x] context browser ใหม่ (ปิด-เปิด) → 4 รายการยังอยู่ · nav "Changeset 4" · Remove `r8-scratch` → 3 รายการ
+- [x] Review: decK validate + diff จริง · gate Clear · diff: route `r8-billing-v1` อยู่ใต้ `r8-billing` ใน YAML เดียวกัน (Review Focus 1) · drift "No change"
+- [x] push commit ว่างเข้า `main` → review อีกครั้ง: "Changed · git: 1 commit pushed to the base branch since this began" + checkbox
+- [x] Submit (พิมพ์ `local/uat` + รหัสผ่าน + ยืนยัน drift) → `kongctl/changeset-2` มี **1 commit** บน `main` ล่าสุด · trailer `Changeset: 2` / `Plans: 53, 54, 55`
+  (ไม่มี `Changed-by` เพราะ `ro-kongctl` เป็น personal ไม่มี operator — ถูกต้อง) · YAML round-trip byte-exact · `_info.select_tags` = `managed-by-kongctl` · decK diff จริง: creating 2, updating 1, deleting 0
+- [x] Blocked: สร้าง 4 service tag managed ใน Kong ผ่าน `local/dev` ที่ไม่มีใน YAML + changeset ใหม่ 1 รายการ → gate "Blocked · deletes 4 entities, over the threshold of 3", ไม่มีฟอร์ม submit ·
+  POST submit ตรงๆ → ปฏิเสธ, changeset ยัง Open, ไม่มี branch `kongctl/changeset-3`
+- [x] Kong logs ของทั้งสอง node ช่วง uat: request ที่ไม่ใช่ GET จาก `ro-kongctl` มีแค่ access probe ตอน login (`PATCH /routes/0000…` → router 404) — ไม่มีอะไรถึง Admin API
+- [x] ภาพหน้าจอ 390/1280: changeset open, review, drift, blocked, submitted, list — ไม่มี horizontal scroll
+- [x] credential: `log/development.log` + log ของ server ไม่มี `Authorization` / `Basic <b64>` / password / PEM / token ใน URL
+- [x] ลบข้อมูลทดสอบ: service `r8-del-1..4`, `r8-orders` ใน Kong (ผ่าน `local/dev`) · changeset 3, plan 9, audit 3 ใน DB dev
+
+**เจอระหว่างตรวจ:** (1) dev server ที่เปิดค้างไว้จาก session ก่อน รัน `git` ไม่ได้ (ออกโดยไม่มีข้อความ) → restart server แล้วปกติ ·
+(2) บั๊ก: git ที่ล้มโดยไม่ใช่เรื่องเครือข่ายถูกอธิบายว่า "Could not reach this connection" → แก้แล้ว `4fc9f8d` พร้อม test ·
+(3) นอก R8 (M5c): update service ที่ YAML เขียนแค่ `url` ทำให้ไฟล์ได้ field ที่ Kong ขยายเพิ่ม (`host`/`port`/timeouts) มาด้วย ·
+(4) หน้า review ของ changeset ที่ submit แล้วยังเปิดได้ (แสดง drift โดยไม่มีรายการ)
 
 ## เกณฑ์ปิดงาน R8
 
