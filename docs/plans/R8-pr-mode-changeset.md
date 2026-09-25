@@ -215,7 +215,7 @@ end
 
 **Interfaces:** `Kong::ChangesetResolver.new(changeset)` — duck type เดียวกับ `DeckReadModelResolver` (`name_of(kong_id)`, `parent_of(kong_id)`) ลอง read-model ก่อน แล้วหา plan create ใน changeset ที่ `provisional_kong_id == kong_id` (ชื่อจาก `after[definition.deck_key]`, parent จาก `parent_kong_id`)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -261,7 +261,7 @@ it "nests a route under a service created earlier in the same changeset" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R8.3): children can nest under parents created in the same changeset`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R8.3): children can nest under parents created in the same changeset`
 
 ---
 

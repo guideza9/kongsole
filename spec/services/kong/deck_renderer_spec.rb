@@ -632,4 +632,26 @@ RSpec.describe Kong::DeckRenderer do
       expect(Kong::DeckDocument.serialize(doc)).not_to match(/: null|created_at|updated_at|service:\s*\n\s+id:/)
     end
   end
+  # R8.3: one changeset creates a service and a route under it; the route's
+  # parent exists only as the earlier item.
+  it "nests a route under a service created earlier in the same changeset" do
+    changeset = create(:changeset)
+    connection = changeset.kong_connection
+    provisional = SecureRandom.uuid
+    service_plan = create(:change_plan, changeset: changeset, kong_connection: connection, position: 1, apply_mode: "pr",
+      operation: "create", entity_type: "service", provisional_kong_id: provisional, target_kong_id: nil,
+      after: { "name" => "billing", "host" => "billing.internal", "tags" => %w[managed-by-kongctl] })
+    route_plan = create(:change_plan, changeset: changeset, kong_connection: connection, position: 2, apply_mode: "pr",
+      operation: "create", entity_type: "route", parent_kong_id: provisional, target_kong_id: nil,
+      after: { "name" => "billing-v1", "paths" => %w[/billing], "service" => { "id" => provisional }, "tags" => %w[managed-by-kongctl] })
+    doc = Kong::DeckDocument.parse(nil, select_tags: %w[managed-by-kongctl])
+    resolver = Kong::ChangesetResolver.new(changeset)
+
+    [ service_plan, route_plan ].each { |plan| described_class.apply_change(doc, plan, resolver: resolver) }
+    parsed = YAML.safe_load(Kong::DeckDocument.serialize(doc))
+
+    expect(parsed["services"].map { _1["name"] }).to eq(%w[billing])
+    expect(parsed["services"].first["routes"].map { _1["name"] }).to eq(%w[billing-v1])
+    expect(parsed["services"].first["routes"].first).not_to have_key("service")
+  end
 end
