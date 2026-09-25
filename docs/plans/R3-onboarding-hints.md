@@ -480,11 +480,36 @@ end
 
 ## เกณฑ์ปิดงาน R3
 
-- [ ] ทุก field ในฟอร์มที่มีอยู่มี help + example จาก `hints.en.yml` (consistency_spec)
-- [ ] ทุกหน้ามี empty state ที่บอกว่าใช้ทำอะไรและเริ่มอย่างไร
-- [ ] ลบ / rank ≥ 2 / admin path มีคำอธิบายผลกระทบก่อนยืนยัน
-- [ ] error 6 แบบ (+ unexpected, connection_failed, network_* 4 ชนิด) มี cause + next step · ปัญหาเครือข่ายไม่ถูกรายงานเป็น "Admin API ล่ม"
-- [ ] ปิด hint แล้วยังปิดหลัง reload (request spec)
-- [ ] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง)
-- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่มจาก baseline · ภาพหน้าจอแนบ
+- [x] ทุก field ในฟอร์มที่มีอยู่มี help + example จาก `hints.en.yml` (consistency_spec)
+- [x] ทุกหน้ามี empty state ที่บอกว่าใช้ทำอะไรและเริ่มอย่างไร
+- [x] ลบ / rank ≥ 2 / admin path มีคำอธิบายผลกระทบก่อนยืนยัน
+- [x] error 6 แบบ (+ unexpected, connection_failed, network_* 4 ชนิด) มี cause + next step · ปัญหาเครือข่ายไม่ถูกรายงานเป็น "Admin API ล่ม"
+- [x] ปิด hint แล้วยังปิดหลัง reload (request spec)
+- [ ] hint อยู่ใน `hints.en.yml` ไฟล์เดียว (`grep -rn "e\.g\." app/views` ไม่เจอข้อความ hint ที่เขียนตรง) — grep ผ่าน แต่ดูข้อค้างด้านล่าง
+- [x] `bundle exec rspec` 0 failures · detect ไม่เพิ่มจาก baseline · ภาพหน้าจอแนบ
 - [ ] R3.7 ทำหลัง R2 (บันทึกผลใน plan นี้)
+
+### ผลตรวจเกณฑ์ปิดงาน (2026-09-25, cloud session)
+
+- `bundle exec rspec`: **951 examples, 0 failures** (T0 ปิดที่ 889) · MCP vitest 28/28 · `log_filtering_spec` 3/0
+  (รันบน Ruby 3.3.6 เพราะ proxy ของ cloud บล็อก `cache.ruby-lang.org` ติดตั้ง 3.4.6 ไม่ได้ — ควรรันซ้ำบน 3.4.6 ในเครื่อง)
+- field: `consistency_spec` "hints" ครอบฟอร์ม connection, login, token, entity edit + filter, JSON editor, plugin config
+- empty state: `hints.empty_states.*` ถูกใช้ครบ 8 ชุด (connections, entities ×3, plugins_catalog, change_plans, audit_events,
+  tokens, certificates_expiring, entity_children)
+- error: ทั้ง 12 key ใต้ `hints.errors` มี `title` / `cause` / `next_step` · `error_explanation_spec` ตรวจว่า network_* ไม่ถูกอธิบายเป็น Admin API ล่ม
+- ปิด hint: `hint_preferences_spec` (cookie ถาวร อ่านฝั่ง server)
+- detect บน snapshot: **44 findings บน 33 หน้า** (warning 39, advisory 5) เทียบ baseline 44 บน 31 หน้า
+  - หน้าที่มีทั้งสองรอบ: 42 → 39 (change-plan-delete 6→5, entity-show 4→2, หน้าอื่นเท่าเดิม) ไม่มี finding ใหม่
+  - หน้าใหม่ของ R3: login-uat 2 (`side-tab` ของ `env-notice` ที่มีตั้งแต่ก่อน R3 + cramped-padding), layout-compact-hints 2, alert-error-explanation 1
+  - `connections-index` ไม่ถูกเขียนลง `tmp/ui-snapshots` แล้ว (ย้ายไป tmpdir ใน `d60c094`) — หน้านี้หลุดจาก detect
+- 390px: ไม่มี horizontal scroll ใน 9 หน้าที่ถ่าย · ภาพหน้าจอ 390 + 1280 ถ่ายจาก snapshot (ไม่มี Docker/compose ใน cloud) แนบในรายงาน ไม่ commit
+- `grep "Basic " log/test.log`: เจอ 1 แถว = fixture `"Basic abc"` ใน config ของ plugin ที่ spec ของ scrub ใส่เอง ไม่ใช่ header ของ request
+- `bin/rails hints:todo`: เหลือ 4 รายการ (`connection.name.detail`, `connection.select_tags_raw.detail`,
+  `errors.forbidden.next_step`, `errors.upstream_unavailable.next_step`) — รอเจ้าของงานใน R3.7
+
+**ข้อค้าง (รอเจ้าของงานตัดสิน):**
+
+1. `hints.risks.rank_2_apply` มีใน `hints.en.yml` แต่ไม่มี view ไหนใช้ — คำเตือน rank ≥ 2 ตอน apply ในหน้า plan review
+   เขียนตรงใน `app/views/change_plans/show.html.erb` ("This writes to %{env} now." / "Pushes a branch — nothing in %{env} changes yet.")
+   ผลกระทบแสดงครบแล้ว แต่ไม่ได้มาจากไฟล์ hint — ต้องเพิ่ม UI task ย้ายข้อความเข้า `hints.en.yml` หรือลบ key ที่ไม่ใช้
+2. เพิ่ม `connections-index` กลับเข้า `tmp/ui-snapshots` เพื่อให้ detect เห็นหน้า Connections (test tooling)
