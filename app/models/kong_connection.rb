@@ -6,10 +6,6 @@
 # transparently encrypted at rest; it is never exposed through `to_json`,
 # `inspect`, or any serializer.
 class KongConnection < ApplicationRecord
-  # The env names the legacy connection form still offers (R1.5 replaces it
-  # with a choice of project env). Rank is never derived from this list any
-  # more: it is copied from the env (ProjectEnv::KNOWN_RANKS).
-  ENVS = ProjectEnv::KNOWN_RANKS.keys.freeze
   CREDENTIAL_KINDS = %w[personal shared].freeze
   CREDENTIAL_MODES = %w[session stored].freeze
   ACCESS_LEVELS = %w[rw ro].freeze
@@ -39,7 +35,6 @@ class KongConnection < ApplicationRecord
   validate :admin_url_must_be_https_unless_localhost
   validate :git_web_url_must_be_a_web_url
 
-  before_validation :adopt_legacy_env, if: -> { project_env.nil? }
   before_validation :copy_policy_from_env
 
   def prod?
@@ -170,15 +165,6 @@ class KongConnection < ApplicationRecord
     self.git_branch = project&.git_branch
     self.git_web_url = project&.git_web_url
     self.name = project_env.qualified_name
-  end
-
-  # A connection that arrives with no env (the flat connections.yml list and
-  # the connection form, until R1.4 and R1.5) gets one in project `default`,
-  # the same way the migration placed legacy rows.
-  def adopt_legacy_env
-    return if name.blank? && env.blank?
-
-    self.project_env = Kong::LegacyProjectBackfill.build_env_for(self)
   end
 
   def admin_url_must_be_https_unless_localhost

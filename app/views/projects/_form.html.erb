@@ -1,0 +1,35 @@
+<%= form_with model: project, scope: :project,
+      url: (project.persisted? ? project_path(project) : projects_path), class: "max-w-xl" do |f| %>
+  <% if project.errors.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
+      <ul><% project.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    <% end %>
+  <% end %>
+
+  <div class="grid gap-4">
+    <% unless project.persisted? %>
+      <div>
+        <%= f.label :key, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :key, class: "field-input mt-1 font-mono" %>
+      </div>
+    <% end %>
+    <div>
+      <%= f.label :name, class: "block text-sm font-medium text-ink" %>
+      <%= f.text_field :name, class: "field-input mt-1" %>
+    </div>
+    <div>
+      <%= f.label :git_repo, class: "block text-sm font-medium text-ink" %>
+      <%= f.text_field :git_repo, class: "field-input mt-1 font-mono text-sm" %>
+    </div>
+    <div>
+      <%= f.label :git_branch, class: "block text-sm font-medium text-ink" %>
+      <%= f.text_field :git_branch, class: "field-input mt-1 font-mono text-sm" %>
+    </div>
+    <div>
+      <%= f.label :git_web_url, class: "block text-sm font-medium text-ink" %>
+      <%= f.text_field :git_web_url, class: "field-input mt-1 font-mono text-sm" %>
+    </div>
+  </div>
+
+  <%= f.submit class: "btn btn-primary mt-6" %>
+<% end %>

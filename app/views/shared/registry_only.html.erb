@@ -1,0 +1,4 @@
+<% content_for :title, "From connections.yml" %>
+<h1 class="page-title mb-1"><%= @registry_label %> comes from config/connections.yml</h1>
+<p class="text-sm mb-6 text-ink-soft">Edit it in that file and run <span class="font-mono">bin/rails kong:load_connections</span>. Kongsole does not change it.</p>
+<%= link_to "Back to connections", connections_path, class: "btn btn-secondary" %>

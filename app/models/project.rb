@@ -14,4 +14,9 @@ class Project < ApplicationRecord
   validates :source, inclusion: { in: SOURCES }
   validates :delete_threshold, numericality: { only_integer: true, greater_than: 0 }
   validates :network_note, length: { maximum: NETWORK_NOTE_MAX }
+
+  # Routes name a project by its key (resources :projects, param: :key).
+  def to_param
+    key_was.presence || key
+  end
 end

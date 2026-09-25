@@ -5,12 +5,11 @@ RSpec.describe KongConnection, type: :model do
     expect(build(:kong_connection)).to be_valid
   end
 
-  it "puts a connection saved without an env into project default, as the backfill did" do
-    connection = build(:kong_connection, name: "dev-readonly", env: "dev")
+  it "requires an env to belong to" do
+    connection = build(:kong_connection)
     connection.project_env = nil
-    connection.save!
-    expect(connection.reload).to have_attributes(name: "default/dev-readonly", rank: 0)
-    expect(connection.project_env.source).to eq("local")
+    expect(connection).not_to be_valid
+    expect(connection.errors[:project_env]).to be_present
   end
 
   # R1: rank lives on the env (ProjectEnv forces dev/sit/uat/prod ranks); the

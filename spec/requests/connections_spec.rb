@@ -8,15 +8,46 @@ RSpec.describe "Connections", type: :request do
     expect(response.body).to include("dev")
   end
 
-  it "creates a connection" do
+  let(:local_env) { create(:project_env, name: "sit", apply_mode: "direct", project: create(:project, key: "project-x")) }
+
+  it "creates a connection for a local env, named project/env" do
     post connections_path, params: {
       kong_connection: {
-        name: "sit", env: "sit", admin_url: "https://kong-sit-admin.internal",
-        apply_mode: "direct", credential_mode: "session", auth_type: "basic"
+        project_env_id: local_env.id, admin_url: "https://kong-sit-admin.internal",
+        credential_mode: "session", auth_type: "basic"
       }
     }
     expect(response).to redirect_to(connections_path)
-    expect(KongConnection.find_by(name: "default/sit")).to be_present
+    expect(KongConnection.find_by(name: "project-x/sit")).to be_present
+  end
+
+  it "never accepts apply_mode, rank or env from the connection form" do
+    env = create(:project_env, apply_mode: "direct", rank: 0, source: "local")
+    post connections_path, params: { kong_connection: { project_env_id: env.id, admin_url: "http://localhost:8001",
+      credential_mode: "session", apply_mode: "pr", rank: 3, env: "prod" } }
+    expect(KongConnection.last).to have_attributes(apply_mode: "direct", rank: 0)
+  end
+
+  it "refuses to edit a registry connection" do
+    env = create(:project_env, source: "registry")
+    connection = create(:kong_connection, project_env: env)
+    patch connection_path(connection), params: { kong_connection: { admin_url: "http://localhost:9999" } }
+    expect(response).to have_http_status(:forbidden)
+    expect(connection.reload.admin_url).not_to eq("http://localhost:9999")
+  end
+
+  it "refuses to remove a registry connection" do
+    connection = create(:kong_connection, project_env: create(:project_env, source: "registry"))
+    delete connection_path(connection)
+    expect(response).to have_http_status(:forbidden)
+    expect(KongConnection.exists?(connection.id)).to be(true)
+  end
+
+  it "refuses to attach a UI connection to an env from connections.yml" do
+    env = create(:project_env, source: "registry")
+    post connections_path, params: { kong_connection: { project_env_id: env.id, admin_url: "http://localhost:8001", credential_mode: "session" } }
+    expect(response).to have_http_status(:forbidden)
+    expect(KongConnection.count).to eq(0)
   end
 
   it "shows policy in words on the connection card, not as raw tokens" do
@@ -44,43 +75,44 @@ RSpec.describe "Connections", type: :request do
     get new_connection_path
     expect(response.body).not_to include("kong_connection[rank]")
 
+    env = create(:project_env, name: "prod", apply_mode: "direct", project: create(:project, key: "project-x"))
     post connections_path, params: {
       kong_connection: {
-        name: "prod-sneaky", env: "prod", rank: 0, admin_url: "https://kong-prod-admin-ro.internal",
-        apply_mode: "pr", credential_mode: "session", auth_type: "basic"
+        project_env_id: env.id, rank: 0, admin_url: "https://kong-prod-admin-ro.internal",
+        credential_mode: "session", auth_type: "basic"
       }
     }
-    expect(KongConnection.find_by(name: "default/prod-sneaky").rank).to eq(3)
+    expect(KongConnection.find_by(name: "project-x/prod").rank).to eq(3)
   end
 
   it "rejects a non-https, non-localhost admin_url" do
     post connections_path, params: {
       kong_connection: {
-        name: "bad", env: "dev", admin_url: "http://kong-dev-admin.internal",
-        apply_mode: "direct", credential_mode: "session", auth_type: "basic"
+        project_env_id: local_env.id, admin_url: "http://kong-dev-admin.internal",
+        credential_mode: "session", auth_type: "basic"
       }
     }
     expect(response).to have_http_status(:unprocessable_entity)
-    expect(KongConnection.find_by(name: "bad")).to be_nil
+    expect(KongConnection.count).to eq(0)
   end
 
   it "never lets allow_insecure_http be set through the web form (config-file-only escape hatch)" do
     post connections_path, params: {
       kong_connection: {
-        name: "sneaky", env: "dev", admin_url: "http://kong-dev-admin.internal",
-        apply_mode: "direct", credential_mode: "session", auth_type: "basic",
+        project_env_id: local_env.id, admin_url: "http://kong-dev-admin.internal",
+        credential_mode: "session", auth_type: "basic",
         allow_insecure_http: true
       }
     }
     expect(response).to have_http_status(:unprocessable_entity)
-    expect(KongConnection.find_by(name: "sneaky")).to be_nil
+    expect(KongConnection.count).to eq(0)
   end
 
   it "removes a connection from the registry" do
     connection = create(:kong_connection, name: "old")
     delete connection_path(connection)
     expect(response).to redirect_to(connections_path)
-    expect(KongConnection.find_by(name: "old")).to be_nil
+    expect(KongConnection.exists?(connection.id)).to be(false)
   end
 end
 

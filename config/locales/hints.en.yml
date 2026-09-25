@@ -30,6 +30,9 @@ en:
 
     fields:
       connection:
+        project_env_id:
+          help: "To Edit: The project environment this Kong node serves. Its name, rank and apply mode come from the environment."
+          example: "payments/dev"
         name:
           help: "A short name you will recognise in the header and in the connection switcher."
           example: "payments-dev"

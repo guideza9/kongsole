@@ -4,10 +4,6 @@ module Kong
   # connections that shared an env (dev-readwrite / dev-readonly) do not
   # collide. Rank, apply_mode and git settings come from the connection; the
   # credential is not touched.
-  #
-  # Also builds (without saving) the env for a connection that arrives with
-  # none -- the flat connections.yml list and the connection form until they
-  # learn about projects (R1.4, R1.5).
   class LegacyProjectBackfill
     PROJECT_KEY = "default"
     PROJECT_NAME = "Default"
@@ -17,10 +13,6 @@ module Kong
 
     def self.call
       new.call
-    end
-
-    def self.build_env_for(connection)
-      new.build_env_for(connection)
     end
 
     def call
@@ -39,12 +31,6 @@ module Kong
           connection.update_columns(project_env_id: env.id, name: env.qualified_name, env: env.name, rank: env.rank)
         end
       end
-    end
-
-    def build_env_for(connection)
-      project = default_project
-      adopt_git_settings(project, [ connection ]) if GIT_FIELDS.all? { |f| project.public_send(f).blank? }
-      build_env(project, connection)
     end
 
     private

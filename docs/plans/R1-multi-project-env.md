@@ -480,7 +480,7 @@ end
 - Create: `app/controllers/projects_controller.rb`, `app/controllers/project_envs_controller.rb`, `app/views/projects/{new,edit,_form}.html.erb`, `app/views/project_envs/{new,edit,_form}.html.erb` (view ตั้งต้นขั้นต่ำ: field + label + error list เท่านั้น), `spec/requests/projects_spec.rb`, `spec/requests/project_envs_spec.rb`
 - Modify: `config/routes.rb`, `app/controllers/connections_controller.rb`, `app/views/connections/_form.html.erb` (render field ใหม่ตาม contract เท่านั้น), `app/views/connections/index.html.erb` (loop `@projects` ขั้นต่ำ), `spec/requests/connections_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/project_envs_spec.rb
@@ -533,9 +533,9 @@ it "refuses to edit a registry connection" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement ตาม contract (strong params ไม่มี `apply_mode: "pr"`: ถ้าค่าเป็น `"pr"` → 422 พร้อม error "PR mode is set in config/connections.yml"; registry → 403 + flash)
-- [ ] **Step 3:** PASS · suite 0 failures
-- [ ] **Step 4:** Commit `feat(R1.5): create and edit local projects, direct envs and their connection in the UI`
+- [x] **Step 2:** FAIL → implement ตาม contract (strong params ไม่มี `apply_mode: "pr"`: ถ้าค่าเป็น `"pr"` → 422 พร้อม error "PR mode is set in config/connections.yml"; registry → 403 + flash)
+- [x] **Step 3:** PASS · suite 0 failures
+- [x] **Step 4:** Commit `feat(R1.5): create and edit local projects, direct envs and their connection in the UI`
 
 ---
 
