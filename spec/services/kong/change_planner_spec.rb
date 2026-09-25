@@ -663,4 +663,37 @@ RSpec.describe Kong::ChangePlanner do
       expect(Changeset.count).to eq(0)
     end
   end
+
+  # R2.4: every create carries the connection's select_tags, whoever proposes
+  # it -- a form, the JSON editor or an agent -- so decK's select_tags scope
+  # (and `deck gateway sync`) always sees it.
+  describe "select_tags on create" do
+    let(:env) { create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl]) }
+    let(:pr_connection) { create(:kong_connection, project_env: env, access_level: "ro", admin_url: "https://kong.test") }
+
+    it "adds them to an agent's create, ahead of its own tags and without duplicates" do
+      plan = described_class.new(connection: pr_connection, client: Kong::Client.new(connection: pr_connection, secret: "pw"),
+        operation: "create", entity_type: "service", actor_username: "alice", actor_kind: "agent",
+        attributes: { "name" => "billing", "url" => "http://billing.internal", "tags" => %w[team-a managed-by-kongctl] }).call
+      expect(plan.after["tags"]).to eq(%w[managed-by-kongctl team-a])
+    end
+
+    it "adds them in direct mode too" do
+      connection.project_env.update!(select_tags: %w[team-a])
+      connection.save! # the connection copies its env's select_tags
+      stub_request(:post, "https://kong-admin.internal/schemas/services/validate").to_return(status: 200, body: "{}")
+      plan = planner(operation: "create", attributes: { "name" => "billing", "url" => "http://billing.internal" }).call
+      expect(plan.after["tags"]).to eq(%w[team-a])
+    end
+
+    it "leaves an update's tags as the operator set them" do
+      connection.project_env.update!(select_tags: %w[team-a])
+      connection.save! # the connection copies its env's select_tags
+      live = { "id" => PLANNER_SVC_1, "name" => "billing", "tags" => [], "updated_at" => 1 }
+      stub_request(:get, "https://kong-admin.internal/services/#{PLANNER_SVC_1}").to_return(status: 200, body: live.to_json)
+      stub_request(:post, "https://kong-admin.internal/schemas/services/validate").to_return(status: 200, body: "{}")
+      plan = planner(operation: "update", target_kong_id: PLANNER_SVC_1, attributes: { "tags" => %w[x] }).call
+      expect(plan.after["tags"]).to eq(%w[x])
+    end
+  end
 end

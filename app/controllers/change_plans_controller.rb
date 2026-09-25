@@ -28,6 +28,7 @@ class ChangePlansController < ApplicationController
     @env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.env_vars_for(@change_plan) : []
     @deck_env_vars = @change_plan.status == "pending" ? Kong::CertificateKeyPolicy.deck_vars_for(@change_plan) : []
     @dependent_snis = dependent_snis
+    @route_overlaps = route_overlaps
     @actionable = @change_plan.status == "pending" && !@change_plan.expired? && !@change_plan.in_changeset?
     @guardrails = @actionable ? guardrails_for(@change_plan) : []
     # Where an applied plan goes next: the record it left in the audit log, and
@@ -157,6 +158,17 @@ class ChangePlansController < ApplicationController
     return nil unless @change_plan.delete? && @change_plan.entity_type == "upstream"
 
     KongEntity.active.where(kong_connection: current_connection, entity_type: "target", parent_kong_id: @change_plan.target_kong_id)
+  end
+
+  # R2: a route create's review warns about the routes it would compete with
+  # (Kong::RouteOverlap) -- a warning, never a block. Only while it can still
+  # be applied: once applied, the route is one of those it would list.
+  def route_overlaps
+    return [] unless @change_plan.entity_type == "route" && @change_plan.operation == "create" && @change_plan.status == "pending"
+
+    after = @change_plan.after
+    Kong::RouteOverlap.check(connection: @change_plan.kong_connection, hosts: after["hosts"], paths: after["paths"],
+      methods: after["methods"], changeset: @change_plan.changeset, exclude_plan_id: @change_plan.id)
   end
 
   # Kong removes a certificate's SNIs with it, so this is a heads-up about

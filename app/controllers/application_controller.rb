@@ -6,7 +6,7 @@ class ApplicationController < ActionController::Base
   stale_when_importmap_changes
 
   helper_method :current_connection, :current_operator, :signed_in?, :detailed_hints?, :current_project_envs,
-    :write_block_reason, :current_open_changeset
+    :write_block_reason, :current_open_changeset, :can_propose_writes?
 
   private
 
@@ -99,6 +99,13 @@ class ApplicationController < ActionController::Base
   # or nil -- nil too when nobody is logged in. Views hide write controls on it.
   def write_block_reason
     current_connection&.write_block_reason
+  end
+
+  # R2: the one answer to "show a write button?" -- a PR env (it writes to
+  # git), or a direct env whose credential can write; never an env whose
+  # apply mode is unset.
+  def can_propose_writes?
+    signed_in? && write_block_reason.nil?
   end
 
   # R1.13: a write form never opens where the write would be refused; the

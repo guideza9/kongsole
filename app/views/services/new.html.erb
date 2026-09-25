@@ -1,0 +1,30 @@
+<% content_for :title, "New service" %>
+
+<h1 class="page-title mb-6">New service</h1>
+
+<%= form_with model: @form, url: services_path, method: :post, class: "max-w-xl grid gap-4" do |f| %>
+  <% if @form.errors.any? %>
+    <div role="alert">
+      <ul><% @form.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    </div>
+  <% end %>
+
+  <% %i[name host port path tags retries connect_timeout read_timeout write_timeout].each do |field| %>
+    <div>
+      <%= f.label field %>
+      <%= f.text_field field, class: "field-input" %>
+    </div>
+  <% end %>
+  <div>
+    <%= f.label :protocol %>
+    <%= f.select :protocol, ServiceForm::PROTOCOLS, {}, class: "field-input" %>
+  </div>
+  <div>
+    <%= f.check_box :enabled %> <%= f.label :enabled %>
+  </div>
+
+  <div>
+    <%= f.submit current_connection.apply_mode == "pr" ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
+    <%= link_to "Cancel", entities_path(type: "service"), class: "btn-sm btn-text" %>
+  </div>
+<% end %>

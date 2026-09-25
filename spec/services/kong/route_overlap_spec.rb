@@ -60,4 +60,11 @@ RSpec.describe Kong::RouteOverlap do
       status: "pending", after: { "name" => "queued", "paths" => %w[/billing] })
     expect(check(paths: %w[/billing], changeset: changeset).map { _1[:route_name] }).to include("queued")
   end
+
+  it "leaves out the changeset item being reviewed, so it never overlaps itself" do
+    changeset = create(:changeset, kong_connection: connection)
+    item = create(:change_plan, changeset: changeset, kong_connection: connection, operation: "create", entity_type: "route",
+      status: "pending", after: { "name" => "queued", "paths" => %w[/billing] })
+    expect(check(paths: %w[/billing], changeset: changeset, exclude_plan_id: item.id)).to be_empty
+  end
 end

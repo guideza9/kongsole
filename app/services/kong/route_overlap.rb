@@ -11,9 +11,11 @@ module Kong
 
     module_function
 
-    def check(connection:, hosts:, paths:, methods:, changeset: nil, exclude_kong_id: nil)
+    # `exclude_plan_id`: the changeset item being reviewed, which would
+    # otherwise overlap itself.
+    def check(connection:, hosts:, paths:, methods:, changeset: nil, exclude_kong_id: nil, exclude_plan_id: nil)
       new_route = normalise(hosts, paths, methods)
-      candidates(connection, changeset, exclude_kong_id).filter_map do |route|
+      candidates(connection, changeset, exclude_kong_id, exclude_plan_id).filter_map do |route|
         reason = reason_for(new_route, route)
         reason && { route_name: route[:name], service_name: route[:service_name], reason: reason }
       end.sort_by { |hit| [ REASON_ORDER.fetch(hit[:reason]), hit[:route_name].to_s ] }
@@ -22,8 +24,8 @@ module Kong
     # The read-model's live routes, with what the open changeset already
     # changes in place of them: its creates are added, its updates replace
     # the route they change, its deletes take theirs away.
-    def candidates(connection, changeset, exclude_kong_id)
-      items = changeset ? changeset.items.where(entity_type: "route").to_a : []
+    def candidates(connection, changeset, exclude_kong_id, exclude_plan_id = nil)
+      items = changeset ? changeset.items.where(entity_type: "route").where.not(id: exclude_plan_id).to_a : []
       replaced = items.filter_map(&:target_kong_id) + [ exclude_kong_id ].compact
 
       live = KongEntity.active.where(kong_connection: connection, entity_type: "route").where.not(kong_id: replaced).to_a

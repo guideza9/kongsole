@@ -28,6 +28,10 @@ Rails.application.routes.draw do
   end
 
   resources :plugins, only: %i[new create]
+  # R2: hand-made forms for a service, and for a route under its service.
+  get "routes/overlap" => "routes#overlap", as: :routes_overlap
+  resources :services, only: %i[new create]
+  resources :routes, only: %i[new create]
   resources :certificates, only: [] do
     collection { get :expiring }
   end

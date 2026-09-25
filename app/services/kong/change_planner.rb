@@ -257,7 +257,7 @@ module Kong
     # genuinely new secret still has it applied.
     def compute_after(before)
       case @operation
-      when "create" then with_parent_reference(Kong::Redactor.prune_marked(@attributes))
+      when "create" then with_select_tags(with_parent_reference(Kong::Redactor.prune_marked(@attributes)))
       when "update" then Kong::Redactor.prune_marked(before.merge(@attributes))
       when "delete" then nil
       end
@@ -265,6 +265,16 @@ module Kong
 
     # An SNI's create body carries `certificate: {id}` -- the only way Kong
     # learns the parent, since the path is flat.
+    # R2.4: every create carries the connection's select_tags, whoever
+    # proposed it (a form, the JSON editor, an agent), so decK's select_tags
+    # scope -- and `deck gateway sync` -- always covers it.
+    def with_select_tags(attributes)
+      select_tags = Array(@connection.select_tags)
+      return attributes if select_tags.empty?
+
+      attributes.merge("tags" => (select_tags + Array(attributes["tags"])).uniq)
+    end
+
     def with_parent_reference(attributes)
       return attributes unless @definition.parent_in_body && @parent_kong_id.present?
 
