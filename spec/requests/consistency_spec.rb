@@ -210,4 +210,68 @@ RSpec.describe "Console consistency", type: :request do
       expect(current.map { |a| a.text.strip }).to eq([ "30 days" ])
     end
   end
+
+  # R1.8: the Connections page reads as projects, each with its envs in the
+  # project's own order.
+  describe "connections by project" do
+    let!(:project_a) { create(:project, key: "project-a", name: "Project A", source: "registry", network_note: "Reachable from the NONPROD VPN only") }
+    let!(:project_x) { create(:project, key: "project-x", name: "Project X", source: "local") }
+
+    before do
+      create(:kong_connection, project_env: create(:project_env, project: project_a, name: "uat", position: 2, apply_mode: "pr", source: "registry"))
+      create(:kong_connection, project_env: create(:project_env, project: project_a, name: "dev", position: 1, apply_mode: "direct", source: "registry"))
+      create(:kong_connection, project_env: create(:project_env, project: project_x, name: "pt", position: 1, rank: 1, apply_mode: nil),
+        last_status: "unreachable")
+      create(:project, key: "empty", name: "Empty Project", source: "local")
+    end
+
+    def section(name)
+      page.css("section").find { |s| s.at_css("h2")&.text&.strip == name }
+    end
+
+    it "gives each project a heading and lists its envs in the project's order" do
+      get connections_path
+      expect(page.css("section h2").map { |h| h.text.strip }).to include("Project A", "Project X")
+      envs = section("Project A").css("[data-env-name]").map { |row| row["data-env-name"] }
+      expect(envs).to eq(%w[dev uat])
+    end
+
+    it "says where each project and env is edited" do
+      get connections_path
+      expect(section("Project A").text).to include("From connections.yml")
+      expect(section("Project X").text).to include("Local only")
+    end
+
+    it "names the project's network, and says when this machine cannot reach an env" do
+      get connections_path
+      expect(section("Project A").text).to include("Reachable from the NONPROD VPN only")
+      expect(section("Project X").text).to include("Unreachable from this machine")
+    end
+
+    it "says an env without an apply mode cannot be written, and gives an other env's rank" do
+      get connections_path
+      text = section("Project X").text
+      expect(text).to include(helper_label(:unset)).and include("Other · rank 1")
+    end
+
+    it "offers Edit and Remove only on rows Kongsole owns" do
+      get connections_path
+      expect(section("Project A").css("a, button").map { |n| n.text.strip }).not_to include("Edit", "Remove")
+      expect(section("Project X").css("a, button").map { |n| n.text.strip }).to include("Edit", "Remove")
+    end
+
+    it "explains a project with no envs yet" do
+      get connections_path
+      expect(section("Empty Project").text).to include(I18n.t("hints.empty_states.project_envs.title"))
+    end
+
+    it "has one primary action: New project" do
+      get connections_path
+      expect(page.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
+    end
+
+    def helper_label(policy)
+      ApplicationController.helpers.write_policy_label(policy)
+    end
+  end
 end

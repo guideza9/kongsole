@@ -630,10 +630,10 @@ end
 
 **คำสั่ง:** `/impeccable layout app/views/connections/index.html.erb` → `/impeccable onboard` (empty state: ไม่มี project / project ไม่มี env) → `/impeccable clarify`
 
-- [ ] **Step 1:** assertion (ก่อน): หน้า index แสดงชื่อ project เป็น heading, env ตาม `position`, env ที่ `apply_mode` nil แสดง `write_policy_label(:unset)`, badge `Local only` / `From connections.yml`
-- [ ] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono + `network_note` ถ้ามี), สถานะ `unreachable` แสดงเป็น "Unreachable from this machine" ต่างจาก `unavailable`, แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
-- [ ] **Step 3:** PASS · snapshot `connections-index-projects` · detect
-- [ ] **Step 4:** Commit `feat(R1.8): connections are grouped by project, envs in each project's own order`
+- [x] **Step 1:** assertion (ก่อน): หน้า index แสดงชื่อ project เป็น heading, env ตาม `position`, env ที่ `apply_mode` nil แสดง `write_policy_label(:unset)`, badge `Local only` / `From connections.yml`
+- [x] **Step 2:** FAIL → ทำ UI: ต่อ project หนึ่ง section (heading + git repo แบบ mono + `network_note` ถ้ามี), สถานะ `unreachable` แสดงเป็น "Unreachable from this machine" ต่างจาก `unavailable`, แถว env: env chip (quiet/violet ตาม rank), rank label (`Dev`/`SIT`/`UAT`/`Prod` หรือ `Other · rank 1`), policy tag, สถานะ, ปุ่ม `Log in` (`.btn-secondary`), `Edit`/`Remove` เฉพาะ local · ปุ่มหลักหนึ่งปุ่ม: "New project"
+- [x] **Step 3:** PASS · snapshot `connections-index-projects` · detect
+- [x] **Step 4:** Commit `feat(R1.8): connections are grouped by project, envs in each project's own order`
 
 **เกณฑ์ detect:** ไม่มี finding หลักเพิ่มจาก baseline · 390px ไม่มี horizontal scroll
 

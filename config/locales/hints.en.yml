@@ -191,8 +191,11 @@ en:
 
     empty_states:
       connections:
-        title: "No connections yet"
-        body: "A connection is one Kong node and its Admin API. Add one here, or load the team registry with bin/rails kong:load_connections."
+        title: "No projects yet"
+        body: "A project groups the environments of one Kong estate, each with its own Kong node. Load the team's projects with bin/rails kong:load_connections, or start a project on this machine."
+      project_envs:
+        title: "No environments in this project yet"
+        body: "An environment is one stage of the project, like dev or uat, served by one Kong node. Add the first one, then connect it to its Kong node."
       entities:
         never_synced:
           title: "Nothing synced from this connection yet"
@@ -313,7 +316,8 @@ en:
 
     pages:
       connections:
-        intro: "Every Kong node you can log in to. Pick one to work on it."
+        intro: "Every project and its environments, in the project's own order. Log in to an environment to work on it."
+        env_without_connection: "No Kong node connected yet. Add connection and pick this environment."
       connections_new:
         intro: "Register a Kong node for this machine. A connection made here is not shared with the team."
       connections_edit:

@@ -65,6 +65,19 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("connections-index")
     end
 
+    it "connections index grouped by project (R1.8)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      KongConnection.find_by!(name: "project-a/dev").update!(last_status: "ok", access_level: "rw", credential_kind: "personal")
+      KongConnection.find_by!(name: "project-a/uat").update!(last_status: "ok", access_level: "ro", credential_kind: "shared")
+      KongConnection.find_by!(name: "project-x/nonprod").update!(last_status: "unreachable")
+      local = create(:project, key: "payments", name: "Payments", source: "local", network_note: "Reachable from the office network")
+      create(:kong_connection, project_env: create(:project_env, project: local, name: "dev", position: 1), admin_url: "http://localhost:8101")
+      create(:project_env, project: local, name: "sit", position: 2, apply_mode: nil)
+      create(:project, key: "onboarding", name: "Onboarding", source: "local")
+      get connections_path
+      snapshot!("connections-index-projects")
+    end
+
     it "connections new" do
       get new_connection_path
       snapshot!("connections-new")

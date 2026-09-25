@@ -117,11 +117,11 @@ RSpec.describe "Connections", type: :request do
 end
 
 RSpec.describe "GET /connections", type: :request do
-  it "fills only one action (Add connection); per-row Log in is secondary" do
+  it "fills only one action (New project, R1.8); per-row Log in is secondary" do
     create_list(:kong_connection, 2)
     get connections_path
     doc = Nokogiri::HTML(response.body)
-    expect(doc.css(".btn-primary").map { |n| n.text.strip }).to eq([ "Add connection" ])
+    expect(doc.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
     expect(doc.css("a.btn-secondary").map { |n| n.text.strip }.count("Log in")).to eq(2)
   end
 end

@@ -1,83 +1,22 @@
 <% content_for :title, "Connections" %>
 
-<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+<div class="flex flex-wrap items-end justify-between gap-4 mb-8">
   <div>
     <h1 class="page-title">Connections</h1>
     <p class="text-sm mt-0.5 text-ink-soft"><%= t("hints.pages.connections.intro") %></p>
   </div>
-  <div class="flex items-center gap-2 shrink-0">
-    <%= link_to "New project", new_project_path, class: "btn btn-text" %>
-    <%= link_to "Add connection", new_connection_path, class: "btn btn-primary" %>
+  <div class="flex flex-wrap items-center gap-2 shrink-0">
+    <%= link_to "Add connection", new_connection_path, class: "btn btn-secondary" %>
+    <%= link_to "New project", new_project_path, class: "btn btn-primary" %>
   </div>
 </div>
 
-<%# R1.5 minimal view: one section per project, envs in the project's order.
-    R1.8 lays this page out. %>
-<div class="grid gap-8">
-  <% @projects.each do |project| %>
-    <section aria-labelledby="project-<%= project.id %>">
-      <div class="flex flex-wrap items-center gap-2 mb-3">
-        <h2 id="project-<%= project.id %>" class="section-label"><%= project.name %></h2>
-        <span class="tag"><%= project.source == "local" ? "Local only" : "From connections.yml" %></span>
-        <% if project.source == "local" %>
-          <%= link_to "Edit", edit_project_path(project), class: "btn-sm btn-text" %>
-          <%= link_to "Add environment", new_project_env_path(project_id: project.id), class: "btn-sm btn-text" %>
-        <% end %>
-      </div>
-
-      <div class="grid gap-3">
-        <% project.project_envs.each do |env| %>
-          <% connection = env.kong_connection %>
-          <% if connection %>
-            <div class="row-card p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-              <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <%= env_badge(connection, size: :lg) %>
-                  <%= status_badge(connection.last_status) %>
-                </div>
-
-                <div class="mt-2 text-sm font-mono truncate text-ink-soft"><%= connection.admin_url %></div>
-
-                <div class="mt-2 flex flex-wrap gap-1.5">
-                  <% if env.apply_mode.nil? %>
-                    <span class="tag">Apply mode not set &mdash; nothing can be written</span>
-                  <% end %>
-                  <% connection_policy_labels(connection).each do |label| %>
-                    <span class="tag"><%= label %></span>
-                  <% end %>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 text-sm w-full sm:w-auto shrink-0">
-                <%= link_to "Log in", login_connection_path(connection), class: "btn-sm btn-secondary" %>
-                <% if connection.editable_in_ui? %>
-                  <%= link_to "Edit", edit_connection_path(connection), class: "btn-sm btn-text" %>
-                  <%# Remove is the only destructive action on the row: it gets its own
-                      side of a hairline, so a slip aimed at Log in or Edit cannot land on it. %>
-                  <div class="ml-auto sm:ml-3 sm:pl-3 sm:border-l sm:border-border">
-                    <%= button_to "Remove", connection_path(connection), method: :delete,
-                          form: { data: { turbo_confirm: "Remove \"#{connection.name}\" from the registry? This does not touch anything in Kong itself." } },
-                          class: "btn-sm btn-text-danger bg-transparent" %>
-                  </div>
-                <% end %>
-              </div>
-            </div>
-          <% else %>
-            <div class="row-card p-4 flex flex-wrap items-center gap-2 text-sm">
-              <span class="font-mono"><%= env.qualified_name %></span>
-              <span class="text-ink-soft">No connection yet.</span>
-              <% if env.source == "local" %>
-                <%= link_to "Edit", edit_project_env_path(env), class: "btn-sm btn-text" %>
-                <%= button_to "Remove", project_env_path(env), method: :delete, class: "btn-sm btn-text-danger bg-transparent" %>
-              <% end %>
-            </div>
-          <% end %>
-        <% end %>
-      </div>
-    </section>
+<% if @projects.empty? %>
+  <%= empty_state(:connections) do %>
+    <%= link_to "New project", new_project_path, class: "btn-sm btn-secondary" %>
   <% end %>
-
-  <% if @projects.empty? %>
-    <%= empty_state(:connections) %>
-  <% end %>
-</div>
+<% else %>
+  <div class="project-list">
+    <%= render partial: "connections/project", collection: @projects, as: :project %>
+  </div>
+<% end %>
