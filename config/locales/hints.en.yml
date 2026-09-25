@@ -214,6 +214,10 @@ en:
       connections:
         title: "No projects yet"
         body: "A project groups the environments of one Kong estate, each with its own Kong node. Load the team's projects with bin/rails kong:load_connections, or start a project on this machine."
+      # R1.19: a filter on the connections page that matched nothing.
+      connections_filtered:
+        title: "No project or environment matches this filter"
+        body: "Every word has to appear in a project's name or key, or in the name of one of its environments. Try fewer words."
       project_envs:
         title: "No environments in this project yet"
         body: "An environment is one stage of the project, like dev or uat, served by one Kong node. Add the first one, then connect it to its Kong node."
@@ -355,8 +359,12 @@ en:
 
     pages:
       connections:
-        intro: "Every project and its environments, in the project's own order. Log in to an environment to work on it."
+        intro: "Pick an environment to log in to it. Open a project to add environments, connect them to Kong or change them."
         env_without_connection: "No Kong node connected yet."
+        # R1.19: the list of projects to log in from.
+        project_without_envs: "No environments yet."
+        filter_label: "Filter projects and environments"
+        filter_placeholder: "e.g. payments uat"
       projects_new:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:

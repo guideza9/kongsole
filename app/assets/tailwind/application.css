@@ -1591,6 +1591,252 @@ html:has(.action-bar) {
   }
 }
 
+/* R1.19 -- the Connections page is a list to log in from. One row per
+   project: the name leads, its envs follow as chips in the project's order
+   (a chip is that env's Log in), and one menu holds the rest. A single panel
+   with hairlines between rows, not a card per project: the rows are one list
+   to scan, and on desktop the names sit in one column so the chips line up. */
+.launcher-filter {
+  margin-bottom: 1rem;
+}
+
+.launcher-filter__label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.launcher-filter__controls {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 28rem;
+}
+
+.launcher-filter__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.launcher {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+}
+
+.launcher__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head menu"
+    "envs envs";
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 0.75rem 0.75rem 1rem;
+}
+
+.launcher__row + .launcher__row {
+  border-top: 1px solid var(--color-border);
+}
+
+.launcher__row[hidden] {
+  display: none;
+}
+
+@media (min-width: 48rem) {
+  .launcher__row {
+    grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+    grid-template-areas: "head envs menu";
+    gap: 0.75rem 1.25rem;
+    padding-block: 0.625rem;
+  }
+}
+
+/* The project in use: a quiet tint and the word, never colour alone. */
+.launcher__row.is-current {
+  background: var(--color-surface-subtle);
+}
+
+.launcher__row:first-child.is-current { border-radius: 0.625rem 0.625rem 0 0; }
+.launcher__row:last-child.is-current { border-radius: 0 0 0.625rem 0.625rem; }
+.launcher__row:only-child.is-current { border-radius: 0.625rem; }
+
+.launcher__head {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.125rem 0.5rem;
+  min-width: 0;
+}
+
+.launcher__name {
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.launcher__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.launcher__current {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-soft);
+}
+
+.launcher__envs,
+.launcher__empty {
+  grid-area: envs;
+}
+
+.launcher__envs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.375rem;
+  min-width: 0;
+}
+
+/* An env name as long as the name rule allows (40) is wider than a phone
+   row: the chip stops at the row and the name ends in an ellipsis; the
+   link's title carries it whole. */
+.launcher__envs > li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.launcher__env .chip-env__label,
+.launcher__env .chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Two projects may share a name; only the key tells them apart, so it is
+   shown then, and only then. */
+.launcher__key {
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.launcher__empty {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+/* The chip is the visible mark; the link around it is the target, padded
+   so a thumb has more than the chip to land on. */
+.launcher__env {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.25rem 0.125rem;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+a.launcher__env:hover .chip {
+  box-shadow: 0 0 0 1px var(--color-border-strong);
+}
+
+a.launcher__env:hover .chip-env {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--env) 35%, transparent);
+}
+
+/* An env with no connection yet: the same chip, drawn as a placeholder. */
+.launcher__env.is-pending .chip {
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-ink-faint);
+}
+
+.launcher__env.is-pending .chip-dot {
+  background: var(--color-ink-faint);
+}
+
+/* A filter named other envs of this project. */
+.launcher__env.is-dim {
+  opacity: 0.4;
+}
+
+/* Where the last login found a problem: a small solid mark on the chip's
+   corner; the link's name and title say which problem. */
+.launcher__problem {
+  position: absolute;
+  top: 0;
+  right: -0.125rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+.launcher__problem--warning { color: var(--color-warning); }
+.launcher__problem--danger  { color: var(--color-danger); }
+
+.launcher__none {
+  margin-top: 1rem;
+}
+
+/* Each project's other actions, behind one button, as the env switcher. */
+.project-menu {
+  grid-area: menu;
+  position: relative;
+  justify-self: end;
+}
+
+.project-menu__summary {
+  list-style: none;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.4rem;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+}
+
+.project-menu__summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-menu__summary:hover,
+.project-menu[open] .project-menu__summary {
+  background: var(--color-surface-subtle);
+  color: var(--color-ink);
+}
+
+.project-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.25rem);
+  z-index: 20;
+  min-width: 12rem;
+  padding: 0.375rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.625rem;
+  box-shadow: 0 4px 8px -4px rgb(0 0 0 / 0.14);
+}
+
+.project-menu__item {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.4rem;
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.project-menu__item:hover {
+  background: var(--color-surface-subtle);
+}
+
 /* R1.8 -- the Connections page reads as projects. The project name leads
    (a real heading, not a small-caps label), its facts sit under it as quiet
    term/value pairs, and its envs follow as the incumbent row cards, in the

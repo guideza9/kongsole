@@ -1077,7 +1077,7 @@ end
 
 **คำสั่ง:** `/impeccable layout app/views/connections/index.html.erb` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน):
+- [x] **Step 1:** assertion (ก่อน):
   - ไม่มี "Add connection" · `.btn-primary` มีแค่ "New project"
   - หนึ่งแถวต่อ project: ชื่อ project เป็นลิงก์ไป `project_path` · chip env เรียงตาม `position` · env ที่มี connection = ลิงก์ไป `login_connection_path` ชื่อสำหรับ screen reader `Log in to <project/env>` ·
     env ไม่มี connection = `<span aria-disabled="true">` · chip env ที่ `last_status` ไม่ใช่ `ok`/nil มีเครื่องหมายและชื่อเข้าถึงได้รวม `status_label` · `ok`/nil ไม่มีเครื่องหมาย
@@ -1086,9 +1086,13 @@ end
     `Add environment`, `Edit project details` เฉพาะ local
   - ช่องกรอง: `<form method="get">` input `q` มี `<label>` "Filter projects and environments" · แสดงเมื่อ `@project_count >= 6` หรือมี `q` ·
     ไม่มีผลลัพธ์ → empty state + ลิงก์ "Clear filter" · แถวของ project ปัจจุบันมีคำว่า "Current" ที่มองเห็นได้
-- [ ] **Step 2:** FAIL → ทำ UI: แถวบรรทัดเดียวบน desktop (ชื่อ · chip · เมนู) บนมือถือ chip ขึ้นบรรทัดใต้ชื่อ · `project_filter_controller.js` กรองทันทีที่พิมพ์ (ซ่อนแถวที่ไม่ตรง, env ที่ไม่ตรง term จางลง, ไม่ส่ง request) · ไม่มี JS ใช้ปุ่ม Filter ส่ง `?q=`
-- [ ] **Step 3:** PASS · snapshot `connections-launcher`, `connections-launcher-filtered` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
-- [ ] **Step 4:** Commit `feat(R1.19): the connections page is a list of projects to log in from`
+- [x] **Step 2:** FAIL → ทำ UI: แถวบรรทัดเดียวบน desktop (ชื่อ · chip · เมนู) บนมือถือ chip ขึ้นบรรทัดใต้ชื่อ · `project_filter_controller.js` กรองทันทีที่พิมพ์ (ซ่อนแถวที่ไม่ตรง, env ที่ไม่ตรง term จางลง, ไม่ส่ง request) · ไม่มี JS ใช้ปุ่ม Filter ส่ง `?q=`
+- [x] **Step 3:** PASS · snapshot `connections-launcher`, `connections-launcher-filtered` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [x] **Step 4:** Commit `feat(R1.19): the connections page is a list of projects to log in from`
+
+**ผล (2026-09-25):** rspec **1081/0** · detect 62 → **58** (หน้า launcher ไม่มี finding) · ข้อมูลทดสอบ 13 project: ความสูงหน้า 1280px = **1175px**, 390px = 2024px (เดิมประมาณ 7,000 / 13,000+) ·
+390/800/1280 ไม่มี horizontal scroll · กรองสด `pay uat` และไม่มี JS (`?q=`) ได้ผลเดียวกัน · เมนูเปิดด้วย Enter ·
+harden: ชื่อ env 40 ตัวอักษรตัดด้วย ellipsis (ชื่อเต็มใน title), project ชื่อซ้ำแสดง key · ไม่ได้สร้าง helper `env_launch_chip` — ใช้ `env_name_chip` ใน partial และให้ชื่อ env ที่ rank < 2 อยู่ใน span `chip__name`
 
 ---
 

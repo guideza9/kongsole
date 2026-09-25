@@ -1,0 +1,47 @@
+<%# R1.19: one project on the connections page. Only what picking an env
+    needs: the project's name (to its page), its envs in the project's order
+    -- each chip the Log in to that env -- and a mark where the last login
+    found a problem. Everything else is on the project's page or in the menu.
+    matched_env_ids: the envs a ?q= named; the others are dimmed.
+    show_key: another project on the page has the same name. %>
+<% current = current_connection&.project == project %>
+<li class="launcher__row<%= " is-current" if current %>" data-project-filter-target="row"
+    data-filter-text="<%= [ project.name, project.key ].join(" ").downcase %>">
+  <div class="launcher__head">
+    <%= link_to project.name, project_path(project), class: "launcher__name" %>
+    <% if local_assigns[:show_key] %><span class="launcher__key font-mono"><%= project.key %></span><% end %>
+    <% if current %><span class="launcher__current">Current</span><% end %>
+  </div>
+
+  <% if project.project_envs.empty? %>
+    <p class="launcher__empty"><%= t("hints.pages.connections.project_without_envs") %></p>
+  <% else %>
+    <ul class="launcher__envs" aria-label="Environments of <%= project.name %>">
+      <% project.project_envs.each do |env| %>
+        <% connection = env.kong_connection %>
+        <% dim = matched_env_ids.any? && !matched_env_ids.include?(env.id) %>
+        <% classes = [ "launcher__env", ("is-dim" if dim), ("is-pending" unless connection) ].compact.join(" ") %>
+        <li>
+          <% if connection %>
+            <% status = connection.last_status %>
+            <% problem = status.present? && status != "ok" %>
+            <% label = "Log in to #{env.qualified_name}" + (problem ? " (#{status_label(status)})" : "") %>
+            <%= link_to login_connection_path(connection), class: classes, data: { env_name: env.name },
+                  aria: { label: label }, title: [ env.qualified_name, (status_label(status) if problem) ].compact.join(" · ") do %>
+              <%= env_name_chip(env) %>
+              <% if problem %>
+                <svg class="launcher__problem launcher__problem--<%= ApplicationHelper::STATUS_TONES.fetch(status, "warning") %>" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.25v4.5" stroke="var(--color-surface)" stroke-width="1.75" stroke-linecap="round"/><circle cx="8" cy="11.4" r="1" fill="var(--color-surface)"/></svg>
+              <% end %>
+            <% end %>
+          <% else %>
+            <span class="<%= classes %>" data-env-name="<%= env.name %>" aria-disabled="true" title="<%= env.qualified_name %> · no connection yet">
+              <%= env_name_chip(env) %><span class="sr-only">, no connection yet</span>
+            </span>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <%= render "connections/project_menu", project: project %>
+</li>

@@ -1,22 +1,52 @@
 <% content_for :title, "Connections" %>
+<%# R1.19: where an env is picked to log in. One row per project -- its name,
+    its envs as chips (the chip is the Log in), a mark only where the last
+    login found a problem, and a menu for the rest. What edits a project, its
+    envs and connections lives on the project's page (projects#show). %>
 
-<div class="flex flex-wrap items-end justify-between gap-4 mb-8">
+<div class="flex flex-wrap items-end justify-between gap-4 mb-6">
   <div>
     <h1 class="page-title">Connections</h1>
     <p class="text-sm mt-0.5 text-ink-soft"><%= t("hints.pages.connections.intro") %></p>
   </div>
-  <div class="flex flex-wrap items-center gap-2 shrink-0">
-    <%= link_to "Add connection", new_connection_path, class: "btn btn-secondary" %>
-    <%= link_to "New project", new_project_path, class: "btn btn-primary" %>
-  </div>
+  <%= link_to "New project", new_project_path, class: "btn btn-primary shrink-0" %>
 </div>
 
-<% if @projects.empty? %>
+<% if @project_count.zero? %>
   <%= empty_state(:connections) do %>
     <%= link_to "New project", new_project_path, class: "btn-sm btn-secondary" %>
   <% end %>
 <% else %>
-  <div class="project-list">
-    <%= render partial: "connections/project", collection: @projects, as: :project %>
+  <%# The whole list is on the page only when no ?q= narrowed it; only then
+      can the filter narrow it further as it is typed. %>
+  <div data-controller="project-filter" data-project-filter-live-value="<%= @query.blank? %>">
+    <% if @project_count >= 6 || @query.present? %>
+      <%= form_with url: connections_path, method: :get, local: true, html: { role: "search", class: "launcher-filter" } do %>
+        <label for="connections-filter" class="launcher-filter__label"><%= t("hints.pages.connections.filter_label") %></label>
+        <div class="launcher-filter__controls">
+          <input type="search" id="connections-filter" name="q" value="<%= @query %>" autocomplete="off" spellcheck="false"
+                 placeholder="<%= t("hints.pages.connections.filter_placeholder") %>" class="field-input launcher-filter__input"
+                 data-project-filter-target="input" data-action="input->project-filter#filter">
+          <button type="submit" class="btn-sm btn-secondary">Filter</button>
+        </div>
+      <% end %>
+    <% end %>
+
+    <% if @rows.empty? %>
+      <%= empty_state(:connections_filtered) do %>
+        <%= link_to "Clear filter", connections_path, class: "btn-sm btn-secondary" %>
+      <% end %>
+    <% else %>
+      <% shared_names = @rows.map { |row| row.project.name }.tally.select { |_, count| count > 1 }.keys %>
+      <ul class="launcher" aria-label="Projects">
+        <% @rows.each do |row| %>
+          <%= render "connections/project_row", project: row.project, matched_env_ids: row.matched_env_ids,
+                show_key: shared_names.include?(row.project.name) %>
+        <% end %>
+      </ul>
+      <p class="launcher__none text-sm text-ink-soft" data-project-filter-target="none" hidden>
+        <%= t("hints.empty_states.connections_filtered.title") %>
+      </p>
+    <% end %>
   </div>
 <% end %>

@@ -101,7 +101,10 @@ module ApplicationHelper
     end
 
     tone = COLOR_TAG_TONES.fetch(env.color_tag.to_s, "neutral")
-    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), env.name ]), class: "chip chip-lg chip-#{tone}"
+    # The name in its own span so a long one can end in an ellipsis where the
+    # chip runs out of room (R1.19), as the uat/prod label does.
+    content_tag :span, safe_join([ content_tag(:span, "", class: "chip-dot"), content_tag(:span, env.name, class: "chip__name") ]),
+      class: "chip chip-lg chip-#{tone}"
   end
 
   def env_display_name(connection)

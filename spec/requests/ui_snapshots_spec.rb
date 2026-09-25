@@ -78,6 +78,21 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("connections-index-projects")
     end
 
+    it "connections as a list of projects to log in from, and filtered (R1.19)" do
+      Kong::ConnectionsConfigLoader.call(path: Rails.root.join("spec/fixtures/connections/two_projects.yml"))
+      KongConnection.find_by!(name: "project-x/nonprod").update!(last_status: "unreachable")
+      %w[Billing Cards Loans Onboarding].each_with_index do |name, i|
+        project = create(:project, key: name.downcase, name: name, source: "local")
+        %w[dev sit uat].first(i % 3 + 1).each_with_index do |env, j|
+          create(:kong_connection, project_env: create(:project_env, project: project, name: env, position: j + 1), admin_url: "http://localhost:#{8100 + i * 10 + j}")
+        end
+      end
+      get connections_path
+      snapshot!("connections-launcher")
+      get connections_path(q: "project-a uat")
+      snapshot!("connections-launcher-filtered")
+    end
+
     it "project and env forms (R1.9)" do
       project = create(:project, key: "payments", name: "Payments", source: "local")
       get new_project_path

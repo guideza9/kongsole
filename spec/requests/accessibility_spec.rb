@@ -369,7 +369,7 @@ RSpec.describe "Accessibility semantics", type: :request do
       env = create(:project_env, name: "nonprod", rank: 0, source: "local",
         project: create(:project, key: "pay", name: "Pay", source: "local"))
       connection = create(:kong_connection, project_env: env)
-      get connections_path
+      get project_path(env.project)
       doc = Nokogiri::HTML(response.body)
 
       names = doc.css("a[href='#{edit_project_env_path(env)}'], a[href='#{edit_connection_path(connection)}']")

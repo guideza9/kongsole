@@ -51,9 +51,9 @@ RSpec.describe "Connections", type: :request do
   end
 
   it "shows policy in words on the connection card, not as raw tokens" do
-    create(:kong_connection, name: "uat-pr", env: "uat", apply_mode: "pr", access_level: "ro", credential_kind: "shared")
+    connection = create(:kong_connection, name: "uat-pr", env: "uat", apply_mode: "pr", access_level: "ro", credential_kind: "shared")
 
-    get connections_path
+    get project_path(connection.project)
 
     expect(response.body).to include("PR mode").and include("Read-only").and include("Shared credential")
     expect(response.body).not_to include("apply: pr")
@@ -61,9 +61,9 @@ RSpec.describe "Connections", type: :request do
   end
 
   it "sets Remove apart from Log in and Edit on its own side of a divider" do
-    create(:kong_connection, name: "dev")
+    connection = create(:kong_connection, name: "dev")
 
-    get connections_path
+    get project_path(connection.project)
 
     row = Nokogiri::HTML(response.body).at_css(".row-card")
     remove = row.at_xpath(".//button[normalize-space()='Remove connection']")
@@ -127,11 +127,12 @@ RSpec.describe "Connections", type: :request do
 end
 
 RSpec.describe "GET /connections", type: :request do
-  it "fills only one action (New project, R1.8); per-row Log in is secondary" do
+  it "fills only one action (New project, R1.8); each env's chip is its Log in (R1.19)" do
     create_list(:kong_connection, 2)
     get connections_path
     doc = Nokogiri::HTML(response.body)
     expect(doc.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
-    expect(doc.css("a.btn-secondary").map { |n| n.text.strip }.count("Log in")).to eq(2)
+    expect(doc.css("a.launcher__env").map { |a| a["aria-label"] }).to all(start_with("Log in to "))
+    expect(doc.css("a.launcher__env").size).to eq(2)
   end
 end

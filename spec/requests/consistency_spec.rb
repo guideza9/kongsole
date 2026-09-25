@@ -246,7 +246,9 @@ RSpec.describe "Console consistency", type: :request do
 
   # R1.8: the Connections page reads as projects, each with its envs in the
   # project's own order.
-  describe "connections by project" do
+  # R1.19: the rows below moved from the connections page to each project's
+  # page (R1.18); the conditions on them are unchanged.
+  describe "a project's page" do
     let!(:project_a) { create(:project, key: "project-a", name: "Project A", source: "registry", network_note: "Reachable from the NONPROD VPN only") }
     let!(:project_x) { create(:project, key: "project-x", name: "Project X", source: "local") }
 
@@ -262,35 +264,38 @@ RSpec.describe "Console consistency", type: :request do
       page.css("section").find { |s| s.at_css("h2")&.text&.strip == name }
     end
 
-    it "gives each project a heading and lists its envs in the project's order" do
-      get connections_path
-      expect(page.css("section h2").map { |h| h.text.strip }).to include("Project A", "Project X")
+    it "gives the project a heading and lists its envs in the project's order" do
+      get project_path(project_a)
+      expect(page.css("section h2").map { |h| h.text.strip }).to include("Project A")
       envs = section("Project A").css("[data-env-name]").map { |row| row["data-env-name"] }
       expect(envs).to eq(%w[dev uat])
     end
 
     it "says where each project and env is edited" do
-      get connections_path
+      get project_path(project_a)
       expect(section("Project A").text).to include("From connections.yml")
+      get project_path(project_x)
       expect(section("Project X").text).to include("Local only")
     end
 
     it "names the project's network, and says when this machine cannot reach an env" do
-      get connections_path
+      get project_path(project_a)
       expect(section("Project A").text).to include("Reachable from the NONPROD VPN only")
+      get project_path(project_x)
       expect(section("Project X").text).to include("Unreachable from this machine")
     end
 
     it "says an env without an apply mode cannot be written, and gives an other env's rank" do
-      get connections_path
+      get project_path(project_x)
       text = section("Project X").text
       expect(text).to include(helper_label(:unset)).and include("Other · rank 1")
     end
 
     it "offers Edit and Remove only on rows Kongsole owns" do
-      get connections_path
       edit_or_remove = ->(name) { section(name).css("a, button").map { |n| n.text.strip }.grep(/\A(Edit|Remove)\b/) }
+      get project_path(project_a)
       expect(edit_or_remove.call("Project A")).to be_empty
+      get project_path(project_x)
       expect(edit_or_remove.call("Project X")).to include("Edit", a_string_starting_with("Remove "))
     end
 
@@ -298,11 +303,12 @@ RSpec.describe "Console consistency", type: :request do
     it "links a connected local env to its own edit page and to its connection's, and neither on a registry env" do
       local_env = create(:project_env, source: "local", project: create(:project, key: "local-p", name: "Local P", source: "local"))
       local_conn = create(:kong_connection, project_env: local_env)
-      get connections_path
+      get project_path(local_env.project)
 
       row = page.css(".env-row").find { |r| r["data-env-name"] == local_env.name }
       hrefs = row.css("a").map { |a| a["href"] }
       expect(hrefs).to include(edit_project_env_path(local_env), edit_connection_path(local_conn))
+      get project_path(project_a)
       expect(section("Project A").css("a").map { |a| a["href"] }.grep(%r{/edit\z})).to be_empty
     end
 
@@ -314,17 +320,131 @@ RSpec.describe "Console consistency", type: :request do
     end
 
     it "explains a project with no envs yet" do
-      get connections_path
+      get project_path(Project.find_by!(key: "empty"))
       expect(section("Empty Project").text).to include(I18n.t("hints.empty_states.project_envs.title"))
-    end
-
-    it "has one primary action: New project" do
-      get connections_path
-      expect(page.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
     end
 
     def helper_label(policy)
       ApplicationController.helpers.write_policy_label(policy)
+    end
+  end
+
+  # R1.19: the connections page is where an env is picked to log in -- one row
+  # per project, its envs as chips, a mark only where there is a problem, and
+  # a menu for the rest. Everything that edits lives on the project's page.
+  describe "the connections page" do
+    let!(:project_a) { create(:project, key: "project-a", name: "Project A", source: "registry", network_note: "Reachable from the NONPROD VPN only") }
+    let!(:project_x) { create(:project, key: "project-x", name: "Project X", source: "local") }
+    let!(:a_uat) { create(:kong_connection, admin_url: "https://kong-a-uat.test", project_env: create(:project_env, project: project_a, name: "uat", position: 2, apply_mode: "pr", source: "registry")) }
+    let!(:a_dev) { create(:kong_connection, admin_url: "https://kong-a-dev.test", project_env: create(:project_env, project: project_a, name: "dev", position: 1, apply_mode: "direct", source: "registry")) }
+    let!(:x_pt) { create(:kong_connection, admin_url: "https://kong-x-pt.test", project_env: create(:project_env, project: project_x, name: "pt", position: 1, rank: 1, apply_mode: nil), last_status: "unreachable") }
+    let!(:x_sit) { create(:project_env, project: project_x, name: "sit", position: 2) }
+    let!(:empty) { create(:project, key: "empty", name: "Empty Project", source: "local") }
+
+    def row(name)
+      page.css(".launcher__row").find { |r| r.at_css(".launcher__name")&.text&.strip == name }
+    end
+
+    def chips(name)
+      row(name).css(".launcher__env")
+    end
+
+    it "has one primary action, New project, and no Add connection" do
+      get connections_path
+      expect(page.css(".btn-primary").map { |n| n.text.strip }).to eq([ "New project" ])
+      expect(page.css("main a, main button").map { |n| n.text.squish }).not_to include("Add connection")
+    end
+
+    it "gives each project one row, by name, its name linking to the project's page" do
+      get connections_path
+      names = page.css(".launcher__row .launcher__name")
+      expect(names.map { |n| n.text.strip }).to eq([ "Empty Project", "Project A", "Project X" ])
+      expect(row("Project A").at_css("a.launcher__name")["href"]).to eq(project_path(project_a))
+    end
+
+    it "lists envs in the project's order, each with a connection a link to its login" do
+      get connections_path
+      expect(chips("Project A").map { |c| c["data-env-name"] }).to eq(%w[dev uat])
+      dev = chips("Project A").first
+      expect(dev.name).to eq("a")
+      expect(dev["href"]).to eq(login_connection_path(a_dev))
+      expect(dev["aria-label"]).to eq("Log in to project-a/dev")
+    end
+
+    it "shows an env with no connection yet, but does not offer it" do
+      get connections_path
+      sit = chips("Project X").find { |c| c["data-env-name"] == "sit" }
+      expect(sit.name).to eq("span")
+      expect(sit["aria-disabled"]).to eq("true")
+      expect(sit.text.squish).to include("no connection yet")
+    end
+
+    it "marks an env only when its last login found a problem, and names the problem" do
+      get connections_path
+      pt = chips("Project X").find { |c| c["data-env-name"] == "pt" }
+      expect(pt.at_css(".launcher__problem")).to be_present
+      expect(pt["aria-label"]).to eq("Log in to project-x/pt (Unreachable from this machine)")
+      expect(chips("Project A").map { |c| c.at_css(".launcher__problem") }).to all(be_nil)
+    end
+
+    it "leaves out what belongs on the project's page" do
+      get connections_path
+      text = page.at_css("main").text
+      [ "https://kong-a-dev.test", "Reachable from the NONPROD VPN only", "Local only", "From connections.yml",
+        ApplicationController.helpers.write_policy_label(:unset) ].each { |fact| expect(text).not_to include(fact) }
+      expect(page.css("main button").map { |b| b.text.squish }.grep(/\ARemove/)).to be_empty
+    end
+
+    it "keeps each project's other actions in its menu; only a local project can be edited here" do
+      get connections_path
+      menu = ->(name) { row(name).at_css("details.project-menu") }
+      expect(menu.call("Project A").at_css("summary")["aria-label"]).to eq("Actions for Project A")
+      expect(menu.call("Project A").css("a").map { |a| a.text.strip }).to eq([ "Open project" ])
+      expect(menu.call("Project X").css("a").map { |a| [ a.text.strip, a["href"] ] }).to eq([
+        [ "Open project", project_path(project_x) ],
+        [ "Add environment", new_project_env_path(project_id: project_x.id) ],
+        [ "Edit project details", edit_project_path(project_x) ]
+      ])
+    end
+
+    it "says a project has no environments yet" do
+      get connections_path
+      expect(row("Empty Project").text).to include(I18n.t("hints.pages.connections.project_without_envs"))
+    end
+
+    it "offers the filter only once there are six projects, or a filter is in use" do
+      get connections_path
+      expect(page.at_css("form[role='search']")).to be_nil
+      get connections_path(q: "project")
+      expect(page.at_css("form[role='search'] input[name='q']")["value"]).to eq("project")
+      3.times { |i| create(:project, key: "more-#{i}", name: "More #{i}") }
+      get connections_path
+      form = page.at_css("form[role='search'][method='get']")
+      input = form.at_css("input[name='q']")
+      expect(form.at_css("label[for='#{input['id']}']").text.squish).to eq(I18n.t("hints.pages.connections.filter_label"))
+    end
+
+    it "dims the envs a query did not name, and says when nothing matches" do
+      get connections_path(q: "project-a uat")
+      expect(page.css(".launcher__row").size).to eq(1)
+      expect(chips("Project A").map { |c| [ c["data-env-name"], c["class"].include?("is-dim") ] }).to eq([ [ "dev", true ], [ "uat", false ] ])
+      get connections_path(q: "nothing-here")
+      expect(page.at_css("main").text).to include(I18n.t("hints.empty_states.connections_filtered.title"))
+      expect(page.css("main a").map { |a| [ a.text.strip, a["href"] ] }).to include([ "Clear filter", connections_path ])
+    end
+
+    it "tells apart two projects with the same name by their keys, and shows no key otherwise" do
+      create(:project, key: "project-x-2", name: "Project X", source: "local")
+      get connections_path
+      keys = page.css(".launcher__row").map { |r| [ r.at_css(".launcher__name").text.strip, r.at_css(".launcher__key")&.text ] }
+      expect(keys).to include([ "Project X", "project-x" ], [ "Project X", "project-x-2" ], [ "Project A", nil ])
+    end
+
+    it "marks the project of the connection in use" do
+      sign_in_to(a_dev)
+      get connections_path
+      expect(row("Project A").text).to include("Current")
+      expect(row("Project X").text).not_to include("Current")
     end
   end
 
