@@ -1,0 +1,122 @@
+<%# R2.5: a new service. Name first (it is how everything else refers to it),
+    then where Kong forwards, then the tuning most people leave alone, folded
+    away with its defaults showing. The browser checks what ServiceForm checks
+    (required / pattern / min / max); the server still decides. %>
+<% pr = current_connection.apply_mode == "pr" %>
+<% field_error = ->(field) { form.errors[field].any? ? "error-service-#{field}".tr("_", "-") : nil } %>
+<% described = ->(field) { [ hint_describedby(:service, field), field_error.(field) ].compact.join(" ") } %>
+<% invalid = ->(field) { form.errors[field].any? || nil } %>
+<% error_line = ->(field) { form.errors[field].any? ? tag.p(form.errors.full_messages_for(field).to_sentence, id: field_error.(field), class: "field-error") : nil } %>
+<% tuning = %i[retries connect_timeout read_timeout write_timeout] %>
+
+<%= form_with model: form, url: services_path, method: :post, class: "max-w-xl",
+      data: { controller: "service-form", service_form_ports_value: ServiceForm::DEFAULT_PORTS.to_json } do |f| %>
+  <% if form.errors.any? %>
+    <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "mb-6 text-sm" } do %>
+      <p class="font-medium">Nothing was proposed. Fix <%= pluralize(form.errors.count, "problem") %> and send it again:</p>
+      <ul class="mt-1 list-disc pl-5"><% form.errors.full_messages.each do |message| %><li><%= message %></li><% end %></ul>
+    <% end %>
+  <% end %>
+
+  <section class="panel p-4">
+    <h2 class="section-label mb-3">Service</h2>
+    <div class="grid gap-4">
+      <div>
+        <%= f.label :name, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :name, required: true, pattern: "[A-Za-z0-9._~\\-]+", maxlength: 128, autocapitalize: "off", spellcheck: false,
+              autofocus: form.name.blank?, class: "field-input mt-1 font-mono", aria: { describedby: described.(:name), invalid: invalid.(:name) } %>
+        <%= error_line.(:name) %>
+        <%= field_hint(:service, :name) %>
+      </div>
+      <div>
+        <%= f.label :tags, class: "block text-sm font-medium text-ink" %>
+        <%= f.text_field :tags, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+              aria: { describedby: described.(:tags) } %>
+        <% if current_connection.select_tags.present? %>
+          <p class="mt-1 text-xs text-ink-soft">Always added: <% current_connection.select_tags.each do |tag| %><code class="font-mono text-ink"><%= tag %></code> <% end %></p>
+        <% end %>
+        <%= field_hint(:service, :tags) %>
+      </div>
+      <div>
+        <label class="inline-flex items-center gap-2 text-sm font-medium text-ink">
+          <%= f.check_box :enabled, aria: { describedby: described.(:enabled) } %> Enabled
+        </label>
+        <%= field_hint(:service, :enabled) %>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Where Kong forwards</h2>
+    <div class="grid gap-4">
+      <div class="grid gap-4 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
+        <div>
+          <%= f.label :protocol, class: "block text-sm font-medium text-ink" %>
+          <%= f.select :protocol, ServiceForm::PROTOCOLS, {}, class: "field-input mt-1",
+                data: { service_form_target: "protocol", action: "service-form#protocolChanged" },
+                aria: { describedby: described.(:protocol), invalid: invalid.(:protocol) } %>
+          <%= error_line.(:protocol) %>
+          <%= field_hint(:service, :protocol) %>
+        </div>
+        <div>
+          <%= f.label :host, class: "block text-sm font-medium text-ink" %>
+          <%= f.text_field :host, required: true, autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+                data: { service_form_target: "host", action: "service-form#preview" },
+                aria: { describedby: described.(:host), invalid: invalid.(:host) } %>
+          <%= error_line.(:host) %>
+          <%= field_hint(:service, :host) %>
+        </div>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
+        <div>
+          <%= f.label :port, class: "block text-sm font-medium text-ink" %>
+          <%= f.number_field :port, value: form.port.presence || ServiceForm::DEFAULT_PORTS[form.protocol], min: 1, max: 65_535,
+                class: "field-input mt-1 font-mono tabular-nums",
+                data: { service_form_target: "port", action: "input->service-form#portEdited" },
+                aria: { describedby: described.(:port), invalid: invalid.(:port) } %>
+          <%= error_line.(:port) %>
+          <%= field_hint(:service, :port) %>
+        </div>
+        <div>
+          <%= f.label :path, class: "block text-sm font-medium text-ink" %>
+          <%= f.text_field :path, pattern: "/.*", autocapitalize: "off", spellcheck: false, class: "field-input mt-1 font-mono",
+                data: { service_form_target: "path", action: "service-form#preview" },
+                aria: { describedby: described.(:path), invalid: invalid.(:path) } %>
+          <%= error_line.(:path) %>
+          <%= field_hint(:service, :path) %>
+        </div>
+      </div>
+      <p class="service-target" data-service-form-target="target" hidden>
+        <span class="service-target__label">Forwards to</span> <code data-service-form-target="url"></code>
+      </p>
+    </div>
+  </section>
+
+  <details class="disclosure panel mt-4" <%= "open" if (tuning & form.errors.attribute_names).any? %>>
+    <summary>Timeouts and retries <span><%= form.retries %> retries · <%= number_with_delimiter(form.read_timeout) %> ms read timeout</span></summary>
+    <div class="grid gap-4 sm:grid-cols-2 px-4 pb-4 pt-1">
+      <div>
+        <%= f.label :retries, class: "block text-sm font-medium text-ink" %>
+        <%= f.number_field :retries, min: 0, max: 32_767, required: true, class: "field-input mt-1 font-mono tabular-nums",
+              aria: { describedby: described.(:retries), invalid: invalid.(:retries) } %>
+        <%= error_line.(:retries) %>
+        <%= field_hint(:service, :retries) %>
+      </div>
+      <% %i[connect_timeout read_timeout write_timeout].each do |field| %>
+        <div>
+          <%= f.label field, "#{field.to_s.humanize} (ms)", class: "block text-sm font-medium text-ink" %>
+          <%= f.number_field field, min: 1, max: 2_147_483_646, required: true, class: "field-input mt-1 font-mono tabular-nums",
+                aria: { describedby: described.(field), invalid: invalid.(field) } %>
+          <%= error_line.(field) %>
+          <%= field_hint(:service, field) %>
+        </div>
+      <% end %>
+    </div>
+  </details>
+
+  <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <%= f.submit pr ? "Add to changeset" : "Review change", class: "btn btn-primary" %>
+    <%= link_to "Cancel", entities_path(type: "service"), class: "btn btn-text" %>
+    <p class="basis-full text-xs text-ink-soft"><%= t(pr ? "hints.pages.service_new.pr_note" : "hints.pages.service_new.direct_note", env: current_connection.name) %></p>
+  </div>
+<% end %>

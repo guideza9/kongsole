@@ -10,8 +10,8 @@ module UiSnapshots
   # Writes only when UI_SNAPSHOTS=1, so the ordinary suite stays side-effect
   # free; `force:` and `dir:` are for this helper's own spec. Returns the
   # path, or nil when nothing was written.
-  def snapshot!(name, force: false, dir: DIR)
-    expect(response).to have_http_status(:ok)
+  def snapshot!(name, force: false, dir: DIR, status: :ok)
+    expect(response).to have_http_status(status)
     return unless force || ENV["UI_SNAPSHOTS"] == "1"
 
     FileUtils.mkdir_p(dir)

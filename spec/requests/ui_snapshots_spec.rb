@@ -275,6 +275,22 @@ RSpec.describe "UI snapshots", type: :request do
       get expiring_certificates_path
       snapshot!("certificates-expiring")
     end
+    it "service form: direct, PR and refused (R2.5)" do
+      connection.update!(access_level: "rw")
+      sign_in
+      get new_service_path
+      snapshot!("service-new")
+
+      post services_path, params: { service_form: { name: "billing api", host: "", port: "70000", path: "api", read_timeout: "0" } }
+      snapshot!("service-new-errors", status: :unprocessable_entity)
+
+      pr = create(:kong_connection, name: "uat-pr", admin_url: "https://kong-uat.test", env: "uat", rank: 2, apply_mode: "pr",
+        select_tags: %w[managed-by-kongctl])
+      sign_in(pr)
+      get new_service_path
+      snapshot!("service-new-pr")
+    end
+
   end
   # R8.9: the changeset pages in each state.
   describe "changesets" do
@@ -328,5 +344,6 @@ RSpec.describe "UI snapshots", type: :request do
       get changeset_path(changeset)
       snapshot!("changeset-submitted")
     end
+
   end
 end

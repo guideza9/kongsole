@@ -164,6 +164,45 @@ RSpec.describe "Console consistency", type: :request do
       get login_connection_path(uat)
       expect(response.body).to include(I18n.t("hints.risks.rank_2_login.title", env: "UAT"))
     end
+
+    # R2.5: the service form says what each field is for, with an example, and
+    # keeps the tuning out of the way until it is wanted.
+    describe "the service form" do
+      include SignInHelper
+
+      it "describes every field, gives examples, and folds timeouts and retries away with their defaults" do
+        sign_in
+        get new_service_path
+        expect(undescribed_fields).to eq([])
+        expect(page.css("main .field-hint__example").size).to be >= 4
+
+        tuning = page.at_css("main details.disclosure")
+        expect(tuning.at_css("summary").text).to include("Timeouts and retries")
+        %w[retries connect_timeout read_timeout write_timeout].each do |field|
+          input = tuning.at_css("input[name='service_form[#{field}]']")
+          expect(input["value"]).to eq(field == "retries" ? "5" : "60000")
+        end
+        expect(page.at_css("main input[type=submit]")["value"]).to eq("Review change")
+      end
+
+      it "checks in the browser what the server checks" do
+        sign_in
+        get new_service_path
+        expect(page.at_css("input[name='service_form[name]']")["required"]).to be_present
+        expect(page.at_css("input[name='service_form[name]']")["pattern"]).to be_present
+        expect(page.at_css("input[name='service_form[host]']")["required"]).to be_present
+        expect(page.at_css("input[name='service_form[port]']")["max"]).to eq("65535")
+        expect(page.at_css("input[name='service_form[read_timeout]']")["min"]).to eq("1")
+      end
+
+      it "adds to the changeset on a PR environment" do
+        pr = create(:kong_connection, name: "uat-pr", admin_url: "https://kong-uat.test", env: "uat", rank: 2, apply_mode: "pr",
+          select_tags: %w[managed-by-kongctl])
+        sign_in_to(pr, access: :ro)
+        get new_service_path
+        expect(page.at_css("main input[type=submit]")["value"]).to eq("Add to changeset")
+      end
+    end
   end
 
   describe "health" do

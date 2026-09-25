@@ -119,7 +119,34 @@ en:
           example: "payment, core"
         sort:
           help: "The order of the list. Updated (newest) shows the latest changes first."
-      service: {}
+      service:
+        name:
+          help: "How this service is known in Kong, decK files and routes. Letters, digits and . _ ~ - only."
+          example: "billing-api"
+        tags:
+          help: "Comma-separated labels for finding it later. This environment's own tags are added for you."
+          example: "team-payments, billing"
+        enabled:
+          help: "A disabled service keeps its routes, but Kong answers them with 503 instead of forwarding."
+        protocol:
+          help: "How Kong talks to the upstream: plain HTTP, HTTPS, or gRPC (with or without TLS)."
+        host:
+          help: "The upstream's host name or IP as Kong reaches it, or the name of an upstream in Kong."
+          example: "billing.internal"
+        port:
+          help: "Follows the protocol (80, or 443 for https and grpcs) until you change it."
+          example: "8080"
+        path:
+          help: "Optional. Put in front of every request's path before it is forwarded. Starts with /."
+          example: "/api"
+        retries:
+          help: "How many times Kong retries a request the upstream failed to answer. 0 to 32767."
+        connect_timeout:
+          help: "How long Kong waits to open a connection to the upstream, in milliseconds."
+        read_timeout:
+          help: "The longest wait between two reads of the upstream's answer, in milliseconds."
+        write_timeout:
+          help: "The longest wait between two writes of the request to the upstream, in milliseconds."
       route: {}
       upstream:
         name:
@@ -389,6 +416,10 @@ en:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:
         intro: "Changes here apply to this machine only. The key stays: every connection in the project is named after it."
+      service_new:
+        intro: "Where Kong forwards requests. Add routes to it afterwards; a service with no route takes no traffic."
+        direct_note: "Next you see exactly what will be created on %{env}, and apply it from there."
+        pr_note: "On %{env} this becomes an item of the changeset. Nothing is written to Kong; it goes out as one pull request."
       project_envs_new:
         intro: "One stage of the project, served by one Kong node. Connect the node once the environment exists."
       project_envs_edit:
