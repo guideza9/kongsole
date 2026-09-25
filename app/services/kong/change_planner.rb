@@ -29,7 +29,7 @@ module Kong
     NOT_IN_KONG_SCHEMA = { "certificate" => %w[snis] }.freeze
 
     def initialize(connection:, client:, operation:, entity_type:, actor_username:, target_kong_id: nil,
-                    parent_kong_id: nil, attributes: {}, actor_operator: nil, actor_kind: "human")
+                    parent_kong_id: nil, attributes: {}, actor_operator: nil, actor_kind: "human", replaces_plan_id: nil)
       @connection = connection
       @client = client
       @operation = operation
@@ -40,6 +40,7 @@ module Kong
       @actor_username = actor_username
       @actor_operator = actor_operator
       @actor_kind = actor_kind
+      @replaces_plan_id = replaces_plan_id
       @definition = Kong::EntityTypes.fetch(entity_type)
     end
 
@@ -55,6 +56,7 @@ module Kong
       )
 
       @parent_kong_id = resolve_parent_kong_id
+      refuse_admin_path_in_changeset! if pr_mode?
 
       before = @operation == "create" ? {} : fetch_current
 
@@ -67,7 +69,18 @@ module Kong
       after = compute_after(before)
       validate_against_kong_schema!(after)
 
+      pr_mode? ? create_in_changeset!(before, after) : create_plan!(before, after)
+    end
+
+    private
+
+    def pr_mode?
+      @connection.apply_mode == "pr"
+    end
+
+    def create_plan!(before, after, **changeset_fields)
       ChangePlan.create!(
+        **changeset_fields,
         kong_connection: @connection,
         actor_username: @actor_username,
         actor_operator: @actor_operator,
@@ -86,7 +99,50 @@ module Kong
       )
     end
 
-    private
+    # R8.2: a PR-mode proposal is an item of the connection's open changeset,
+    # never a plan of its own. An item that replaces an earlier one (an edit)
+    # takes its place in the order and, for a create, its provisional id, so
+    # children proposed under it still find it.
+    def create_in_changeset!(before, after)
+      ChangePlan.transaction do
+        changeset = Changeset.open_for!(connection: @connection, actor_username: @actor_username, actor_operator: @actor_operator)
+        replaced = replaced_item(changeset)
+        refuse_second_item_on_entity!(changeset, replaced)
+        replaced&.update!(status: "cancelled")
+
+        create_plan!(before, after,
+          changeset: changeset,
+          replaces_plan: replaced,
+          position: replaced&.position || (changeset.change_plans.maximum(:position).to_i + 1),
+          provisional_kong_id: (@operation == "create" ? replaced&.provisional_kong_id || SecureRandom.uuid : nil))
+      end
+    end
+
+    def replaced_item(changeset)
+      return nil if @replaces_plan_id.blank?
+
+      changeset.items.find_by(id: @replaces_plan_id) ||
+        raise(InvalidChange, "plan #{@replaces_plan_id} is not an item of this changeset -- it cannot be replaced")
+    end
+
+    # Two items on one entity would render the second over a `before` the
+    # first already changed. The one already there is edited instead.
+    def refuse_second_item_on_entity!(changeset, replaced)
+      return if @target_kong_id.blank?
+
+      other = changeset.items.where(target_kong_id: @target_kong_id).where.not(id: replaced&.id).first
+      return unless other
+
+      raise InvalidChange, "#{@entity_type} #{other.entity_label} is already in this changeset (item #{other.position}) -- edit that item instead"
+    end
+
+    # The admin path is never rendered into decK YAML (CLAUDE.md rule 3), so
+    # neither it nor anything under it may enter a changeset.
+    def refuse_admin_path_in_changeset!
+      return unless @connection.admin_path?(@target_kong_id) || @connection.admin_path?(@parent_kong_id)
+
+      raise InvalidChange, "admin-path entities never go into a changeset -- they are never rendered into decK YAML"
+    end
 
     # A nested type (target) can't build any Admin API path without its
     # parent; a flat child (sni) needs it in the create body. An update/delete

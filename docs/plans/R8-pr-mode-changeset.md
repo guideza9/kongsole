@@ -150,7 +150,7 @@ end
 
 **Interfaces:** `Kong::ChangePlanner.new(…, replaces_plan_id: nil)`; PR mode → plan มี `changeset`, `position`, (create) `provisional_kong_id`; ปฏิเสธ (`InvalidChange`): (ก) entity admin path ("admin-path entities never go into a changeset"), (ข) มี plan pending อีกตัวบน `target_kong_id` เดียวกันใน changeset และไม่ได้ `replaces_plan_id` มัน
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 describe "PR mode" do
@@ -203,9 +203,9 @@ describe "PR mode" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS
-- [ ] **Step 3:** API test: `kong_plan` บน PR connection คืน `changeset_id` และ `status: "pending"`
-- [ ] **Step 4:** suite 0 failures · Commit `feat(R8.2): PR-mode proposals collect in the connection's open changeset`
+- [x] **Step 2:** FAIL → implement → PASS
+- [x] **Step 3:** API test: `kong_plan` บน PR connection คืน `changeset_id` และ `status: "pending"`
+- [x] **Step 4:** suite 0 failures · Commit `feat(R8.2): PR-mode proposals collect in the connection's open changeset`
 
 ---
 

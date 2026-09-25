@@ -47,6 +47,21 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(ChangePlan.find(json["id"]).actor_operator).to eq("alice")
     end
 
+    it "puts a PR-mode proposal into the connection's changeset and says which (R8.2)" do
+      connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "ro", credential_mode: "stored",
+        auth_secret: "devpassword", project_env: create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[t]))
+      token = token_for(connection)
+
+      post api_v1_change_plans_path, params: {
+        connection: connection.name, type: "service", operation: "create", attributes: { name: "billing", url: "http://billing.internal" }
+      }, headers: auth(token)
+
+      expect(response).to have_http_status(:created)
+      json = JSON.parse(response.body)
+      expect(json["status"]).to eq("pending")
+      expect(json["changeset_id"]).to eq(Changeset.find_by!(kong_connection: connection, status: "open").id)
+    end
+
     it "returns 403 without creating a plan when the credential can't write" do
       connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "ro", credential_mode: "stored", auth_secret: "devpassword")
       token = token_for(connection)

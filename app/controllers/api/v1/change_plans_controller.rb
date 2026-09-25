@@ -106,7 +106,9 @@ module Api
           "id" => plan.id, "operation" => plan.operation, "entity_type" => plan.entity_type,
           "target_kong_id" => plan.target_kong_id, "parent_kong_id" => plan.parent_kong_id,
           "diff" => plan.diff, "status" => plan.status,
-          "expires_at" => plan.expires_at.iso8601
+          "expires_at" => plan.expires_at.iso8601,
+          # R8.2: a PR-mode proposal waits in this changeset for a person to submit it.
+          "changeset_id" => plan.changeset_id
         }
       end
     end

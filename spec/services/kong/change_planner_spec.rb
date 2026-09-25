@@ -567,4 +567,71 @@ RSpec.describe Kong::ChangePlanner do
       expect(validate).to have_been_requested
     end
   end
+
+  # R8.2: every PR-mode proposal collects in the connection's open changeset.
+  describe "PR mode" do
+    let(:env) { create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl]) }
+    let(:connection) { create(:kong_connection, project_env: env, access_level: "ro", admin_url: "https://kong.test") }
+    let(:client) { Kong::Client.new(connection: connection, secret: "pw") }
+
+    def plan_create(name)
+      described_class.new(connection: connection, client: client, operation: "create", entity_type: "service",
+        actor_username: "alice", attributes: { "name" => name, "url" => "http://#{name}.internal" }).call
+    end
+
+    it "puts every plan into the connection's open changeset, in order, and makes no write call" do
+      a = plan_create("billing")
+      b = plan_create("ledger")
+      expect(a.changeset).to eq(b.changeset)
+      expect([ a.position, b.position ]).to eq([ 1, 2 ])
+      expect(a.provisional_kong_id).to be_present
+      expect(a_request(:any, /kong\.test/).with { |req| req.method != :get }).not_to have_been_made
+    end
+
+    it "refuses a second item on the same entity unless it replaces the first" do
+      live = { "id" => SecureRandom.uuid, "name" => "billing", "tags" => [], "updated_at" => 1 }
+      stub_request(:get, "https://kong.test/services/#{live['id']}").to_return(status: 200, body: live.to_json)
+      first = described_class.new(connection: connection, client: client, operation: "update", entity_type: "service",
+        target_kong_id: live["id"], actor_username: "a", attributes: { "tags" => %w[x] }).call
+      expect {
+        described_class.new(connection: connection, client: client, operation: "update", entity_type: "service",
+          target_kong_id: live["id"], actor_username: "a", attributes: { "tags" => %w[y] }).call
+      }.to raise_error(Kong::ChangePlanner::InvalidChange, /already in this changeset/)
+
+      replacement = described_class.new(connection: connection, client: client, operation: "update", entity_type: "service",
+        target_kong_id: live["id"], actor_username: "a", attributes: { "tags" => %w[y] }, replaces_plan_id: first.id).call
+      expect(first.reload.status).to eq("cancelled")
+      expect(replacement.position).to eq(first.position)
+    end
+
+    it "keeps a replaced create's provisional id, so its children still find it" do
+      first = plan_create("billing")
+      replacement = described_class.new(connection: connection, client: client, operation: "create", entity_type: "service",
+        actor_username: "alice", attributes: { "name" => "billing", "url" => "http://billing-v2.internal" }, replaces_plan_id: first.id).call
+      expect(replacement.provisional_kong_id).to eq(first.provisional_kong_id)
+    end
+
+    it "refuses to replace a plan that is not a pending item of this changeset" do
+      other = create(:change_plan, kong_connection: connection, apply_mode: "pr", status: "applied")
+      expect { plan_create_replacing(other.id) }.to raise_error(Kong::ChangePlanner::InvalidChange, /not an item/)
+    end
+
+    def plan_create_replacing(id)
+      described_class.new(connection: connection, client: client, operation: "create", entity_type: "service",
+        actor_username: "alice", attributes: { "name" => "x", "url" => "http://x.internal" }, replaces_plan_id: id).call
+    end
+
+    it "refuses an admin-path entity before it reaches the changeset" do
+      admin_id = SecureRandom.uuid
+      connection.update!(admin_path_fingerprint: { "service_id" => admin_id, "route_ids" => [], "plugin_ids" => [], "consumer_ids" => [] })
+      stub_request(:get, "https://kong.test/services/#{admin_id}")
+        .to_return(status: 200, body: { id: admin_id, name: "admin-api", tags: %w[kong-admin-path], updated_at: 1 }.to_json)
+
+      expect {
+        described_class.new(connection: connection, client: client, operation: "update", entity_type: "service",
+          target_kong_id: admin_id, actor_username: "a", attributes: { "tags" => %w[x] }).call
+      }.to raise_error(Kong::ChangePlanner::InvalidChange, /admin-path/)
+      expect(Changeset.count).to eq(0)
+    end
+  end
 end
