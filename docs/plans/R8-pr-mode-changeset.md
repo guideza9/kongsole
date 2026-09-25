@@ -71,7 +71,7 @@
 - `Changeset#items`, `#open?`, `#branch_url`
 - `ChangePlan belongs_to :changeset, optional: true`; `ChangePlan#in_changeset?`; `#expired?` → false ถ้า `in_changeset?`; `position` (integer)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/models/changeset_spec.rb
@@ -103,7 +103,7 @@ it "does not expire while it sits in a changeset" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → migrations:
+- [x] **Step 2:** FAIL → migrations:
 
 ```ruby
 class CreateChangesets < ActiveRecord::Migration[8.1]
@@ -139,8 +139,8 @@ class AddChangesetToChangePlans < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 3:** models → PASS · migrate/rollback/migrate · suite 0 failures
-- [ ] **Step 4:** Commit `feat(R8.1): changesets group PR-mode plans; plans in one never expire`
+- [x] **Step 3:** models → PASS · migrate/rollback/migrate · suite 0 failures
+- [x] **Step 4:** Commit `feat(R8.1): changesets group PR-mode plans; plans in one never expire`
 
 ---
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_110100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -42,6 +42,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
     t.string "apply_mode", null: false
     t.datetime "base_updated_at"
     t.jsonb "before", default: {}, null: false
+    t.bigint "changeset_id"
     t.string "commit_sha"
     t.datetime "created_at", null: false
     t.jsonb "deck_diff"
@@ -52,14 +53,40 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
     t.bigint "kong_connection_id", null: false
     t.string "operation", null: false
     t.uuid "parent_kong_id"
+    t.integer "position"
     t.integer "pr_number"
     t.string "pr_state"
     t.string "pr_url"
+    t.uuid "provisional_kong_id"
+    t.bigint "replaces_plan_id"
     t.string "status", default: "pending", null: false
     t.uuid "target_kong_id"
     t.datetime "updated_at", null: false
+    t.index ["changeset_id"], name: "index_change_plans_on_changeset_id"
     t.index ["kong_connection_id", "status"], name: "index_change_plans_on_kong_connection_id_and_status"
     t.index ["kong_connection_id"], name: "index_change_plans_on_kong_connection_id"
+    t.index ["replaces_plan_id"], name: "index_change_plans_on_replaces_plan_id"
+  end
+
+  create_table "changesets", force: :cascade do |t|
+    t.string "actor_operator"
+    t.string "actor_username", null: false
+    t.string "base_git_sha"
+    t.string "branch"
+    t.string "commit_sha"
+    t.datetime "created_at", null: false
+    t.jsonb "deck_diff"
+    t.text "failure_reason"
+    t.jsonb "gate_reasons", default: [], null: false
+    t.bigint "kong_connection_id", null: false
+    t.text "pr_body"
+    t.string "pr_url"
+    t.string "status", default: "open", null: false
+    t.datetime "submitted_at"
+    t.string "submitted_by"
+    t.datetime "updated_at", null: false
+    t.index ["kong_connection_id"], name: "index_changesets_on_kong_connection_id"
+    t.index ["kong_connection_id"], name: "index_changesets_one_open_per_connection", unique: true, where: "((status)::text = 'open'::text)"
   end
 
   create_table "kong_connections", force: :cascade do |t|
@@ -192,7 +219,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
 
   add_foreign_key "audit_events", "change_plans"
   add_foreign_key "audit_events", "kong_connections"
+  add_foreign_key "change_plans", "change_plans", column: "replaces_plan_id"
+  add_foreign_key "change_plans", "changesets"
   add_foreign_key "change_plans", "kong_connections"
+  add_foreign_key "changesets", "kong_connections"
   add_foreign_key "kong_connections", "project_envs"
   add_foreign_key "kong_entities", "kong_connections"
   add_foreign_key "personal_access_token_connections", "kong_connections"

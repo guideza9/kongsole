@@ -1,6 +1,12 @@
 require "rails_helper"
 
 RSpec.describe ChangePlan do
+  it "does not expire while it sits in a changeset (R8.1)" do
+    plan = create(:change_plan, expires_at: 1.day.ago, changeset: create(:changeset))
+    expect(plan.expired?).to be(false)
+    expect(plan).to be_in_changeset
+  end
+
   describe "#entity_label" do
     it "is the entity's name, from before when present" do
       plan = build(:change_plan, before: { "name" => "payments-api" }, after: { "name" => "renamed" })
