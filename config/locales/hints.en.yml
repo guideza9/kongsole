@@ -336,6 +336,11 @@ en:
         title: "Kong gave an answer Kongsole does not recognise."
         cause: "The Admin API returned a status none of the known cases cover."
         next_step: "Try again. If it keeps happening, note the time and tell whoever runs this Kong node."
+      # R8.4: the config repo refused the key or token this machine pushes with.
+      git_auth_failed:
+        title: "To Edit: The config repo refused this machine's git credential."
+        cause: "To Edit: git reached the repo, but the SSH key or token it used was not accepted."
+        next_step: "To Edit: Check that this machine's git key or token can read and push to the project's config repo, then try again."
       connection_failed:
         title: "Could not reach this connection."
         cause: "The request never got an answer. This machine may not be on the network of the project."

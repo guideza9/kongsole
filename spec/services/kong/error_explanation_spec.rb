@@ -39,4 +39,17 @@ RSpec.describe Kong::ErrorExplanation do
     ro = described_class.for(Kong::Client::RouteNotMatched.new("x"))
     expect(ro.cause).not_to match(/not found|does not exist/i)
   end
+  # R8.4: the config repo is reached over the project's network too.
+  it "explains a git host this machine cannot reach as a network problem, with the network note" do
+    error = Kong::GitClient::Unreachable.new("git fetch failed", kind: :timeout)
+    result = described_class.for(error, network_note: "Reachable from the NONPROD VPN only")
+    expect(result.key).to eq("network_timed_out")
+    expect(result.next_step).to include("NONPROD VPN")
+  end
+
+  it "explains a rejected git key or token as its own problem" do
+    result = described_class.for(Kong::GitClient::AuthFailed.new("Permission denied (publickey)"))
+    expect(result.key).to eq("git_auth_failed")
+    expect(result.title).to be_present
+  end
 end

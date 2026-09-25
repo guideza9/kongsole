@@ -38,7 +38,9 @@ module Kong
 
     def self.key_for(error)
       case error
-      when Kong::Client::NetworkUnreachable then network_key(error.kind)
+      when Kong::Client::NetworkUnreachable, Kong::GitClient::Unreachable then network_key(error.kind)
+      when Kong::GitClient::AuthFailed then "git_auth_failed"
+      when Kong::DeckCli::Error then network_key(Kong::NetworkFailure.classify_text(error.message))
       when Faraday::Error then network_key(Kong::NetworkFailure.classify(error))
       else KEYS_BY_CLASS.fetch(error.class) { "connection_failed" }
       end

@@ -1,6 +1,7 @@
 require "rails_helper"
 require "open3"
 require "tmpdir"
+require Rails.root.join("spec/support/bare_git_repo")
 
 RSpec.describe Kong::GitClient do
   around do |example|
@@ -75,5 +76,46 @@ RSpec.describe Kong::GitClient do
     connection.git_repo = @tmp.join("does-not-exist.git").to_s
 
     expect { client_for(connection).pull! }.to raise_error(Kong::GitClient::Error)
+  end
+  # R8.4: the changeset preview reads the whole working copy's diff, the
+  # remote's head, and always leaves the working copy clean.
+  describe "for a changeset" do
+    include BareGitRepo
+
+    let(:repo) { bare_git_repo(path: "uat/kong.yaml", select_tags: %w[t]) }
+    let(:connection) { pr_connection_for(repo, path: "uat/kong.yaml", select_tags: %w[t]) }
+
+    it "diffs a rewritten file against the base, then discards it" do
+      git = described_class.new(connection: connection).pull!
+      git.write_file("uat/kong.yaml", "_format_version: \"3.0\"\nservices: []\n")
+      expect(git.diff("uat/kong.yaml")).to include("+services: []")
+      git.discard!
+      status, = Open3.capture3("git", "status", "--porcelain", chdir: git.working_dir.to_s)
+      expect(status).to be_empty
+    end
+
+    it "shows a file that did not exist yet as all added" do
+      git = described_class.new(connection: connection).pull!
+      git.write_file("uat/new.yaml", "x: 1\n")
+      expect(git.diff("uat/new.yaml")).to include("+x: 1")
+    end
+
+    it "reads the remote branch's head without a working copy" do
+      expect(described_class.new(connection: connection).remote_head_sha).to eq(head_sha(repo))
+    end
+  end
+
+  it "tells an unreachable git host apart from a refused key" do
+    connection = create(:kong_connection, project_env: create(:project_env, apply_mode: "pr", source: "registry",
+      project: create(:project, git_repo: "https://git.example/team/repo.git")))
+    failed = instance_double(Process::Status, success?: false)
+    allow(Open3).to receive(:capture3)
+      .and_return([ "", "fatal: unable to access 'https://git.example/team/repo.git/': Could not resolve host: git.example", failed ])
+    expect { described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir)).pull! }
+      .to raise_error(described_class::Unreachable) { |e| expect(e.kind).to eq(:dns) }
+
+    allow(Open3).to receive(:capture3).and_return([ "", "git@git.example: Permission denied (publickey).", failed ])
+    expect { described_class.new(connection: connection, working_dir: Pathname(Dir.mktmpdir)).pull! }
+      .to raise_error(described_class::AuthFailed)
   end
 end

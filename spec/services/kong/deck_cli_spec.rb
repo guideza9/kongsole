@@ -28,6 +28,8 @@ RSpec.describe Kong::DeckCli do
         expect(described_class.validate(file)).to be(true)
 
         expect(Open3).to have_received(:capture3).with({}, "deck", "file", "validate", file.to_s)
+        described_class.validate(file, extra_paths: %w[/repo/base.yaml])
+        expect(Open3).to have_received(:capture3).with({}, "deck", "file", "validate", file.to_s, "/repo/base.yaml")
       end
 
       it "uses the binary named by DECK_BIN" do
@@ -96,6 +98,22 @@ RSpec.describe Kong::DeckCli do
           {}, "deck", "gateway", "diff", file.to_s,
           "--kong-addr", "https://kong-uat-admin-ro.internal", "--headers", header, "--json-output"
         )
+      end
+
+      # R8.4: an env's other decK files are read alongside the rendered one.
+      it "passes the env's extra files as more positional state files" do
+        allow(Open3).to receive(:capture3).and_return([ { "changes" => {} }.to_json, "", success ])
+        described_class.diff(file, connection: connection, secret: "pw", extra_paths: %w[/repo/base.yaml])
+        expect(Open3).to have_received(:capture3).with(
+          {}, "deck", "gateway", "diff", file.to_s, "/repo/base.yaml",
+          "--kong-addr", "https://kong-uat-admin-ro.internal", "--headers", header, "--json-output"
+        )
+      end
+
+      it "never puts the Authorization header into its error" do
+        allow(Open3).to receive(:capture3).and_return([ "", "Error: connection refused", failure ])
+        expect { described_class.diff(file, connection: connection, secret: "pw") }
+          .to raise_error(described_class::Error) { |e| expect(e.message).not_to include("Authorization", "Basic") }
       end
 
       it "treats blank output as no changes" do

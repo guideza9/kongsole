@@ -12,6 +12,22 @@ module Kong
   class GitClient
     class Error < StandardError; end
 
+    # R8.4: the config repo sits on the project's network too. A host this
+    # machine cannot reach is told apart from one that refused the key or
+    # token, and both from git failing for any other reason.
+    class Unreachable < Error
+      attr_reader :kind
+
+      def initialize(message = nil, kind: :other)
+        super(message)
+        @kind = kind
+      end
+    end
+
+    class AuthFailed < Error; end
+
+    NETWORK_KINDS = %i[dns refused timeout tls].freeze
+
     DEFAULT_BRANCH = "main"
 
     def initialize(connection:, working_dir: nil)
@@ -74,13 +90,44 @@ module Kong
       run!("git", "rev-parse", "HEAD", chdir: working_dir).strip
     end
 
+    # R8.4: what writing `relative_path` changed against the base, as a
+    # unified diff -- a file that did not exist yet shows as all added.
+    def diff(relative_path)
+      run!("git", "add", "--intent-to-add", "--", relative_path, chdir: working_dir)
+      run!("git", "diff", "--", relative_path, chdir: working_dir)
+    end
+
+    # The base branch's head on the remote, without touching a working copy
+    # -- where a changeset began, and whether someone has pushed since.
+    def remote_head_sha
+      out = run!("git", "ls-remote", @repo, "refs/heads/#{@branch}", chdir: Dir.tmpdir)
+      out.split.first.presence || raise(Error, "#{@branch} was not found in the config repo")
+    end
+
+    # Back to a clean base branch: nothing a preview or a failed submit wrote
+    # may linger into the next render.
+    def discard!
+      return self unless File.directory?(working_dir.join(".git"))
+
+      run!("git", "reset", "--hard", chdir: working_dir)
+      run!("git", "clean", "-fd", chdir: working_dir)
+      run!("git", "checkout", @branch, chdir: working_dir)
+      self
+    end
+
     private
 
     def run!(*cmd, chdir:, env: {})
       stdout, stderr, status = Open3.capture3(env, *cmd, chdir: chdir.to_s)
-      raise Error, "#{cmd.join(' ')} failed: #{stderr.presence || stdout}" unless status.success?
+      return stdout if status.success?
 
-      stdout
+      output = stderr.presence || stdout
+      message = "#{cmd.join(' ')} failed: #{output}"
+      kind = Kong::NetworkFailure.classify_text(output)
+      raise AuthFailed, message if kind == :auth
+      raise Unreachable.new(message, kind: kind) if NETWORK_KINDS.include?(kind)
+
+      raise Error, message
     end
   end
 end

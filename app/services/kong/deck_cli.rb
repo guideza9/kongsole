@@ -24,24 +24,27 @@ module Kong
     ENV_REFERENCE = /\$\{\{ env "(DECK_[A-Z0-9_]+)" \}\}/
     MAX_MESSAGE = 2000
 
-    def self.validate(file_path)
-      new.validate(file_path)
+    # `extra_paths` (R8.4): the env's other decK files in the same repo, read
+    # alongside the rendered one as more positional state files -- decK merges
+    # them. Kongsole never writes them.
+    def self.validate(file_path, extra_paths: [])
+      new.validate(file_path, extra_paths: extra_paths)
     end
 
-    def self.diff(file_path, connection:, secret:)
-      new.diff(file_path, connection: connection, secret: secret)
+    def self.diff(file_path, connection:, secret:, extra_paths: [])
+      new.diff(file_path, connection: connection, secret: secret, extra_paths: extra_paths)
     end
 
-    def validate(file_path)
-      _stdout, stderr, status = run([ "file", "validate", file_path.to_s ], file_path)
+    def validate(file_path, extra_paths: [])
+      _stdout, stderr, status = run([ "file", "validate", file_path.to_s, *extra_paths.map(&:to_s) ], file_path)
       raise Error, "deck file validate failed: #{clean(stderr)}" unless status.success?
 
       true
     end
 
-    def diff(file_path, connection:, secret:)
+    def diff(file_path, connection:, secret:, extra_paths: [])
       args = [
-        "gateway", "diff", file_path.to_s,
+        "gateway", "diff", file_path.to_s, *extra_paths.map(&:to_s),
         "--kong-addr", connection.admin_url,
         "--headers", "Authorization:#{basic_auth(connection.auth_username, secret)}",
         "--json-output"

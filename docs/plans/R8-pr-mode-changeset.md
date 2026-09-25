@@ -277,7 +277,7 @@ end
 - `Preview = Struct.new(:yaml_diff, :deck_diff, :gate, :drift, :error, :explanation, keyword_init: true)` — `explanation` = `Kong::ErrorExplanation::Result` (พร้อม `network_note` ของ project) เมื่อ git/decK/Kong เข้าไม่ถึง; หน้า changeset ยังแสดงรายการได้ปกติ
 - `deck_extra_paths` ของ env ถูกส่งต่อเป็น positional file เพิ่มให้ `deck file validate` / `deck gateway diff` (อ่านอย่างเดียว ไม่แก้)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -344,8 +344,8 @@ it "tells an unreachable git host apart from a refused key" do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (GitClient เพิ่ม method + test ของตัวเอง; DeckCli เพิ่ม `extra_paths` + test ว่า argv มีไฟล์เพิ่ม และ error message ไม่มี header `Authorization`)
-- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R8.4): render a whole changeset from the latest git and preview its diff`
+- [x] **Step 2:** FAIL → implement (GitClient เพิ่ม method + test ของตัวเอง; DeckCli เพิ่ม `extra_paths` + test ว่า argv มีไฟล์เพิ่ม และ error message ไม่มี header `Authorization`)
+- [x] **Step 3:** PASS · suite 0 failures · Commit `feat(R8.4): render a whole changeset from the latest git and preview its diff`
 
 ---
 
