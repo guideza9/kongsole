@@ -16,6 +16,8 @@ module Kong
     def check(connection:, hosts:, paths:, methods:, changeset: nil, exclude_kong_id: nil, exclude_plan_id: nil)
       new_route = normalise(hosts, paths, methods)
       candidates(connection, changeset, exclude_kong_id, exclude_plan_id).filter_map do |route|
+        next if route[:admin_path] && !names_admin_host?(new_route, route)
+
         reason = reason_for(new_route, route)
         reason && { route_name: route[:name], service_name: route[:service_name], reason: reason }
       end.sort_by { |hit| [ REASON_ORDER.fetch(hit[:reason]), hit[:route_name].to_s ] }
@@ -31,11 +33,22 @@ module Kong
       live = KongEntity.active.where(kong_connection: connection, entity_type: "route").where.not(kong_id: replaced).to_a
       names = service_names(connection, live.map(&:parent_kong_id) + items.map { |plan| plan.after.dig("service", "id") })
 
-      from_kong = live.map { |entity| describe(entity.data, entity.name, names[entity.parent_kong_id]) }
+      from_kong = live.map do |entity|
+        describe(entity.data, entity.name, names[entity.parent_kong_id]).merge(admin_path: entity.is_admin_path?)
+      end
       from_changeset = items.reject(&:delete?).map do |plan|
         describe(plan.after, plan.after["name"], names[plan.after.dig("service", "id")])
       end
       from_kong + from_changeset
+    end
+
+    # The routes the console reaches Kong through answer only their own hosts;
+    # a route that does not name one of those hosts is no competition for
+    # them (host outranks every other match in Kong's router), and warning
+    # about them on every host-less route would teach operators to ignore
+    # the warning.
+    def names_admin_host?(new_route, admin_route)
+      new_route[:hosts].any? && hosts_overlap?(new_route[:hosts], admin_route[:hosts])
     end
 
     def describe(data, name, service_name)

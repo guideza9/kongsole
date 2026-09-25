@@ -31,6 +31,8 @@ class RouteForm
   validate :matches_something
   validate :hosts_well_formed
   validate :paths_well_formed
+  validate :no_strip_path_on_grpc_only
+  validate { ServiceForm.tag_errors(tag_list).each { |message| errors.add(:tags, message) } }
 
   def methods=(value)
     self.http_methods = value
@@ -93,6 +95,14 @@ class RouteForm
 
       errors.add(:hosts, "#{host} is not a host name (a wildcard may only be the first or last part, like *.example.com)")
     end
+  end
+
+  # Kong refuses strip_path on a route that takes only gRPC.
+  def no_strip_path_on_grpc_only
+    list = protocols_list
+    return unless strip_path && list.any? && (list - ServiceForm::GRPC).empty?
+
+    errors.add(:strip_path, "must be off for a route that only takes grpc or grpcs (Kong refuses it)")
   end
 
   def paths_well_formed

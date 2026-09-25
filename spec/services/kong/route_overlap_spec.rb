@@ -67,4 +67,19 @@ RSpec.describe Kong::RouteOverlap do
       status: "pending", after: { "name" => "queued", "paths" => %w[/billing] })
     expect(check(paths: %w[/billing], changeset: changeset, exclude_plan_id: item.id)).to be_empty
   end
+
+  describe "the admin-path routes (final review #2)" do
+    before do
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "admin-api-rw", is_admin_path: true,
+        data: { "name" => "admin-api-rw", "hosts" => %w[kong-admin.internal], "paths" => [], "methods" => [] })
+    end
+
+    it "leaves them out for a route that does not name their host" do
+      expect(check(paths: %w[/billing])).to be_empty
+    end
+
+    it "still names them for a route on their host" do
+      expect(check(hosts: %w[kong-admin.internal], paths: %w[/billing]).map { _1[:route_name] }).to eq(%w[admin-api-rw])
+    end
+  end
 end

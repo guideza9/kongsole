@@ -39,4 +39,16 @@ RSpec.describe RouteForm do
     attrs = described_class.new(valid.merge(hosts: "", methods: [])).to_attributes(select_tags: [], service_kong_id: "s")
     expect(attrs.keys).not_to include("hosts", "methods")
   end
+
+  # Final review #1: Kong refuses strip_path on a route that only takes gRPC.
+  it "refuses strip_path on a gRPC-only route" do
+    form = described_class.new(valid.merge(protocols: %w[grpc], strip_path: "1"))
+    expect(form).not_to be_valid
+    expect(form.errors[:strip_path].join).to match(/grpc/i)
+    expect(described_class.new(valid.merge(protocols: %w[grpc], strip_path: "0"))).to be_valid
+  end
+
+  it "refuses a tag with a slash, which Kong rejects" do
+    expect(described_class.new(valid.merge(tags: "team/a"))).not_to be_valid
+  end
 end

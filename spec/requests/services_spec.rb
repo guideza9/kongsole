@@ -9,7 +9,7 @@ RSpec.describe "Create service", type: :request do
   context "direct mode, read-write" do
     let(:connection) { create(:kong_connection, admin_url: "https://kong.test", project_env: create(:project_env, apply_mode: "direct", select_tags: %w[team-a])) }
 
-    it "validates against Kong's schema, then opens the plan review" do
+    it "checks the form, then opens the plan review with the environment's tags" do
       sign_in_to(connection, access: :rw)
       stub_request(:post, "https://kong.test/schemas/services/validate").to_return(status: 200, body: "{}")
       post services_path, params: { service_form: { name: "billing", protocol: "http", host: "billing.internal" } }

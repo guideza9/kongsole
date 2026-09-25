@@ -34,10 +34,24 @@ class RoutesController < ApplicationController
 
   def set_service
     @service_kong_id = params[:service_id].to_s
+    # Never under the service the console reaches Kong through (CLAUDE.md
+    # rule 3): a route there could open the Admin API without its guard.
+    if admin_path_service?(@service_kong_id)
+      return redirect_to(entities_path(type: "service"),
+        alert: "Routes can't be added under the admin path -- the service Kongsole reaches Kong through.")
+    end
+
     @service_label = service_name(@service_kong_id)
     return if @service_label
 
     redirect_to entities_path(type: "service"), alert: "That service isn't on #{current_connection.name} -- pick one from the list."
+  end
+
+  def admin_path_service?(kong_id)
+    return false if kong_id.blank?
+
+    current_connection.admin_path?(kong_id) ||
+      KongEntity.active.exists?(kong_connection: current_connection, entity_type: "service", kong_id: kong_id, is_admin_path: true)
   end
 
   def service_name(kong_id)

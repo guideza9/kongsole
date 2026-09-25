@@ -39,6 +39,16 @@ RSpec.describe "Create route", type: :request do
       expect(response.parsed_body["overlaps"]).to contain_exactly(include("route_name" => "old", "reason" => "exact"))
     end
 
+    it "refuses the admin-path service however the URL is built (final review)" do
+      admin = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "kong-admin", is_admin_path: true)
+      get new_route_path(service_id: admin.kong_id)
+      expect(response).to redirect_to(entities_path(type: "service"))
+
+      post routes_path, params: route_params.merge(service_id: admin.kong_id)
+      expect(response).to redirect_to(entities_path(type: "service"))
+      expect(ChangePlan.count).to eq(0)
+    end
+
     it "sends an unknown service back to the service list" do
       get new_route_path(service_id: SecureRandom.uuid)
       expect(response).to redirect_to(entities_path(type: "service"))

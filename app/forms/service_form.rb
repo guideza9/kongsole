@@ -13,6 +13,14 @@ class ServiceForm
   NAME_MESSAGE = "must use letters, digits, . _ ~ -".freeze
   TIMEOUT_RANGE = (1..2_147_483_646)
   TIMEOUT_FIELDS = %i[connect_timeout read_timeout write_timeout].freeze
+  # A bare host name (or a Kong upstream's name) -- no scheme, port or path.
+  HOST_NAME = /\A[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?\z/
+  GRPC = %w[grpc grpcs].freeze
+
+  # Kong refuses a tag with a slash (a comma already splits the field).
+  def self.tag_errors(tags)
+    tags.select { |tag| tag.include?("/") }.map { |tag| "#{tag} can't contain / (Kong refuses it)" }
+  end
 
   attribute :name, :string
   attribute :protocol, :string, default: "http"
@@ -31,6 +39,9 @@ class ServiceForm
   validates :protocol, inclusion: { in: PROTOCOLS }
   validates :host, presence: true
   validate :path_starts_with_slash
+  validate :no_path_on_grpc
+  validate :host_is_bare
+  validate { self.class.tag_errors(tag_list).each { |message| errors.add(:tags, message) } }
   validate { check_range(:port, 1..65_535, blank_ok: true) }
   validate { check_range(:retries, 0..32_767) }
   validate { TIMEOUT_FIELDS.each { |field| check_range(field, TIMEOUT_RANGE) } }
@@ -63,6 +74,26 @@ class ServiceForm
   def path_starts_with_slash
     value = path.to_s.strip
     errors.add(:path, "must start with /") if value.present? && !value.start_with?("/")
+  end
+
+  # Kong forwards a gRPC call as it is: its service schema wants no path.
+  def no_path_on_grpc
+    return unless GRPC.include?(protocol) && path.to_s.strip.present?
+
+    errors.add(:path, "must be empty for a grpc or grpcs service (Kong forwards gRPC calls as they are)")
+  end
+
+  def host_is_bare
+    value = host.to_s.strip
+    return if value.empty? || value.match?(HOST_NAME) || ipv6?(value)
+
+    errors.add(:host, "must be a host name or IP only -- put the port and path in their own fields")
+  end
+
+  def ipv6?(value)
+    value.include?(":") && IPAddr.new(value.delete_prefix("[").delete_suffix("]")).ipv6?
+  rescue IPAddr::InvalidAddressError
+    false
   end
 
   def check_range(field, range, blank_ok: false)
