@@ -786,6 +786,161 @@ end
 5. นอก R1: หน้า Health ที่ 390px เลื่อนแนวนอนได้ถึง 889px เพราะ `<span class="sr-only">Actions</span>` (absolute) หลุดจาก `.overflow-x-auto` — มีตั้งแต่ `682cb0c`
 6. นอก R1: หน้า login ที่ 390px ตัด "PR mode" กลางคำ เพราะ `break-all` ครอบทั้งบรรทัด admin URL + apply mode
 
+**คำตัดสินของเจ้าของงาน (2026-09-25):**
+
+| ข้อ | คำตัดสิน | ผลใน plan |
+|---|---|---|
+| 1 | เพิ่ม task | R1.13 (backend) + R1.14 (UI) |
+| 2 | เพิ่ม task | R1.15 (UI) |
+| 3 | (ก) แก้ข้อความให้ทำตามได้จริง | R1.16 (backend) |
+| 4 | จดไว้ก่อน ยังไม่ทำ | `00-roadmap.md` §งานต่อที่รอ |
+| 5–6 | นอก R1 ยังไม่ทำ | — |
+
+หลัง R1.13–R1.16 ต้องรัน R1.17 (ตรวจซ้ำเฉพาะส่วนที่เปลี่ยน) ก่อนปิด R1
+
+---
+
+### Task R1.13: นโยบายการเขียนของ connection เป็นที่เดียว + controller ปฏิเสธก่อนเปิดฟอร์ม (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R1.3 · **ไฟล์ที่แก้ได้:** `app/models/kong_connection.rb`, `app/services/kong/change_guardrails.rb`, `app/controllers/application_controller.rb`, `app/controllers/entities_controller.rb`, `app/controllers/plugins_controller.rb`, `spec/models/kong_connection_spec.rb`, `spec/services/kong/change_guardrails_spec.rb`, `spec/requests/entities_spec.rb`, `spec/requests/plugins_spec.rb`
+
+**ทำไม:** ข้อค้าง 1 — ปุ่มเขียนแสดงทุกกรณี แล้วค่อยถูกปฏิเสธตอนส่ง · UI (R1.14) ต้องมีคำตอบเดียวที่ตรงกับ `check_write_access!` ไม่ใช่เขียนเงื่อนไขเองใน view
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/models/kong_connection_spec.rb — เพิ่ม
+describe "#write_block_reason" do
+  def connection_for(apply_mode:, access_level:)
+    create(:kong_connection, project_env: create(:project_env, apply_mode: apply_mode), access_level: access_level)
+  end
+
+  it { expect(connection_for(apply_mode: nil, access_level: "rw").write_block_reason).to eq(:apply_mode_unset) }
+  it { expect(connection_for(apply_mode: "direct", access_level: "ro").write_block_reason).to eq(:read_only) }
+  it { expect(connection_for(apply_mode: "direct", access_level: nil).write_block_reason).to eq(:read_only) }
+  it { expect(connection_for(apply_mode: "direct", access_level: "rw").write_block_reason).to be_nil }
+  it { expect(connection_for(apply_mode: "pr", access_level: "ro").write_block_reason).to be_nil } # PR เขียนลง git ไม่ใช่ Kong
+end
+```
+
+```ruby
+# spec/services/kong/change_guardrails_spec.rb — เพิ่ม
+it "refuses exactly when the connection says writing is blocked" do
+  [ [ nil, "rw" ], [ "direct", "ro" ], [ "direct", "rw" ], [ "pr", "ro" ] ].each do |mode, access|
+    connection = create(:kong_connection, project_env: create(:project_env, apply_mode: mode), access_level: access)
+    check = -> { described_class.check_write_access!(connection: connection) }
+    connection.write_block_reason ? expect(&check).to(raise_error(described_class::Violation)) : expect(&check).not_to(raise_error)
+  end
+end
+```
+
+```ruby
+# spec/requests/entities_spec.rb — เพิ่ม (Kong ไม่มี stub สำหรับการเขียน: ถ้ามีการเรียก WebMock จะทำให้ fail)
+context "when the env's apply mode is not set" do
+  let(:connection) { create(:kong_connection, project_env: create(:project_env, apply_mode: nil)) }
+  before { sign_in_to(connection) }
+
+  it "sends new/edit/delete back to the list with the reason instead of opening a form" do
+    get new_entity_path(type: "upstream")
+    expect(response).to redirect_to(entities_path(type: "upstream"))
+    expect(flash[:alert]).to include("apply mode is not set")
+  end
+end
+# plugins_spec.rb: GET new_plugin_path → redirect entities_path(type: "plugin") + alert เดียวกัน
+```
+
+- [ ] **Step 2:** FAIL → implement:
+  - `KongConnection#write_block_reason` → `:apply_mode_unset` / `:read_only` / `nil` (กติกาเดียวกับ `check_write_access!` เดิม)
+  - `ChangeGuardrails.check_write_access!` เรียก `write_block_reason` แล้ว raise ข้อความเดิมทุกตัวอักษร (spec เดิมต้องผ่านโดยไม่แก้)
+  - `ApplicationController`: `helper_method :write_block_reason` (ของ `current_connection`, `nil` ถ้าไม่ได้ login) และ `require_writable!` ที่ redirect ไป list ของ type นั้นพร้อม `flash[:alert]` = ข้อความของ guardrail
+  - `before_action :require_writable!` ใน `EntitiesController` (`new create edit update destroy`) และ `PluginsController` (`new create`)
+- [ ] **Step 3:** PASS · suite 0 failures · Commit `feat(R1.13): one write policy per connection; write forms refuse before they open`
+
+---
+
+### Task R1.14: ซ่อนปุ่มเขียนเมื่อ env เขียนไม่ได้ พร้อมบอกเหตุผล (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.13, R3.4 · **ไฟล์ที่แก้ได้:** `app/views/entities/index.html.erb`, `app/views/entities/show.html.erb`, `app/views/change_plans/show.html.erb` (เฉพาะปุ่ม Apply / Push branch), `app/views/shared/_write_blocked.html.erb` (create), `app/assets/tailwind/application.css`, `config/locales/hints.en.yml` (`hints.risks.write_blocked.apply_mode_unset`, `hints.risks.write_blocked.read_only`), `spec/requests/consistency_spec.rb` (assertion), `spec/requests/ui_snapshots_spec.rb`
+
+**คำสั่ง:** `/impeccable clarify write-blocked notice` → `/impeccable harden`
+
+- [ ] **Step 1:** assertion (ก่อน): เมื่อ `write_block_reason` ไม่ใช่ nil — `entities/index` ไม่มี "New upstream" / "New global plugin" / "New certificate" / "New CA certificate";
+  `entities/show` ไม่มี Edit / Delete / Add plugin / Add target / Add SNI; `change_plans/show` ไม่มีปุ่ม Apply / Push branch;
+  ทุกหน้านั้นมี notice เดียวที่ใช้ข้อความจาก `hints.risks.write_blocked.<reason>` · เมื่อ `nil` ทุกปุ่มยังอยู่ครบ (กันการซ่อนเกิน)
+- [ ] **Step 2:** FAIL → ทำ UI: notice เงียบ (ไม่ใช่ danger) บอกว่า "ทำไมเขียนไม่ได้" + "แก้อย่างไร"
+  (`apply_mode_unset` → ตั้งเป็น Direct apply ที่หน้า Connections หรือ PR mode ใน `config/connections.yml`; `read_only` → login ด้วย credential ที่เขียนได้) · ปุ่มอ่านอย่างเดียว (Sync now, Filter, Expiring soon) ไม่แตะ
+- [ ] **Step 3:** PASS · snapshot `entities-index-write-blocked`, `entity-show-write-blocked` · detect ไม่เพิ่ม · 390px ไม่มี horizontal scroll
+- [ ] **Step 4:** Commit `feat(R1.14): write buttons stay hidden where nothing can be written, and the page says why`
+
+---
+
+### Task R1.15: แก้ env ที่มี connection แล้วได้จากหน้า Connections (UI)
+
+**ชั้น:** UI · **ต้องเสร็จก่อน:** R1.8, R1.9 · **ไฟล์ที่แก้ได้:** `app/views/connections/_env_row.html.erb`, `app/views/connections/show.html.erb`, `app/assets/tailwind/application.css`, `config/locales/hints.en.yml`, `spec/requests/consistency_spec.rb` (assertion), `spec/requests/accessibility_spec.rb` (assertion), `spec/requests/ui_snapshots_spec.rb`
+
+**ทำไม:** ข้อค้าง 2 — env ที่ต่อแล้วเปลี่ยน apply_mode / rank / สีไม่ได้ถ้าไม่พิมพ์ URL เอง
+
+**คำสั่ง:** `/impeccable layout app/views/connections/_env_row.html.erb` → `/impeccable harden`
+
+- [ ] **Step 1:** assertion (ก่อน): แถว env `source: "local"` ที่มี connection มีลิงก์ไป `edit_project_env_path(env)` และลิงก์ไป `edit_connection_path(connection)`
+  ที่แยกกันด้วย accessible name (`Edit environment <project/env>` / `Edit connection <project/env>`) · แถว env `registry` ไม่มีทั้งสองลิงก์ ·
+  หน้า `connections/show` ของ connection local มีลิงก์ไปแก้ env ของมัน
+- [ ] **Step 2:** FAIL → ทำ UI: Remove ยังเป็น action ทำลายอันเดียวที่อยู่อีกฝั่งของเส้นคั่น · 390px ปุ่มไม่ล้นแถว
+- [ ] **Step 3:** PASS · snapshot `connections-index-projects` อัปเดต · detect ไม่เพิ่ม
+- [ ] **Step 4:** Commit `feat(R1.15): a connected env can be edited from its row`
+
+---
+
+### Task R1.16: ข้อความ `ConflictingRepos` ทำตามได้จริงตอน migrate (backend)
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R1.2 · **ไฟล์ที่แก้ได้:** `app/services/kong/legacy_project_backfill.rb`, `spec/services/kong/legacy_project_backfill_spec.rb`, `docs/plans/00-roadmap.md` (ตาราง Migrations แถว #3 คอลัมน์ Rollback)
+
+**ทำไม:** ข้อค้าง 3 — ข้อความเดิมบอกให้แก้ `config/connections.yml` "before migrating" แต่ตอนนั้น `kong:load_connections` ใช้ไม่ได้
+(`column kong_connections.project_env_id does not exist`) · ไม่เปลี่ยนพฤติกรรม: ยังปฏิเสธเหมือนเดิม
+
+- [ ] **Step 1: test**
+
+```ruby
+# spec/services/kong/legacy_project_backfill_spec.rb — แก้ it เดิมที่ตรวจ ConflictingRepos + เพิ่ม
+# `legacy(attrs)` = helper เดิมของไฟล์นี้ (save!(validate: false))
+let(:pr_attrs) { { admin_url: "http://localhost:8001", apply_mode: "pr" } }
+
+it "names each PR connection with its repo and says how to continue from this schema" do
+  legacy(pr_attrs.merge(name: "uat", env: "uat", rank: 2, color_tag: "orange", git_repo: "/tmp/a.git"))
+  legacy(pr_attrs.merge(name: "prod", env: "prod", rank: 3, color_tag: "red", git_repo: "/tmp/b.git"))
+  expect { described_class.call }.to raise_error(described_class::ConflictingRepos) { |e|
+    expect(e.message).to include("uat → /tmp/a.git", "prod → /tmp/b.git")
+    expect(e.message).to include("Nothing was changed", "bin/rails console", "update_all(git_repo:", "bin/rails db:migrate")
+    expect(e.message).not_to include("kong:load_connections")
+  }
+end
+
+it "goes through once the connections are pointed at one repo, as the message says" do
+  legacy(pr_attrs.merge(name: "uat", env: "uat", rank: 2, color_tag: "orange", git_repo: "/tmp/a.git"))
+  legacy(pr_attrs.merge(name: "prod", env: "prod", rank: 3, color_tag: "red", git_repo: "/tmp/b.git"))
+  KongConnection.where(apply_mode: "pr").update_all(git_repo: "/tmp/a.git")
+  expect { described_class.call }.not_to raise_error
+  expect(Project.find_by!(key: "default").git_repo).to eq("/tmp/a.git")
+end
+```
+
+- [ ] **Step 2:** FAIL → implement ข้อความ (ภาษาอังกฤษ หลายบรรทัด): รายการ `name → repo` ต่อบรรทัด · "Nothing was changed: this migration was rolled back." ·
+  ทางที่ทำได้ ณ schema นั้น: ใน `bin/rails console` ใช้ `KongConnection.where(name: [...]).update_all(git_repo: "<repo ที่ถูก>")` หรือลบ connection ที่ไม่ใช้แล้ว → `bin/rails db:migrate` อีกครั้ง ·
+  บอกว่าหลัง migrate ทุก connection อยู่ใน project `default` เป็น `default/<ชื่อเดิม>`
+- [ ] **Step 3:** เพิ่มขั้นตอนเดียวกันในคอลัมน์ Rollback แถว #3 ของ `00-roadmap.md`
+- [ ] **Step 4:** PASS · suite 0 failures · Commit `fix(R1.16): the conflicting-repos refusal says how to continue from where the migration stopped`
+
+---
+
+### Task R1.17: ตรวจซ้ำหลัง R1.13–R1.16 (verification)
+
+**ชั้น:** — · **ต้องเสร็จก่อน:** R1.13–R1.16
+
+- [ ] compose: env `apply_mode` ว่าง → หน้า entities / entity / plan review ไม่มีปุ่มเขียน มี notice; เปิด `/entities/new?type=upstream` ตรง → กลับไป list พร้อมเหตุผล;
+  ตั้งกลับเป็น Direct apply ผ่านลิงก์ใหม่ในแถว env → ปุ่มกลับมา · connection `access_level: ro` (`local/dev-ro`) direct → ไม่มีปุ่มเขียน · `local/uat` (PR, ro) → ยังมีปุ่ม
+- [ ] สำเนา DB dev: rollback STEP=4 → migrate ที่ PR คนละ repo → ข้อความใหม่ → ทำตามข้อความ → migrate สำเร็จ · drop สำเนา
+- [ ] `bundle exec rspec` 0 failures · vitest ผ่าน · detect ไม่เพิ่ม · ภาพหน้าจอ 390/1280 ของหน้าที่เปลี่ยน · ลบข้อมูลทดสอบใน DB dev
+
 ## เกณฑ์ปิดงาน R1
 
 - [ ] เกณฑ์ใน `R1-multi-project-env.md` (ฉบับแก้ §C2) ครบทุกข้อ พร้อมหลักฐาน

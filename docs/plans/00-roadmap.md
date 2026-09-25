@@ -123,6 +123,12 @@ R2, R3, R5, R7, T0 ไม่มี migration
   `deck_diff`, `audit_events.diff` และคืนผ่าน API (MCP) · rake `kong:redact_stored_plugin_secrets` ล้างได้เฉพาะของที่มีอยู่แล้ว ·
   เจ้าของงานเลือก "เปิดเป็น task แยกทีหลัง" (ทางเลือก: redact ตอนบันทึก audit + หลัง apply / เข้ารหัส column ระหว่าง pending) — หยุดถามก่อนทำ
 
+### งานต่อที่รอ (จากตรวจ R1.12 บนเครื่อง compose, ตัดสิน 2026-09-25)
+
+- **connection `stored` login ใน development ไม่ได้บนเครื่องที่ไม่มี `config/master.key`** — ได้ 500
+  `ActiveRecord::Encryption::Errors::Configuration` (T0.4 ตั้งกุญแจให้เฉพาะ test) · ทางเลือก: วาง `master.key` จริง / ตั้งกุญแจ dev แยก /
+  แสดงข้อความแทน 500 · เจ้าของงานเลือก "จดไว้ก่อน ยังไม่ทำ" — หยุดถามก่อนทำ
+
 ## ข้อความที่จะแก้ในไฟล์ requirement
 
 อยู่ใน `docs/plans/design-amendments.md` §C (อนุมัติแล้ว — แก้ไฟล์จริงเป็น task แรกของช่วงที่ 2: `T0.0` พร้อม `CLAUDE.md` §B) · §A (DESIGN.md) เป็นร่างให้ทีมแก้เอง
@@ -148,7 +154,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 
 - [x] T0 — `docs/plans/T0-security-and-tooling.md` (ปิด 2026-09-25: rspec 889/0, vitest 28/28, PAT revoke แล้ว — เจ้าของงานยืนยัน)
 - [ ] R3 — `docs/plans/R3-onboarding-hints.md` (R3.1–R3.6 เสร็จ · ตรวจเกณฑ์ 2026-09-25: rspec 951/0, ต่อมา 952/0, detect ไม่เพิ่มจาก baseline · ข้อค้าง 2 ข้อแก้แล้ว · เหลือ R3.7 ซึ่งทำหลัง R2)
-- [ ] R1 — `docs/plans/R1-multi-project-env.md`
+- [ ] R1 — `docs/plans/R1-multi-project-env.md` (R1.1–R1.11 เสร็จ · R1.12 ตรวจบน compose 2026-09-25: rspec 1033/0, vitest 30/30 · เพิ่ม R1.13–R1.17 ตามคำตัดสินข้อค้าง)
 - [ ] R8 — `docs/plans/R8-pr-mode-changeset.md`
 - [ ] R2 — `docs/plans/R2-create-service-route.md`
 - [ ] R4 — `docs/plans/R4-plugins.md`
