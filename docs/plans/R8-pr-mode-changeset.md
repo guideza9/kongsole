@@ -629,8 +629,8 @@ end
 #3 lock working copy ต่อ connection (advisory lock) + ไม่ prefetch หน้า review · #4 delete ที่ rank ≥ 2 หรือ protected ต้องพิมพ์ชื่อ entity อีกครั้ง ·
 #6 placeholder `DECK_` ในไฟล์เพิ่มของ env · #9 อ่าน head ของ repo นอก transaction + timeout 15 วินาที · #14 ขั้นตอน rollback ของ migration R8 ใน `00-roadmap.md`
 
-**ยังไม่ได้ทำ — รอเจ้าของงานตัดสิน:** #5 "แก้รายการ" (ฟอร์มที่ส่ง `replaces_plan_id`) — ต้องมีฟอร์มต่อชนิด entity ซึ่งฟอร์ม service/route เป็นของ R2 ·
-ตอนนี้ข้อความปฏิเสธบอกทางที่ใช้ได้จริง: "remove that item first, then propose the change again"
+**#5 "แก้รายการ" — เจ้าของงานตัดสิน 2026-09-25: (ก) ลบแล้วเสนอใหม่** · ไม่สร้างฟอร์มที่ส่ง `replaces_plan_id` ใน R8 ·
+ข้อความปฏิเสธบอกทางที่ใช้ได้จริง: "remove that item first, then propose the change again" (backend รองรับ `replaces_plan_id` แล้ว หากจะเพิ่มฟอร์มแก้ภายหลัง)
 Minor ที่เลื่อนไว้: parent ใน attributes ข้าม admin-path check (ปลอดภัยเพราะ admin service ไม่อยู่ใน git) · submit ไม่ตรวจซ้ำว่ายังเป็น PR mode ·
 ล้มหลัง push แล้วบอก "Nothing was pushed" · `pr_url` รับบน changeset ที่ไม่ได้ submit และ remove/abandon/pr_url ไม่มี audit ·
 audit ของ submit ปน actor_kind ของผู้เสนอกับชื่อผู้ submit · หน้า review ของ changeset ที่ submit แล้วยังเปิดได้ · strip 3 ช่องที่ 390px เหลือช่องว่าง ·
@@ -650,8 +650,8 @@ audit ของ submit ปน actor_kind ของผู้เสนอกับ
 
 ## เกณฑ์ปิดงาน R8
 
-- [ ] เกณฑ์ใน `R8-pr-mode-changeset.md` (ฉบับแก้ §C9) ครบ พร้อมหลักฐาน — **ครบยกเว้น "แก้รายการ"** (ดู, ลบ, ยังอยู่หลังปิด browser, preview diff, block admin path + threshold,
-  PR body + `Changed-by:`, ตรวจ drift, ลิงก์ branch + คัดลอก PR body + วาง URL, CiGate ก่อน push, round-trip byte-exact, R3 — มีหลักฐานใน R8.1–R8.10) · "แก้" รอคำตัดสิน #5
+- [x] เกณฑ์ใน `R8-pr-mode-changeset.md` (ฉบับแก้ §C9) ครบ พร้อมหลักฐาน — "แก้รายการ" = ลบแล้วเสนอใหม่ (เจ้าของงานตัดสิน #5) (ดู, ลบ, ยังอยู่หลังปิด browser, preview diff, block admin path + threshold,
+  PR body + `Changed-by:`, ตรวจ drift, ลิงก์ branch + คัดลอก PR body + วาง URL, CiGate ก่อน push, round-trip byte-exact, R3 — มีหลักฐานใน R8.1–R8.10)
 - [x] migration 2 ตัว up/down ผ่าน (R8.1: migrate → rollback STEP=2 → migrate) · ขั้นตอน rollback ใน `00-roadmap.md` #5, #6
 - [x] test "no write call" ผ่านทั้ง planner และ submitter · compose: request ที่ไม่ใช่ GET จาก `ro-kongctl` มีแค่ access probe ตอน login (router 404)
 - [x] `bundle exec rspec` **1174/0** · vitest **31/31** · detect: หน้าเดิมไม่เพิ่ม (60 → 74 ทั้งหมดอยู่ใน 5 หน้าใหม่ และเป็นชนิดที่ baseline มีจาก component เดิม) ·
