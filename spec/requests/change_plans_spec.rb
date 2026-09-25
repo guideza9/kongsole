@@ -56,6 +56,20 @@ RSpec.describe "ChangePlans (web)", type: :request do
     expect(response.body).to match(/<form[^>]*action-bar env-prod.*name="confirm_env_name".*<\/form>/m)
   end
 
+  # R8.7: a PR-mode plan leaves only as part of its changeset.
+  it "sends Apply on a PR-mode plan back with the reason, and changes nothing" do
+    prod = create(:kong_connection, :prod, name: "prod", admin_url: "https://kong-prod.test", credential_mode: "session", apply_mode: "pr")
+    sign_in(prod)
+    plan = create(:change_plan, kong_connection: prod, apply_mode: "pr", changeset: create(:changeset, kong_connection: prod))
+    expect(Kong::GitClient).not_to receive(:new)
+
+    post apply_change_plan_path(plan), params: { confirm_env_name: prod.name, password: "pw" }
+
+    expect(response).to redirect_to(change_plan_path(plan))
+    expect(flash[:alert]).to include("changeset")
+    expect(plan.reload.status).to eq("pending")
+  end
+
   it "drops the guardrail count and the countdown once a plan is applied" do
     sign_in
     plan = create(:change_plan, kong_connection: connection, status: "applied")
@@ -564,55 +578,9 @@ RSpec.describe "ChangePlans (web)", type: :request do
     expect(response.body).to include(pr_plan.before["name"])
   end
 
-  describe "PR-mode apply" do
-    def sh!(*cmd, chdir:)
-      _out, err, status = Open3.capture3(*cmd, chdir: chdir.to_s)
-      raise "#{cmd.join(' ')} failed: #{err}" unless status.success?
-    end
-
-    around do |example|
-      Dir.mktmpdir do |dir|
-        @tmp = Pathname.new(dir)
-        example.run
-      end
-    end
-
-    let(:bare_repo) { @tmp.join("uat.git") }
-    let(:pr_connection) do
-      create(:kong_connection, apply_mode: "pr", access_level: "ro", credential_mode: "session",
-        admin_url: "https://kong-uat.test", git_repo: bare_repo.to_s, git_branch: "main", git_path: "kong.yaml",
-        select_tags: [ "managed-by-kongctl" ])
-    end
-
-    before do
-      sh!("git", "init", "--bare", "--initial-branch=main", bare_repo.to_s, chdir: @tmp)
-      scratch = @tmp.join("seed")
-      sh!("git", "clone", bare_repo.to_s, scratch.to_s, chdir: @tmp)
-      File.write(scratch.join("kong.yaml"), Kong::DeckDocument.serialize(Kong::DeckDocument.parse(nil, select_tags: [ "managed-by-kongctl" ])))
-      sh!("git", "add", "-A", chdir: scratch)
-      sh!("git", "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed", chdir: scratch)
-      sh!("git", "push", "origin", "main", chdir: scratch)
-
-      original_new = Kong::GitClient.method(:new)
-      allow(Kong::GitClient).to receive(:new) { |connection:| original_new.call(connection: connection, working_dir: @tmp.join("cache")) }
-      allow(Kong::DeckCli).to receive(:validate).and_return(true)
-      allow(Kong::DeckCli).to receive(:diff).and_return({ "changes" => [ { "name" => "orders-api", "change" => "create" } ] })
-    end
-
-    it "pushes a branch instead of writing to Kong, even on a read-only credential" do
-      sign_in(pr_connection)
-      plan = create(:change_plan, kong_connection: pr_connection, apply_mode: "pr", operation: "create",
-        target_kong_id: nil, before: {}, after: { "name" => "orders-api" }, base_updated_at: nil)
-
-      post apply_change_plan_path(plan)
-
-      expect(plan.reload.status).to eq("applied")
-      expect(plan.pr_state).to eq("branch_pushed")
-
-      get change_plan_path(plan)
-      expect(response.body).to match(%r{Pushed\s*<time[^>]*>[^<]+</time>\s*to branch})
-    end
-  end
+  # R8.7: a PR-mode plan is no longer applied from its own page -- see "sends
+  # Apply on a PR-mode plan back" above, and the changeset submit in
+  # spec/requests/changesets_spec.rb (R8.8).
 
   describe "certificates and SNIs (M5b)" do
     let(:cert_id) { "dddddddd-0000-0000-0000-00000000000d" }

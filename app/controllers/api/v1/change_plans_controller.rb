@@ -45,6 +45,11 @@ module Api
       def apply
         plan = ChangePlan.where(kong_connection: current_pat_connection).find(params[:id])
 
+        # R8.7 (Q13): an agent adds items to a changeset; only a person submits it.
+        if plan.apply_mode == "pr" || plan.kong_connection.apply_mode == "pr"
+          return render json: { error: pr_mode_refusal(plan) }, status: :forbidden
+        end
+
         if plan.kong_connection.rank >= REAUTH_RANK_THRESHOLD && plan.kong_connection.apply_mode == "direct"
           return render json: {
             error: "connection is rank #{plan.kong_connection.rank} on apply_mode direct -- the agent path can only " \
@@ -99,6 +104,14 @@ module Api
 
       def client_for(connection)
         Kong::Client.new(connection: connection, secret: connection.auth_secret)
+      end
+
+      def pr_mode_refusal(plan)
+        if plan.changeset_id
+          "submit changeset #{plan.changeset_id} from the Kongsole web UI -- agents can add items but only a person submits"
+        else
+          "PR-mode changes now collect in a changeset -- re-propose this with kong_plan; a person submits the changeset from the Kongsole web UI"
+        end
       end
 
       def serialize_plan(plan)

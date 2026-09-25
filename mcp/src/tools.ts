@@ -114,7 +114,9 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
       description:
         "Propose a create/update/delete against a Kong entity. No side effect on Kong -- returns a diff and a " +
         "plan_id for kong_apply to execute. Deleting an admin-path or protected entity is always rejected here, " +
-        "with no override. A certificate's key must be a {vault://env/NAME} reference -- a private key is never accepted.",
+        "with no override. A certificate's key must be a {vault://env/NAME} reference -- a private key is never accepted. " +
+        "On a PR-mode connection (uat/prod) the plan is added to the connection's open changeset (the response names " +
+        "changeset_id); it reaches git only when a person submits that changeset from the Kongsole web UI.",
       inputSchema: {
         connection: CONNECTION,
         type: z
@@ -150,7 +152,9 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
       title: "Apply a proposed Kong entity change",
       description:
         "Execute a pending plan from kong_plan against Kong. Rejected outright, before touching Kong, if the " +
-        "connection is rank >= 2 and still on apply_mode direct (agent writes to those need PR mode).",
+        "connection is rank >= 2 and still on apply_mode direct (agent writes to those need PR mode). " +
+        "A PR-mode plan cannot be applied here: it sits in a changeset, and only a person submits a changeset, " +
+        "from the Kongsole web UI.",
       inputSchema: {
         connection: CONNECTION,
         plan_id: z.number().int().describe("The id kong_plan returned"),

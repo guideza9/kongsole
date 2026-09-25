@@ -105,6 +105,8 @@ module Kong
       Kong::GitClient::NETWORK_KINDS.include?(Kong::NetworkFailure.classify_text(text))
     end
 
+    public
+
     # decK reads an empty `select_tags` as "no filter": `deck gateway sync` would
     # then treat the whole workspace as managed and delete everything the file
     # does not list (CLAUDE.md rule 2).
@@ -115,6 +117,8 @@ module Kong
         "this connection has no select_tags -- decK would sync the whole workspace and delete everything absent from " \
         "the config file; set select_tags on the env first"
     end
+
+    private
 
     def read_yaml(git)
       path = git.working_dir.join(@connection.git_path)

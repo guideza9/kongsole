@@ -207,6 +207,20 @@ describe("registerTools", () => {
     expect(result.content[0].text).toBe("unexpected");
   });
 
+  // R8.7: on a PR-mode connection a proposal joins a changeset, and only a
+  // person submits it -- the agent is told so before it tries.
+  describe("PR mode", () => {
+    it("says kong_plan adds to a changeset there, and kong_apply cannot submit it", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+
+      expect(configs.get("kong_plan")!.description).toContain("changeset");
+      const apply = configs.get("kong_apply")!.description!;
+      expect(apply).toContain("changeset");
+      expect(apply).toContain("only a person");
+    });
+  });
+
   // R1.6: connections are named project/env; a bare env name is ambiguous
   // across projects and the API refuses it, so every tool says so up front.
   describe("connection naming", () => {

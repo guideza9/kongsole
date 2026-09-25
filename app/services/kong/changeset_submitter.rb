@@ -57,12 +57,15 @@ module Kong
       raise Kong::ChangeGuardrails::Violation, "this changeset has no items to submit" if @renderer.items.empty?
 
       Kong::ChangeGuardrails.check_write_access!(connection: @connection)
+      # Refused before the repo is even pulled: nothing to clean up after.
+      @renderer.require_select_tags!
       @renderer.items.each { |plan| check_item!(plan) }
     end
 
     # Re-checked here, not only when the item was added: the admin path or
     # the key policy may have moved since (CLAUDE.md rules 3 and 4).
     def check_item!(plan)
+      Kong::DeckRenderer.assert_supported!(plan.entity_type)
       if @connection.admin_path?(plan.target_kong_id) || @connection.admin_path?(plan.parent_kong_id)
         raise Kong::ChangeGuardrails::Violation,
           "item #{plan.position} (#{plan.entity_type} #{plan.entity_label}) is on the admin path -- it is never rendered into decK YAML"

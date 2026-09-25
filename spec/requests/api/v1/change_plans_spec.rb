@@ -281,6 +281,24 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
       expect(plan.reload.status).to eq("pending")
     end
 
+    # R8.7: an agent adds items to a changeset; only a person submits it.
+    it "refuses a PR-mode plan with 403 and says a person submits its changeset, leaving it pending" do
+      connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "ro", credential_mode: "stored",
+        auth_secret: "devpassword", project_env: create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[t]))
+      token = token_for(connection)
+      changeset = create(:changeset, kong_connection: connection)
+      plan = create(:change_plan, kong_connection: connection, apply_mode: "pr", actor_kind: "agent", changeset: changeset)
+      expect(Kong::GitClient).not_to receive(:new)
+
+      post apply_api_v1_change_plan_path(plan), params: { connection: connection.name }, headers: auth(token)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(JSON.parse(response.body)["error"]).to eq(
+        "submit changeset #{changeset.id} from the Kongsole web UI -- agents can add items but only a person submits"
+      )
+      expect(plan.reload.status).to eq("pending")
+    end
+
     it "answers 422 with decK's scrubbed message when deck rejects the rendered YAML" do
       connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword")
       token = token_for(connection)

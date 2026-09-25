@@ -485,7 +485,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R8.6 · **ไฟล์ที่แก้ได้:** `app/services/kong/change_applier.rb` (ลบ `execute_pr!` ย้าย helper ที่ submitter ใช้ไปไว้ใน `ChangesetRenderer`/`PrBody`), `app/controllers/change_plans_controller.rb` (`apply` บน plan PR → redirect ไป changeset + alert), `app/controllers/api/v1/change_plans_controller.rb` (`kong_apply` บน plan PR → 403 `"submit changeset <id> from the Kongsole web UI -- agents can add items but only a person submits"`), `mcp/src/tools.ts` (description ของ `kong_plan`/`kong_apply`), `spec/services/kong/change_applier_spec.rb` (ย้าย example PR mode ที่ยังมีคุณค่าไป `changeset_submitter_spec.rb`), `spec/requests/api/v1/change_plans_spec.rb`, `spec/requests/change_plans_spec.rb`, `mcp/src/tools.test.ts`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 it "refuses to apply a PR-mode plan on its own, without touching git" do
@@ -497,9 +497,9 @@ end
 ```
 + API: `kong_apply` → 403 ข้อความตามข้างบน, plan ยัง pending
 
-- [ ] **Step 2:** FAIL → implement → PASS
-- [ ] **Step 3:** ตรวจว่า example PR เดิมทั้งหมดใน `change_applier_spec.rb` ถูกย้ายหรือแทนด้วย example เทียบเท่าใน submitter (ห้ามลดความคุ้มครอง: select_tags ว่าง, round-trip, admin path, cert placeholder, failure scrub, git token scrub) — ทำตารางเทียบในข้อความ commit
-- [ ] **Step 4:** suite 0 failures · vitest ผ่าน · Commit `refactor(R8.7): PR mode writes only through changesets`
+- [x] **Step 2:** FAIL → implement → PASS
+- [x] **Step 3:** ตรวจว่า example PR เดิมทั้งหมดใน `change_applier_spec.rb` ถูกย้ายหรือแทนด้วย example เทียบเท่าใน submitter (ห้ามลดความคุ้มครอง: select_tags ว่าง, round-trip, admin path, cert placeholder, failure scrub, git token scrub) — ทำตารางเทียบในข้อความ commit
+- [x] **Step 4:** suite 0 failures · vitest ผ่าน · Commit `refactor(R8.7): PR mode writes only through changesets`
 
 ---
 

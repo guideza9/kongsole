@@ -1,13 +1,11 @@
 module Kong
-  # Executes a pending ChangePlan -- docs/DESIGN.md section 10, steps 6
-  # ("Execute") and 7 ("Record"). Re-runs guardrails (state may have moved
-  # since the plan was proposed), checks the plan's expiry and its
-  # optimistic lock, then either writes through to Kong (`apply_mode:
-  # direct`) or renders + pushes a decK YAML branch (`apply_mode: pr`,
-  # docs/DESIGN.md section 6) -- never both, and never mutates a plan that
-  # isn't pending.
+  # Executes a pending direct-mode ChangePlan -- docs/DESIGN.md section 10,
+  # steps 6 ("Execute") and 7 ("Record"). Re-runs guardrails (state may have
+  # moved since the plan was proposed), checks the plan's expiry and its
+  # optimistic lock, then writes through to Kong. Never mutates a plan that
+  # isn't pending. A PR-mode plan is refused: it leaves Kongsole only as part
+  # of its changeset (Kong::ChangesetSubmitter, R8), submitted by a person.
   class ChangeApplier
-    BRANCH_PREFIX = "kongctl"
 
     Result = Struct.new(:change_plan, :audit_event, keyword_init: true)
 
@@ -27,6 +25,7 @@ module Kong
 
     def call
       raise Kong::ChangeGuardrails::Violation, "this plan is #{@change_plan.status}, not pending" unless @change_plan.status == "pending"
+      refuse_pr_mode!
       raise Kong::ChangeGuardrails::Violation, "this plan expired -- re-propose the change" if @change_plan.expired?
 
       Kong::ChangeGuardrails.check_write_access!(connection: @connection)
@@ -52,17 +51,10 @@ module Kong
         )
       end
 
-      # An admin-path entity must never reach decK YAML at all (rule ง) --
-      # blocked here, before anything is rendered, rather than filtered out
-      # at serialize time.
-      if @change_plan.apply_mode == "pr" && @connection.admin_path?(@change_plan.target_kong_id)
-        raise Kong::ChangeGuardrails::Violation, "this entity is on the admin path -- it is never rendered into decK YAML"
-      end
-
       check_optimistic_lock! unless @change_plan.operation == "create"
 
       execute!
-    rescue Kong::Client::Error, Kong::GitClient::Error, Kong::DeckCli::Error => e
+    rescue Kong::Client::Error => e
       # Keep the failing side's own words on the plan, not just in the flash
       # that dies on the next request -- a reviewer opening this plan later
       # needs to know why it failed.
@@ -72,21 +64,24 @@ module Kong
 
     private
 
+    # R8.7: PR mode writes only through a changeset -- one branch, one PR, one
+    # gate for all of them -- and only a person submits it.
+    def refuse_pr_mode!
+      return unless @change_plan.apply_mode == "pr" || @connection.apply_mode == "pr"
+
+      where = @change_plan.changeset_id ? "submit changeset #{@change_plan.changeset_id}" : "re-propose it so it joins a changeset, then submit that"
+      raise Kong::ChangeGuardrails::Violation,
+        "PR-mode changes leave Kongsole only as a changeset -- #{where} from the changeset page"
+    end
+
     # A stored reason is read back by every operator who opens the plan, for as
     # long as the plan exists, so it goes through the same bar as anything else
     # entering the read-model (docs/DESIGN.md section 8).
     FAILURE_REASON_LIMIT = 2000
-    # `https://user:token@host/repo.git` -- git echoes the remote it was given
-    # in its own stderr, and `run!` puts the argv in the message, so a config
-    # repo URL carrying a token would otherwise be persisted verbatim.
-    URL_CREDENTIAL = %r{://[^/\s@]+@}
-
     def failure_reason_for(error)
       text = [ error.message, kong_detail(error) ].compact_blank.join(" -- ")
 
-      Kong::CertificateKeyPolicy.scrub(text)
-        .gsub(URL_CREDENTIAL, "://")
-        .truncate(FAILURE_REASON_LIMIT)
+      Kong::CertificateKeyPolicy.scrub(text).truncate(FAILURE_REASON_LIMIT)
     end
 
     # Kong::Client raises a classification of the status ("unexpected Kong Admin
@@ -138,14 +133,10 @@ module Kong
     end
 
     def execute!
-      if @change_plan.apply_mode == "pr"
-        execute_pr_discarding_unsaved_id!
-      else
-        case @change_plan.operation
-        when "create" then execute_create!
-        when "update" then execute_update!
-        when "delete" then execute_delete!
-        end
+      case @change_plan.operation
+      when "create" then execute_create!
+      when "update" then execute_update!
+      when "delete" then execute_delete!
       end
 
       @change_plan.update!(status: "applied")
@@ -224,86 +215,6 @@ module Kong
       KongEntity.active
         .where(kong_connection: @connection, parent_kong_id: @change_plan.target_kong_id)
         .update_all(deleted_at: Time.current)
-    end
-
-    # The renderer mints a certificate create's id onto the plan in memory. If
-    # anything after that raises, nothing was pushed, so the id must not be
-    # written by whatever saves the plan next (the rescue that marks it failed).
-    def execute_pr_discarding_unsaved_id!
-      execute_pr!
-    rescue StandardError
-      @change_plan.restore_attributes(%w[target_kong_id])
-      raise
-    end
-
-    # docs/DESIGN.md section 6, "เส้นทางของ PR mode" steps 2-8: pull the
-    # config repo, refuse a file the tool could not reproduce, mutate + serialize
-    # its YAML (rules ก-ค), validate + diff against Kong with the read-only
-    # credential already in hand, commit to a branch, and push. No PR-host API
-    # call -- see Kong::GitClient. Everything that can refuse does so before the
-    # branch is touched: the repo is left clean and the plan stays pending.
-    def execute_pr!
-      Kong::DeckRenderer.assert_supported!(@change_plan.entity_type)
-      require_select_tags!
-
-      git = Kong::GitClient.new(connection: @connection).pull!
-
-      text = read_yaml(git)
-      Kong::DeckDocument.verify_input!(text)
-      doc = Kong::DeckDocument.parse(text, select_tags: @connection.select_tags)
-      Kong::DeckRenderer.apply_change(doc, @change_plan)
-      rendered = Kong::DeckDocument.serialize(doc)
-      verify_round_trip!(rendered)
-
-      branch = "#{BRANCH_PREFIX}/#{@change_plan.id}"
-      git.checkout_branch!(branch)
-      git.write_file(@connection.git_path, rendered)
-
-      file_path = git.working_dir.join(@connection.git_path)
-      Kong::DeckCli.validate(file_path)
-      deck_diff = Kong::DeckCli.diff(file_path, connection: @connection, secret: @secret)
-
-      commit_sha = git.commit!(commit_message, author_name: @actor_username)
-      git.push!(branch)
-
-      # A certificate create's minted id (target_kong_id) was assigned in memory
-      # by Kong::DeckRenderer; it is written only here, once the branch is pushed.
-      @change_plan.update!(commit_sha: commit_sha, deck_diff: deck_diff, pr_state: "branch_pushed",
-        target_kong_id: @change_plan.target_kong_id)
-    end
-
-    # decK reads an empty `select_tags` as "no filter": `deck gateway sync` would
-    # then treat the whole workspace as managed and delete everything the file
-    # does not list. So a PR-mode connection must name its tags; refused before
-    # the repo is pulled. (Kong::DeckDocument writes `select_tags: []` faithfully;
-    # this is the enforcement point.)
-    def require_select_tags!
-      return if Array(@connection.select_tags).map(&:to_s).reject(&:blank?).any?
-
-      raise Kong::ChangeGuardrails::Violation,
-        "this connection has no select_tags -- decK would sync the whole workspace and delete everything absent from " \
-        "the config file; set select_tags on the connection first"
-    end
-
-    def read_yaml(git)
-      path = git.working_dir.join(@connection.git_path)
-      File.exist?(path) ? File.read(path) : nil
-    end
-
-    def verify_round_trip!(rendered)
-      Kong::DeckDocument.verify_input!(rendered)
-    rescue Kong::DeckDocument::Unparseable => e
-      # e.message names only a line number (never a value), so an operator can see
-      # where a serializer bug bites.
-      raise Kong::ChangeGuardrails::Violation,
-        "rendered YAML did not round-trip byte-for-byte (#{e.message}) -- refusing to push a diff that would be noisy to review"
-    end
-
-    def commit_message
-      summary = "#{@change_plan.operation} #{@change_plan.entity_type} #{@change_plan.entity_label}"
-      lines = [ summary, "", "Plan: #{@change_plan.id}" ]
-      lines << "Changed-by: #{@actor_operator}" if @actor_operator.present?
-      lines.join("\n")
     end
 
     def parse(response)
