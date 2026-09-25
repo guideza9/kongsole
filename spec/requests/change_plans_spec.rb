@@ -363,6 +363,10 @@ RSpec.describe "ChangePlans (web)", type: :request do
     end
 
     describe "deleting at rank >= 2" do
+      # A direct delete: the env is direct for these (R1.3 refuses a plan
+      # whose mode no longer matches its env's).
+      before { set_env_policy(prod, apply_mode: "direct", source: "local") }
+
       let(:delete_plan) do
         create(:change_plan, :delete, kong_connection: prod, apply_mode: "direct", target_kong_id: kong_id,
           before: { "id" => kong_id, "name" => "checkout-api", "tags" => [], "updated_at" => 1_700_000_000 })

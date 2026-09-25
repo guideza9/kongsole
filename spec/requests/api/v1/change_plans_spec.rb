@@ -12,6 +12,21 @@ RSpec.describe "API::V1::ChangePlans", type: :request do
   end
 
   describe "POST /api/v1/change_plans (kong_plan)" do
+    it "answers 403 and creates no plan on a connection whose apply_mode is not set" do
+      connection = create(:kong_connection, :stored, project_env: create(:project_env, apply_mode: nil),
+        admin_url: "https://kong-admin.test", access_level: "rw", auth_secret: "devpassword")
+      token = token_for(connection)
+
+      expect {
+        post api_v1_change_plans_path, params: { connection: connection.name, type: "service", operation: "create",
+          attributes: { name: "billing", host: "billing.internal" } }, headers: auth(token)
+      }.not_to change(ChangePlan, :count)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body["error"]).to match(/apply mode is not set/i)
+      expect(a_request(:any, /kong-admin\.test/)).not_to have_been_made
+    end
+
     it "proposes an update and returns the diff + plan id" do
       connection = create(:kong_connection, admin_url: "https://kong-admin.test", access_level: "rw", credential_mode: "stored", auth_secret: "devpassword")
       token = token_for(connection)

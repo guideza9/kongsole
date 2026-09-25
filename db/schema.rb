@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_100200) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_25_100300) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -67,7 +67,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_100200) do
     t.jsonb "admin_path_fingerprint", default: {}, null: false
     t.string "admin_url", null: false
     t.boolean "allow_insecure_http", default: false, null: false
-    t.string "apply_mode", default: "direct", null: false
+    t.string "apply_mode"
     t.text "auth_secret"
     t.string "auth_type", default: "basic", null: false
     t.string "auth_username"

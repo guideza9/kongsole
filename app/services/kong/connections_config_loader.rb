@@ -38,7 +38,8 @@ module Kong
         env: attrs[:env],
         admin_url: attrs[:admin_url],
         auth_type: attrs[:auth_type] || "basic",
-        apply_mode: attrs[:apply_mode] || "direct",
+        # R1.3: no apply_mode means not set (read-only), never direct.
+        apply_mode: attrs[:apply_mode],
         verify_ssl: attrs.fetch(:verify_ssl, true),
         # docs/DESIGN.md section 3: the http:// escape hatch may only ever be
         # set from this file, never from the web UI (see ConnectionsController).

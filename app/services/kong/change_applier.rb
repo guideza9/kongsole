@@ -30,6 +30,7 @@ module Kong
       raise Kong::ChangeGuardrails::Violation, "this plan expired -- re-propose the change" if @change_plan.expired?
 
       Kong::ChangeGuardrails.check_write_access!(connection: @connection)
+      Kong::ChangeGuardrails.check_plan_mode_current!(plan: @change_plan, connection: @connection)
       Kong::ChangeGuardrails.check_plugin_immutable!(
         connection: @connection, entity_type: @change_plan.entity_type,
         target: @change_plan.operation == "create" ? nil : { "id" => @change_plan.target_kong_id },

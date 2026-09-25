@@ -33,7 +33,8 @@ class KongConnection < ApplicationRecord
   validates :credential_kind, inclusion: { in: CREDENTIAL_KINDS }, allow_nil: true
   validates :credential_mode, inclusion: { in: CREDENTIAL_MODES }
   validates :access_level, inclusion: { in: ACCESS_LEVELS }, allow_nil: true
-  validates :apply_mode, inclusion: { in: APPLY_MODES }
+  # nil = not set: nothing can be written (R1.3, Kong::ChangeGuardrails).
+  validates :apply_mode, inclusion: { in: APPLY_MODES }, allow_nil: true
   validates :last_status, inclusion: { in: STATUSES }, allow_nil: true
   validate :admin_url_must_be_https_unless_localhost
   validate :git_web_url_must_be_a_web_url

@@ -314,7 +314,7 @@ end
 - Create: `db/migrate/<ts>_make_kong_connection_apply_mode_nullable.rb`
 - Modify: `app/services/kong/change_guardrails.rb`, `app/controllers/api/v1/change_plans_controller.rb`, `app/models/kong_connection.rb` (`validates :apply_mode, inclusion:, allow_nil: true`), `app/controllers/connections_controller.rb` (`new` ไม่ตั้ง `apply_mode: "direct"`), `app/services/kong/connections_config_loader.rb` (ลบ `|| "direct"`), `spec/services/kong/change_guardrails_spec.rb`, `spec/services/kong/change_applier_spec.rb`, `spec/requests/api/v1/change_plans_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/change_guardrails_spec.rb — เพิ่ม
@@ -354,7 +354,7 @@ it "answers 403 and creates no plan on a connection whose apply_mode is not set"
 end
 ```
 
-- [ ] **Step 2:** FAIL → แก้ `check_write_access!`:
+- [x] **Step 2:** FAIL → แก้ `check_write_access!`:
 
 ```ruby
 def self.check_write_access!(connection:)
@@ -369,7 +369,7 @@ def self.check_write_access!(connection:)
 end
 ```
 
-- [ ] **Step 3:** migration
+- [x] **Step 3:** migration
 
 ```ruby
 class MakeKongConnectionApplyModeNullable < ActiveRecord::Migration[8.1]
@@ -390,8 +390,8 @@ class MakeKongConnectionApplyModeNullable < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 4:** PASS · migrate/rollback/migrate สะอาด · suite 0 failures
-- [ ] **Step 5:** Commit `feat(R1.3): an env with no apply_mode cannot be written through any path`
+- [x] **Step 4:** PASS · migrate/rollback/migrate สะอาด · suite 0 failures
+- [x] **Step 5:** Commit `feat(R1.3): an env with no apply_mode cannot be written through any path`
 
 ---
 

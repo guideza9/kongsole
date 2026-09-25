@@ -20,10 +20,27 @@ module Kong
     class Violation < StandardError; end
 
     def self.check_write_access!(connection:)
+      # R1.3: an env with no apply_mode is read-only through every path --
+      # never read as direct.
+      if connection.apply_mode.nil?
+        raise Violation, "#{connection.qualified_name || connection.name}: apply mode is not set -- nothing can be " \
+          "written until the environment is set to direct (in Kongsole) or pr (in config/connections.yml)"
+      end
       return if connection.apply_mode == "pr"
       return if connection.access_level == "rw"
 
       raise Violation, "this credential can't write (access_level: #{connection.access_level || 'unknown'})"
+    end
+
+    # R1.3: a plan runs the way it was proposed (a direct write or a pushed
+    # branch). If the env's apply_mode changed while it was pending, running
+    # it would either write the Admin API of what is now a PR env (CLAUDE.md
+    # rule 1) or push a branch nobody asked for -- so it is refused instead.
+    def self.check_plan_mode_current!(plan:, connection:)
+      return if plan.apply_mode == connection.apply_mode
+
+      raise Violation, "this plan was proposed for apply mode #{plan.apply_mode}, but " \
+        "#{connection.qualified_name || connection.name} is now #{connection.apply_mode || 'not set'} -- re-propose the change"
     end
 
     def self.check_delete_confirmation!(connection:, entity:, confirmation_name:, actor_kind: "human")

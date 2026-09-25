@@ -14,7 +14,7 @@ class ConnectionsController < ApplicationController
   end
 
   def new
-    @connection = KongConnection.new(credential_mode: "session", apply_mode: "direct", auth_type: "basic", verify_ssl: true)
+    @connection = KongConnection.new(credential_mode: "session", auth_type: "basic", verify_ssl: true)
   end
 
   def create
