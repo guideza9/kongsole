@@ -29,7 +29,7 @@ module Kong
       Kong::DeckCli.validate(file, extra_paths: extra)
       deck_diff = Kong::DeckCli.diff(file, connection: @connection, secret: @secret, extra_paths: extra)
 
-      Preview.new(yaml_diff: yaml_diff, deck_diff: deck_diff, gate: gate_for(deck_diff))
+      Preview.new(yaml_diff: yaml_diff, deck_diff: deck_diff, gate: gate_for(deck_diff), drift: drift_for(git))
     rescue Kong::GitClient::Error, Kong::DeckCli::Error, Kong::Client::Error => e
       Preview.new(yaml_diff: yaml_diff, error: self.class.scrub(e.message), explanation: explanation_for(e))
     rescue Kong::ChangeGuardrails::Violation, NotImplementedError => e
@@ -53,6 +53,13 @@ module Kong
       rendered = Kong::DeckDocument.serialize(doc)
       verify_round_trip!(rendered)
       rendered
+    end
+
+    # R8.5: read against the git copy just pulled, and Kong through the
+    # read-only credential.
+    def drift_for(git)
+      client = @secret.present? ? Kong::Client.new(connection: @connection, secret: @secret) : nil
+      Kong::ChangesetDrift.check(changeset: @changeset, git: git, client: client)
     end
 
     def gate_for(deck_diff)

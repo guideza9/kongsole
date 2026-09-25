@@ -355,7 +355,7 @@ end
 
 **Interfaces:** `Kong::ChangesetDrift.check(changeset:, git:, client:) -> Report`; `Report = Struct.new(:commits_behind, :kong_changed, keyword_init: true)` + `git_moved?` (`commits_behind.to_i > 0` หรือ base nil → `nil` = unknown แสดงเป็นเตือน), `any?`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -396,7 +396,7 @@ RSpec.describe Kong::ChangesetDrift do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R8.5): tell whether git or Kong moved since a changeset began`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R8.5): tell whether git or Kong moved since a changeset began`
 
 ---
 

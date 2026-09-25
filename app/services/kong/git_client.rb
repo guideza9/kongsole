@@ -104,6 +104,15 @@ module Kong
       out.split.first.presence || raise(Error, "#{@branch} was not found in the config repo")
     end
 
+    # R8.5: how many commits the pulled base branch has on top of `sha`, or
+    # nil when `sha` is not in its history (rewritten, or never there).
+    def commits_since(sha)
+      run!("git", "cat-file", "-e", "#{sha}^{commit}", chdir: working_dir)
+      run!("git", "rev-list", "--count", "#{sha}..HEAD", chdir: working_dir).strip.to_i
+    rescue Error
+      nil
+    end
+
     # Back to a clean base branch: nothing a preview or a failed submit wrote
     # may linger into the next render.
     def discard!

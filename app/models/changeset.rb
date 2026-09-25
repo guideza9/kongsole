@@ -19,10 +19,21 @@ class Changeset < ApplicationRecord
     end
 
     find_by(kong_connection: connection, status: "open") ||
-      create!(kong_connection: connection, status: "open", actor_username: actor_username, actor_operator: actor_operator)
+      create!(kong_connection: connection, status: "open", actor_username: actor_username, actor_operator: actor_operator,
+        base_git_sha: remote_head_sha(connection))
   rescue ActiveRecord::RecordNotUnique
     find_by!(kong_connection: connection, status: "open")
   end
+
+  # R8.5: where the changeset began, so a submit can tell whether git moved
+  # since. A repo that cannot be read now still lets the changeset open; the
+  # base is then unknown, and the submit asks for a look.
+  def self.remote_head_sha(connection)
+    Kong::GitClient.new(connection: connection).remote_head_sha
+  rescue Kong::GitClient::Error
+    nil
+  end
+  private_class_method :remote_head_sha
 
   # What will go into the branch, in the order it will be rendered.
   def items

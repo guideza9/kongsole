@@ -80,4 +80,11 @@ RSpec.describe Kong::ChangesetRenderer do
     expect(preview.explanation.key).to eq("network_dns_failed")
     expect(preview.explanation.next_step).to include("NONPROD VPN")
   end
+  it "says in the preview whether git moved since the changeset began (R8.5)" do
+    changeset.update!(base_git_sha: head_sha(repo))
+    create_item("billing")
+    push_empty_commit(repo)
+    preview = described_class.new(changeset: changeset, secret: "pw").preview
+    expect(preview.drift.commits_behind).to eq(1)
+  end
 end
