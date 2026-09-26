@@ -178,7 +178,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - [x] R8 — `docs/plans/R8-pr-mode-changeset.md` (ปิด 2026-09-25: R8.1–R8.10 + final review, rspec 1174/0, vitest 31/31 · #5 "แก้รายการ" = ลบแล้วเสนอใหม่ — เจ้าของงานยืนยัน · ข้อจำกัด: entity ที่ไม่อยู่ใน git)
 - [x] R2 — `docs/plans/R2-create-service-route.md` (ปิด 2026-09-26: R2.1–R2.8 + final review + distill ตาม R3.7 รอบที่ 1, rspec 1240/0, vitest 31/31 — เจ้าของงานยืนยัน)
 - [ ] R4 — `docs/plans/R4-plugins.md` (R4.1–R4.10 + final review เสร็จ 2026-09-26, rspec 1339/0, vitest 31/31 · R4.10 = secret ของ plugin ใน plan ถูกปิดผนึก (ตามที่เจ้าของงานสั่ง) · รอเจ้าของงานยืนยันปิด)
-- [ ] R5 — `docs/plans/R5-project-understanding.md` (R5.0–R5.9 เสร็จ 2026-09-27, rspec 1421/0 · spec `docs/superpowers/specs/2026-09-27-r5-project-understanding-design.md` + canvas ที่อนุมัติ · fixture จาก compose Kong: path_handling v1 = v0 บน traditional_compatible · รอ: สคริปต์ทดสอบ 5 นาทีของเจ้าของงาน + final review + เจ้าของงานยืนยันปิด)
+- [ ] R5 — `docs/plans/R5-project-understanding.md` (R5.0–R5.9 + final review เสร็จ 2026-09-27, rspec 1433/0 · spec `docs/superpowers/specs/2026-09-27-r5-project-understanding-design.md` + canvas ที่อนุมัติ · fixture จาก compose Kong: path_handling v1 = v0 บน traditional_compatible · รอ: สคริปต์ทดสอบ 5 นาทีของเจ้าของงาน + เจ้าของงานยืนยันปิด)
 - [ ] R7 — `docs/plans/R7-export-config.md`
 - [ ] R6 — `docs/plans/R6-traffic-dashboard.md`
 
