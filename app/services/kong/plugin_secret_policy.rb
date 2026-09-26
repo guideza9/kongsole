@@ -6,8 +6,10 @@ module Kong
   # must be a reference, never the value:
   #   {vault://env/rate-limiting-api-key}       Kong reads the env var (CE: env vault only)
   #   ${{ env "DECK_RATE_LIMITING_API_KEY" }}   decK fills it in when CI syncs
-  # Direct mode sends the value to Kong only; the read-model and the review
-  # page redact it (T0.2), and the form suggests a vault reference anyway.
+  # Direct mode sends the value to Kong and takes it: the read-model redacts it
+  # (T0.2), but the pending plan and its review page still hold it (the
+  # deferred "plugin secrets in the write path" item), so the form suggests a
+  # vault reference.
   #
   # A refusal names the field, never the value.
   module PluginSecretPolicy
@@ -27,6 +29,36 @@ module Kong
         raise Kong::ChangePlanner::InvalidChange, rejection_message(path, plugin["name"])
       end
     end
+
+    # PR mode skips Kong's schema check, and a key the schema does not have
+    # (a typo of api_key) is never checked as a secret: refuse it, at every
+    # record depth. Named by path, never by value. A map's own keys are the
+    # operator's, so a map (or a list) is not walked.
+    def self.check_known_fields!(attributes, schema:)
+      config_spec = Array(schema.to_h["fields"]).find { |field| field.is_a?(Hash) && field.key?("config") }&.dig("config")
+      return unless config_spec
+
+      unknown = unknown_path(attributes.to_h.deep_stringify_keys["config"], config_spec, [ "config" ])
+      return unless unknown
+
+      raise Kong::ChangePlanner::InvalidChange,
+        "#{unknown.join('.')}: Kong's schema for #{attributes.to_h.deep_stringify_keys['name']} has no such field -- " \
+        "check the name against the schema reference"
+    end
+
+    def self.unknown_path(value, spec, path)
+      return nil unless value.is_a?(Hash) && spec.is_a?(Hash) && spec["type"] == "record"
+
+      known = Array(spec["fields"]).to_h { |field| field.first }
+      value.each do |key, child|
+        return path + [ key ] unless known.key?(key)
+
+        found = unknown_path(child, known[key], path + [ key ])
+        return found if found
+      end
+      nil
+    end
+    private_class_method :unknown_path
 
     def self.dig(attributes, path)
       path.reduce(attributes) { |node, key| node.is_a?(Hash) ? node[key] : nil }

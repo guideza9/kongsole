@@ -67,8 +67,8 @@ module PluginsHelper
 
   # The reference a secret field suggests: `{vault://env/rate-limiting-api-key}`,
   # which Kong reads from RATE_LIMITING_API_KEY on every node.
-  def plugin_vault_example(plugin_name, field)
-    var = "#{plugin_name}-#{field.name}".downcase.gsub(/[^a-z0-9]+/, "-")
+  def plugin_vault_example(plugin_name, field_name)
+    var = "#{plugin_name}-#{field_name}".downcase.gsub(/[^a-z0-9]+/, "-")
     { example: "{vault://env/#{var}}", env_var: var.upcase.tr("-", "_"),
       deck: %(${{ env "DECK_#{var.upcase.tr('-', '_')}" }}) }
   end

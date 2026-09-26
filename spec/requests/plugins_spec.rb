@@ -206,6 +206,17 @@ RSpec.describe "Plugins (web)", type: :request do
       expect(ChangePlan.last.after["service"]).to eq("id" => service.kong_id)
     end
 
+    # R4 final review: a filtered-out option is not submitted; a picker that
+    # sent no scope must not turn into a global plugin.
+    it "refuses a picker submit that carries no scope instead of making the plugin global" do
+      sign_in
+      stub_schema
+      post plugins_path, params: { plugin_name: "rate-limiting", scope_picker: "1", plugin: { config: { minute: "60" } } }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("Pick where the plugin runs")
+      expect(ChangePlan.count).to eq(0)
+    end
+
     it "re-renders with the field's own error for a bad value" do
       sign_in
       connection.update!(access_level: "rw")
@@ -317,6 +328,29 @@ RSpec.describe "Plugins (web)", type: :request do
       page = config_page(scope_type: "route", scope_kong_id: admin_route_id)
       expect(response.body).to include("read-only")
       expect(page.css('form[action="/plugins"] button[type="submit"]')).to be_empty
+    end
+
+    # R4 final review: real rate-limiting's only secret is redis.password,
+    # inside a record edited as JSON.
+    it "treats a secret nested in a JSON field as a secret: hinted, never echoed, refused on that field" do
+      env = create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])
+      pr_connection = create(:kong_connection, admin_url: "https://kong-uat.test", project_env: env)
+      sign_in_to(pr_connection, access: :ro)
+      nested = { fields: [ { config: { type: "record", fields: [
+        { minute: { type: "number" } },
+        { redis: { type: "record", fields: [ { host: { type: "string" } }, { password: { type: "string", referenceable: true } } ] } } ] } } ] }.to_json
+      stub_request(:get, "https://kong-uat.test/schemas/plugins/rate-limiting").to_return(status: 200, body: nested)
+
+      get new_plugin_path(plugin_name: "rate-limiting")
+      expect(response.body).to include("must be a vault reference or decK placeholder")
+      expect(Nokogiri::HTML(response.body).at_css("#plugin-config-redis-hint").text).to include("{vault://env/")
+
+      post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { redis: "{\"password\":\"hunter2-PLAIN\"}" } } }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).not_to include("hunter2-PLAIN")
+      redis = Nokogiri::HTML(response.body).at_css("#plugin-config-redis")
+      expect(redis["aria-invalid"]).to eq("true")
+      expect(Nokogiri::HTML(response.body).at_css("#plugin-config-redis-error").text).to include("config.redis.password")
     end
 
     it "keeps the whole-plugin JSON editor as a disclosure" do

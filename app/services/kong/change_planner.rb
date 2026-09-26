@@ -86,9 +86,12 @@ module Kong
     def check_plugin_secrets!(before)
       return unless @entity_type == "plugin" && pr_mode? && %w[create update].include?(@operation)
 
-      plugin = { "name" => before["name"] }.compact.merge(@attributes)
+      # An update is checked against the plugin Kong holds, whatever name it sends.
+      plugin = @attributes.merge({ "name" => before["name"] }.compact)
       secret_paths = Kong::PluginSecretFields.new.fetch(client: @client, plugin_name: plugin["name"].to_s)
       Kong::PluginSecretPolicy.check!(plugin, secret_paths: secret_paths, apply_mode: @connection.apply_mode)
+      schema = Kong::SchemaCache.fetch(connection: @connection, client: @client, kind: "plugin", name: plugin["name"].to_s)
+      Kong::PluginSecretPolicy.check_known_fields!(plugin, schema: schema)
     end
 
     def create_plan!(before, after, **changeset_fields)

@@ -9,9 +9,11 @@ module Kong
   # or its values -- Kong::PluginSecretFields): the form never prefills one.
   class PluginSchemaForm
     # `element_kind` is a :list's element type (:string, :number, :integer),
-    # so the submitted lines go back to Kong typed.
+    # so the submitted lines go back to Kong typed. `nested_secrets` are the
+    # secret paths inside a field edited as JSON (rate-limiting's
+    # redis.password -> [["password"]]): never echoed back, always hinted.
     Field = Struct.new(:path, :name, :kind, :required, :default, :one_of, :secret, :description, :help, :element_kind,
-      keyword_init: true)
+      :nested_secrets, keyword_init: true)
 
     SCALARS = { "string" => :string, "number" => :number, "integer" => :integer, "boolean" => :boolean }.freeze
     LISTS = %w[array set].freeze
@@ -25,7 +27,8 @@ module Kong
         Field.new(path: "config.#{name}", name: name, kind: kind, required: spec["required"] == true,
           default: default(spec), one_of: spec["one_of"], secret: secret?(name, spec),
           description: spec["description"], help: custom_help[name],
-          element_kind: kind == :list ? SCALARS[spec.dig("elements", "type")] : nil)
+          element_kind: kind == :list ? SCALARS[spec.dig("elements", "type")] : nil,
+          nested_secrets: nested_secrets(name, spec))
       end
     end
 
@@ -67,6 +70,11 @@ module Kong
       end
     end
     private_class_method :record_defaults
+
+    def self.nested_secrets(name, spec)
+      Kong::PluginSecretFields.paths("fields" => [ { name => spec } ]).select { |path| path.size > 1 }.map { |path| path.drop(1) }
+    end
+    private_class_method :nested_secrets
 
     def self.secret?(name, spec)
       Kong::PluginSecretFields.paths("fields" => [ { name => spec } ]).include?([ name ])

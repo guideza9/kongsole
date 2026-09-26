@@ -16,6 +16,19 @@ RSpec.describe "Parameter log filtering" do
     expect(filtered["attributes"]).to eq({ "key" => "[FILTERED]", "key_alt" => "[FILTERED]", "tags" => [ "ok" ] })
   end
 
+  # R4 final review: the plugin form sends each config field on its own, and a
+  # JSON sub-field (http-log's headers, a redis record) can hold a secret the
+  # field name says nothing about -- an Authorization header, a password.
+  it "filters every config value of the plugin form, whatever the field is called" do
+    filtered = filter.filter("plugin_name" => "http-log", "plugin" => { "config" => {
+      "headers" => "{\"Authorization\":\"Basic abc\"}", "redis" => "{\"password\":\"hunter2\"}", "http_endpoint" => "http://logs" },
+      "enabled" => "1" })
+
+    expect(filtered["plugin"]["config"].values).to all(eq("[FILTERED]"))
+    expect(filtered["plugin"]["enabled"]).to eq("1")
+    expect(filtered["plugin_name"]).to eq("http-log")
+  end
+
   it "does not blank unrelated params such as the type or connection" do
     expect(filter.filter("type" => "certificate", "connection" => "dev")).to eq({ "type" => "certificate", "connection" => "dev" })
   end

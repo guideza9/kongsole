@@ -19,9 +19,11 @@ export default class extends Controller {
 
     this.itemTargets.forEach((item) => {
       const text = item.dataset.filterText || ""
-      const found = terms.every((term) => text.includes(term))
+      // A selected option stays: hiding it would leave the select showing a
+      // choice the filter says is gone. Options are never disabled -- a
+      // disabled option is not submitted, even when selected.
+      const found = terms.every((term) => text.includes(term)) || (item.tagName === "OPTION" && item.selected)
       item.hidden = !found
-      if (item.tagName === "OPTION") item.disabled = !found
       if (found) shown++
     })
 

@@ -4,6 +4,7 @@
     carries both halves as "service:<kong_id>"; the filter above it narrows
     long lists and stays hidden without JS. %>
 <div class="scope-picker" data-controller="list-filter">
+  <input type="hidden" name="scope_picker" value="1">
   <label for="plugin-scope" class="block text-sm font-medium text-ink">Scope</label>
   <% if options.values.sum(&:size) > 8 %>
     <div class="scope-picker__filter" data-list-filter-target="field" hidden>

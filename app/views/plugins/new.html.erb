@@ -38,7 +38,7 @@
     <% end %>
     <% if @admin_path_scope %>
       <%= risk_notice(:plugin_admin_path) %>
-    <% elsif pr && @fields.to_a.any?(&:secret) %>
+    <% elsif pr && @fields.to_a.any? { |field| field.secret || field.nested_secrets.present? } %>
       <%= risk_notice(:plugin_secret_pr) %>
     <% end %>
 
@@ -87,7 +87,7 @@
               <p class="text-sm text-ink-soft"><%= t("hints.pages.plugins_new.defaults_body") %></p>
               <div class="plugin-form__fields">
                 <% folded.each do |field| %>
-                  <%= render "field", field: field, values: values, errors: errors %>
+                  <%= render "field", field: field, values: values, errors: errors, plugin_name: @plugin_name, secret_policy: @secret_policy %>
                 <% end %>
               </div>
             </div>

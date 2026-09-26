@@ -5,7 +5,7 @@
     under the field. The error, when there is one, is read with the label. %>
 <% id = plugin_field_id(field) %>
 <% error = errors[field.path].presence %>
-<% value = plugin_field_value(field, values) %>
+<% value = field.nested_secrets.present? ? nil : plugin_field_value(field, values) %>
 <% describedby = [ plugin_field_hint_id(field), (plugin_field_error_id(field) if error) ].compact.join(" ") %>
 <% placeholder = field.default.nil? ? nil : "Default: #{plugin_default_text(field)}" %>
 <% name = "plugin[config][#{field.name}]" %>
@@ -60,6 +60,12 @@
     <% if (text = field.help.presence || field.description.presence) %><p><%= text %></p><% end %>
     <% if field.kind == :list %><p><%= t("hints.fields.plugin.list.help") %></p><% end %>
     <% if field.kind == :json %><p><%= t("hints.fields.plugin.json.help") %></p><% end %>
+    <% if field.nested_secrets.present? %>
+      <% ref = plugin_vault_example(local_assigns[:plugin_name], "#{field.name}-#{field.nested_secrets.first.join('-')}") %>
+      <p><%= t("hints.fields.plugin.secret_inside", paths: field.nested_secrets.map { _1.join(".") }.join(", ")) %>
+        <%= t(local_assigns[:secret_policy] == :reference_required ? "hints.fields.plugin.secret_pr" : "hints.fields.plugin.secret_direct",
+              example: ref[:example], env_var: ref[:env_var], deck: ref[:deck]) %></p>
+    <% end %>
     <% if placeholder %><p class="plugin-field__default"><%= placeholder %></p><% end %>
   </div>
 </div>

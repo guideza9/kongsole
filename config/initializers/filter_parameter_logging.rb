@@ -7,5 +7,9 @@ Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   # M5b: a private key pasted into a certificate form arrives inside the JSON
   # editor's payload; the API sends it as attributes[key] / attributes[key_alt].
-  :payload_json, /(\A|\.)key(_alt)?\z/
+  :payload_json, /(\A|\.)key(_alt)?\z/,
+  # R4: the plugin form sends each config field on its own; a JSON sub-field
+  # (http-log's headers, a redis record) can hold an Authorization header or a
+  # password under any name, so every config value is filtered.
+  /\Aplugin\.config\./
 ]

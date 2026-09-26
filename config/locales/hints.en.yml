@@ -265,7 +265,8 @@ en:
           help: "One value per line."
         json:
           help: "JSON for this field and everything inside it. Advanced, below, lists what it holds."
-        secret_direct: "Kong keeps what you type and Kongsole never shows it again. Better: a vault reference such as %{example}, and Kong reads %{env_var} on every node instead."
+        secret_direct: "Kong keeps what you type, and the change review still shows it, so prefer a vault reference such as %{example}: Kong reads %{env_var} on every node instead."
+        secret_inside: "Holds a secret (%{paths})."
         secret_pr: "This goes into git, so it must be a vault reference such as %{example} (Kong reads %{env_var} on every node) or a decK placeholder such as %{deck}."
 
     empty_states:

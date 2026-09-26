@@ -632,6 +632,25 @@ RSpec.describe Kong::ChangePlanner do
           .to raise_error(described_class::InvalidChange, /config\.api_key/)
       end
 
+      # R4 final review: PR mode skips Kong's validation, so a key the schema
+      # does not have (a typo) is never checked as a secret -- refuse it.
+      it "refuses a config key the plugin's schema does not have, at any record depth, without echoing it" do
+        expect { plan_plugin(attributes: { "name" => "rate-limiting", "config" => { "apikey" => "sk_live_PLAIN" } }) }
+          .to raise_error(described_class::InvalidChange, /config\.apikey/) { |e| expect(e.message).not_to include("sk_live_PLAIN") }
+        expect { plan_plugin(attributes: { "name" => "rate-limiting", "config" => { "redis" => { "passwrd" => "hunter2" } } }) }
+          .to raise_error(described_class::InvalidChange, /config\.redis\.passwrd/)
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "checks an update against the live plugin's name, not one the update sends" do
+        plugin_id = SecureRandom.uuid
+        live = { "id" => plugin_id, "name" => "rate-limiting", "config" => {}, "updated_at" => 1 }
+        stub_request(:get, "https://kong.test/plugins/#{plugin_id}").to_return(status: 200, body: live.to_json)
+        stub_request(:get, "https://kong.test/schemas/plugins/file-log").to_return(status: 200, body: { fields: [] }.to_json)
+        expect { plan_plugin(operation: "update", target_kong_id: plugin_id, attributes: { "name" => "file-log", "config" => { "api_key" => "plain" } }) }
+          .to raise_error(described_class::InvalidChange, /config\.api_key/)
+      end
+
       it "refuses when Kong's schema for the plugin cannot be read" do
         stub_request(:get, "https://kong.test/schemas/plugins/rate-limiting").to_return(status: 503, body: "{}")
         expect { plan_plugin(attributes: { "name" => "rate-limiting", "config" => {} }) }

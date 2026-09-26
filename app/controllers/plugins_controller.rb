@@ -60,12 +60,21 @@ class PluginsController < ApplicationController
 
   def create_from_form
     load_config_step(params[:plugin_name])
+    # The picker always sends a scope; none means the choice was lost (a
+    # filtered-out option is not submitted) -- never read it as global.
+    if params[:scope_picker] == "1" && params[:scope].blank?
+      @form_error = "Pick where the plugin runs: Global, or one service, route or consumer."
+      return render_config_step(status: :unprocessable_entity)
+    end
     attributes, @field_errors = Kong::PluginFormParams.call(fields: @fields, params: plugin_params)
     return render_config_step(status: :unprocessable_entity) if @field_errors.any?
 
     propose(attributes.merge("name" => @plugin_name))
   rescue Kong::ChangePlanner::InvalidChange => e
-    @form_error = e.message
+    # A refusal that names a config path goes on that field (a secret inside
+    # redis is refused as config.redis.password); anything else on top.
+    field = @fields.find { |f| e.message.start_with?("#{f.path}:", "#{f.path}.") }
+    field ? (@field_errors[field.path] = [ e.message ]) : (@form_error = e.message)
     render_config_step(status: :unprocessable_entity)
   end
 
@@ -114,7 +123,7 @@ class PluginsController < ApplicationController
 
   # What was typed, for the re-rendered form -- never a secret field's value.
   def render_config_step(status:)
-    secret_names = @fields.select(&:secret).map(&:name)
+    secret_names = @fields.select { |field| field.secret || field.nested_secrets.present? }.map(&:name)
     @values = plugin_params.fetch("config", {}).to_h.except(*secret_names)
     @payload_json = JSON.pretty_generate(seed_payload(@plugin_name, @schema))
     render :new, status: status
