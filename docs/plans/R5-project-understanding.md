@@ -57,7 +57,7 @@
 
 เหตุผล: ลำดับ route และกติกาการต่อ path ในสเปก §4.2/§4.4 เป็นสมมติฐานจากเอกสาร Kong — fixture นี้คือหลักฐาน และเป็น authority ของ test ใน R5.2 และ R5.4 (ถ้าแถวใดขัดกับโค้ด ให้แก้โค้ด ไม่แก้ fixture)
 
-- [ ] **Step 1: เขียน script** (ทำงานกับ compose เท่านั้น ลบทุกอย่างที่สร้างเมื่อจบ แม้ล้มกลางทาง)
+- [x] **Step 1: เขียน script** (ทำงานกับ compose เท่านั้น ลบทุกอย่างที่สร้างเมื่อจบ แม้ล้มกลางทาง)
 
 ```ruby
 # script/kong_router_fixtures.rb
@@ -200,10 +200,10 @@ ensure
 end
 ```
 
-- [ ] **Step 2: รัน** — `mkdir -p spec/fixtures/kong_router && ruby script/kong_router_fixtures.rb`
+- [x] **Step 2: รัน** — `mkdir -p spec/fixtures/kong_router && ruby script/kong_router_fixtures.rb`
   Expected: `wrote 9 ordering and 14 join cases (Kong 3.7.1, traditional_compatible)` และ `curl -s "localhost:8001/routes?tags=r5-router-check"` คืน `"data":[]`
-- [ ] **Step 3: ตรวจ fixture ด้วยตา** — ทุก join case มี `got.status` 200 และ `got.path` ไม่ว่าง (ถ้า status เป็น 404/502 แปลว่า sink ไม่จับ hop ที่สอง → **หยุดและถามเจ้าของงาน** ก่อนเพิ่ม echo container ใน compose ตามสเปก §6) · ordering case "a method the route does not allow" ต้องได้ `status: 404, route: null`
-- [ ] **Step 4: Commit** `test(R5.0): record compose Kong's route order and forwarded paths as fixtures`
+- [x] **Step 3: ตรวจ fixture ด้วยตา** — ทุก join case มี `got.status` 200 และ `got.path` ไม่ว่าง (ถ้า status เป็น 404/502 แปลว่า sink ไม่จับ hop ที่สอง → **หยุดและถามเจ้าของงาน** ก่อนเพิ่ม echo container ใน compose ตามสเปก §6) · ordering case "a method the route does not allow" ต้องได้ `status: 404, route: null`
+- [x] **Step 4: Commit** `test(R5.0): record compose Kong's route order and forwarded paths as fixtures`
 
 ---
 
@@ -213,7 +213,7 @@ end
 
 **Interfaces:** Produces `ProjectOverview.new(project).rows -> Array<Row>`; `ProjectOverview::COUNTED = %w[service route plugin consumer upstream certificate]`; `Row = Struct.new(:env, :connection, :status, :last_connected_at, :synced_at, :counts, keyword_init: true)`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/queries/project_overview_spec.rb
@@ -260,8 +260,8 @@ RSpec.describe ProjectOverview do
 end
 ```
 
-- [ ] **Step 2:** `bundle exec rspec spec/queries/project_overview_spec.rb` → FAIL `uninitialized constant ProjectOverview`
-- [ ] **Step 3: implement**
+- [x] **Step 2:** `bundle exec rspec spec/queries/project_overview_spec.rb` → FAIL `uninitialized constant ProjectOverview`
+- [x] **Step 3: implement**
 
 ```ruby
 # app/queries/project_overview.rb
@@ -293,7 +293,7 @@ class ProjectOverview
 end
 ```
 
-- [ ] **Step 4:** rspec ไฟล์เดิม → PASS · Commit `feat(R5.1): project overview from the read-model`
+- [x] **Step 4:** rspec ไฟล์เดิม → PASS · Commit `feat(R5.1): project overview from the read-model`
 
 ---
 
@@ -305,7 +305,7 @@ end
 - Consumes: `spec/fixtures/kong_router/ordering.json` (R5.0)
 - Produces: `Kong::RouteMatcher.call(connection:, host:, path:, method:) -> Result`; `Result = Struct.new(:route, :service, :matched_on, :losers, :skipped, keyword_init: true)`; `matched_on = { host: String|nil, method: String|nil, path: String|nil, regex: Boolean, matched: String }` (`matched` = ส่วนของ path ที่ route จับได้ — prefix หรือทั้งหมดที่ regex match); `losers = [{ route: KongEntity, reason: String }]`; `skipped = [{ route: KongEntity, reason: String }]`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/route_matcher_spec.rb
@@ -416,8 +416,8 @@ RSpec.describe Kong::RouteMatcher do
 end
 ```
 
-- [ ] **Step 2:** `bundle exec rspec spec/services/kong/route_matcher_spec.rb` → FAIL `uninitialized constant Kong::RouteMatcher`
-- [ ] **Step 3: implement** (ลำดับเริ่มจากสมมติฐานของสเปก §4.2 — fixture เป็นตัวตัดสิน ถ้าแถวไหนไม่ผ่าน ให้แก้ `sort_key`/`LOSS_REASONS` ให้ตรงกับ Kong แล้วจด `Ruling:` ใน ledger)
+- [x] **Step 2:** `bundle exec rspec spec/services/kong/route_matcher_spec.rb` → FAIL `uninitialized constant Kong::RouteMatcher`
+- [x] **Step 3: implement** (ลำดับเริ่มจากสมมติฐานของสเปก §4.2 — fixture เป็นตัวตัดสิน ถ้าแถวไหนไม่ผ่าน ให้แก้ `sort_key`/`LOSS_REASONS` ให้ตรงกับ Kong แล้วจด `Ruling:` ใน ledger)
 
 ```ruby
 # app/services/kong/route_matcher.rb
@@ -537,7 +537,7 @@ module Kong
 end
 ```
 
-- [ ] **Step 4:** rspec ไฟล์เดิม → PASS ทุก case รวม fixture ทั้ง 9 · Commit `feat(R5.2): approximate Kong's route matching from the read-model, pinned to compose Kong`
+- [x] **Step 4:** rspec ไฟล์เดิม → PASS ทุก case รวม fixture ทั้ง 9 · Commit `feat(R5.2): approximate Kong's route matching from the read-model, pinned to compose Kong`
 
 ---
 
@@ -549,7 +549,7 @@ end
 - Consumes: `Kong::PluginCatalog.bundled -> Set<String>` (R4.2)
 - Produces: `Kong::PluginEffects.for(name, config: {}) -> Effect | nil`; `Effect = Struct.new(:kind, :status, keyword_init: true)`; kind ∈ `:may_stop :may_change :may_answer :answers :unknown` · `Kong::PluginChain.for(connection:, route:, service:) -> [Array<Step>, Array<Step>]`; `Step = Struct.new(:plugin, :scope, :priority, :enabled, :overrides, :effect, :consumer, keyword_init: true)`; scope ∈ `"route+service" "route" "service" "global" "consumer"`
 
-- [ ] **Step 1: tests**
+- [x] **Step 1: tests**
 
 ```ruby
 # spec/services/kong/plugin_effects_spec.rb
@@ -673,8 +673,8 @@ RSpec.describe Kong::PluginChain do
 end
 ```
 
-- [ ] **Step 2:** `bundle exec rspec spec/services/kong/plugin_effects_spec.rb spec/services/kong/plugin_chain_spec.rb` → FAIL `uninitialized constant Kong::PluginEffects`
-- [ ] **Step 3: implement**
+- [x] **Step 2:** `bundle exec rspec spec/services/kong/plugin_effects_spec.rb spec/services/kong/plugin_chain_spec.rb` → FAIL `uninitialized constant Kong::PluginEffects`
+- [x] **Step 3: implement**
 
 ```ruby
 # app/services/kong/plugin_effects.rb
@@ -777,7 +777,7 @@ module Kong
 end
 ```
 
-- [ ] **Step 4:** rspec ทั้งสองไฟล์ → PASS · Commit `feat(R5.3): the plugin chain a traced request would run, and what each may do to it`
+- [x] **Step 4:** rspec ทั้งสองไฟล์ → PASS · Commit `feat(R5.3): the plugin chain a traced request would run, and what each may do to it`
 
 ---
 
@@ -789,7 +789,7 @@ end
 - Consumes: `Kong::RouteMatcher::Result` (R5.2, ใช้ `route`, `service`, `matched_on[:matched]`), `Kong::PluginChain::Step` (R5.3), `spec/fixtures/kong_router/join.json` (R5.0)
 - Produces: `Kong::ForwardedRequest.call(connection:, match:, host:, path:, query:, steps:) -> Result | nil` (nil เมื่อไม่มี route); `Result = Struct.new(:route_effect, :service_effect, :answered_by, keyword_init: true)`; `RouteEffect = Struct.new(:removed, :kept, :query, :host_header, :preserve_host, :strip_path, :path_handling, keyword_init: true)`; `ServiceEffect = Struct.new(:url, :protocol, :host, :port, :added_path, :tls_verify, :upstream, :not_forwarded, :timeouts, :retries, keyword_init: true)` (nil เมื่อ route ไม่มี service); `Upstream = Struct.new(:name, :algorithm, :targets, keyword_init: true)`; `answered_by = { plugin: KongEntity, status: Integer, message: String|nil } | nil`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/forwarded_request_spec.rb
@@ -900,8 +900,8 @@ RSpec.describe Kong::ForwardedRequest do
 end
 ```
 
-- [ ] **Step 2:** `bundle exec rspec spec/services/kong/forwarded_request_spec.rb` → FAIL `uninitialized constant Kong::ForwardedRequest`
-- [ ] **Step 3: implement** (`join` เป็นสมมติฐานจากตาราง `path_handling` ในเอกสาร Kong — fixture เป็นตัวตัดสิน แก้ `join` จนทุกแถวผ่าน และจด `Ruling:` ถ้าต่างจากสเปก)
+- [x] **Step 2:** `bundle exec rspec spec/services/kong/forwarded_request_spec.rb` → FAIL `uninitialized constant Kong::ForwardedRequest`
+- [x] **Step 3: implement** (`join` เป็นสมมติฐานจากตาราง `path_handling` ในเอกสาร Kong — fixture เป็นตัวตัดสิน แก้ `join` จนทุกแถวผ่าน และจด `Ruling:` ถ้าต่างจากสเปก)
 
 ```ruby
 # app/services/kong/forwarded_request.rb
@@ -995,7 +995,7 @@ module Kong
 end
 ```
 
-- [ ] **Step 4:** rspec ไฟล์เดิม → PASS ทุก case รวม fixture ทั้ง 14 · Commit `feat(R5.4): the request a traced service receives, pinned to compose Kong`
+- [x] **Step 4:** rspec ไฟล์เดิม → PASS ทุก case รวม fixture ทั้ง 14 · Commit `feat(R5.4): the request a traced service receives, pinned to compose Kong`
 
 ---
 
@@ -1005,7 +1005,7 @@ end
 
 **Interfaces:** Produces `ProjectNotes::DIR = Rails.root.join("config/projects")`; `ProjectNotes.new(project, dir: ProjectNotes::DIR).html -> ActiveSupport::SafeBuffer | nil`; `#relative_path -> "config/projects/<key>.md"`; `ProjectNotes.skeleton(project) -> String`; rake `kong:project_notes[key]`
 
-- [ ] **Step 1: tests**
+- [x] **Step 1: tests**
 
 ```ruby
 # spec/services/project_notes_spec.rb
@@ -1070,9 +1070,9 @@ RSpec.describe "kong:project_notes" do
 end
 ```
 
-- [ ] **Step 2:** rspec ทั้งสองไฟล์ → FAIL `uninitialized constant ProjectNotes`
-- [ ] **Step 3:** `bundle add commonmarker --version "~> 2.0"` → `bundle exec bundler-audit check --update` → Expected: `No vulnerabilities found`
-- [ ] **Step 4: implement**
+- [x] **Step 2:** rspec ทั้งสองไฟล์ → FAIL `uninitialized constant ProjectNotes`
+- [x] **Step 3:** `bundle add commonmarker --version "~> 2.0"` → `bundle exec bundler-audit check --update` → Expected: `No vulnerabilities found`
+- [x] **Step 4: implement**
 
 ```ruby
 # app/services/project_notes.rb
@@ -1137,7 +1137,7 @@ end
 
 `config/projects/.keep` — ไฟล์ว่าง
 
-- [ ] **Step 5:** rspec ทั้งสองไฟล์ → PASS · Commit `feat(R5.5): team-written project notes from config/projects, rendered safely`
+- [x] **Step 5:** rspec ทั้งสองไฟล์ → PASS · Commit `feat(R5.5): team-written project notes from config/projects, rendered safely`
 
 ---
 
@@ -1149,7 +1149,7 @@ end
 - Consumes: R5.1 `ProjectOverview`, R5.2 `RouteMatcher`, R5.3 `PluginChain`, R5.4 `ForwardedRequest`, R5.5 `ProjectNotes`
 - Produces: ตาม Contract ข้างบน · `TraceForm.new(project:, env:, http_method:, host:, path:)` (`valid?`, `submitted?`, `connection`, `path_only`, `query`) · `Kong::RequestTrace.call(connection:, http_method:, host:, path:, query:) -> Trace`; `Trace = Struct.new(:connection, :synced_at, :match, :steps, :consumer_steps, :forwarded, keyword_init: true)`
 
-- [ ] **Step 1: tests**
+- [x] **Step 1: tests**
 
 ```ruby
 # spec/forms/trace_form_spec.rb
@@ -1273,8 +1273,8 @@ RSpec.describe "Project overview", type: :request do
 end
 ```
 
-- [ ] **Step 2:** rspec ทั้งสามไฟล์ → FAIL (`uninitialized constant TraceForm` / no route `project_trace`)
-- [ ] **Step 3: implement**
+- [x] **Step 2:** rspec ทั้งสามไฟล์ → FAIL (`uninitialized constant TraceForm` / no route `project_trace`)
+- [x] **Step 3: implement**
 
 ```ruby
 # app/forms/trace_form.rb
@@ -1442,8 +1442,8 @@ end
 <% end %>
 ```
 
-- [ ] **Step 4:** rspec ทั้งสามไฟล์ → PASS · `bundle exec rspec` → 0 failures
-- [ ] **Step 5:** Commit `feat(R5.6): project overview and request tracer pages, backed by the read-model`
+- [x] **Step 4:** rspec ทั้งสามไฟล์ → PASS · `bundle exec rspec` → 0 failures
+- [x] **Step 5:** Commit `feat(R5.6): project overview and request tracer pages, backed by the read-model`
 
 ---
 
@@ -1455,7 +1455,7 @@ end
 
 **คำสั่ง:** `/impeccable shape project overview` (brief มีแล้วในสเปก §5 — ยืนยันสั้นๆ) → build code-led ตาม board → `/impeccable onboard` (notes ว่าง: rake → แก้ไฟล์ → PR) → `/impeccable harden` (Thai ยาว, env 6+ แถว, 390px, unreachable + network note, sync เก่ากว่า 24 ชม. แสดงอายุ)
 
-- [ ] **Step 1: assertion (ก่อน)** — เพิ่มใน `spec/requests/projects_overview_spec.rb`:
+- [x] **Step 1: assertion (ก่อน)** — เพิ่มใน `spec/requests/projects_overview_spec.rb`:
 
 ```ruby
   it "puts each env's counts in its own row, and a Trace link only on synced envs" do
@@ -1482,8 +1482,8 @@ end
 
 + ใน `ui_snapshots_spec.rb`: `project-overview` (มี notes ภาษาไทยยาว, 4 env: synced / unreachable / never synced / ไม่มี connection) และ `project-overview-empty-notes`
 
-- [ ] **Step 2:** FAIL → ทำ UI ตาม board · hints ใหม่: `hints.pages.project_show.counts_note`, `hints.empty_states.project_notes.{title,body,action}` · PASS · `bin/rails tailwindcss:build` → `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb` → `npx impeccable detect --json tmp/ui-snapshots` ไม่เพิ่มจากก่อนเริ่ม
-- [ ] **Step 3:** Commit `feat(R5.7): project overview page`
+- [x] **Step 2:** FAIL → ทำ UI ตาม board · hints ใหม่: `hints.pages.project_show.counts_note`, `hints.empty_states.project_notes.{title,body,action}` · PASS · `bin/rails tailwindcss:build` → `UI_SNAPSHOTS=1 bundle exec rspec spec/requests/ui_snapshots_spec.rb` → `npx impeccable detect --json tmp/ui-snapshots` ไม่เพิ่มจากก่อนเริ่ม
+- [x] **Step 3:** Commit `feat(R5.7): project overview page`
 
 ---
 
@@ -1495,7 +1495,7 @@ end
 
 **คำสั่ง:** `/impeccable shape request tracer` (ยืนยัน brief จากสเปก §5) → build code-led ตาม board → `/impeccable clarify` (ประโยค approximation, note ของ plugin, "Not forwarded") → `/impeccable harden` (ไม่มี route, route ไม่มี service, regex ข้าม, upstream ไม่มี target, request-termination, custom plugin, 390px)
 
-- [ ] **Step 1: assertion (ก่อน)** — เพิ่มใน `spec/requests/project_traces_spec.rb`:
+- [x] **Step 1: assertion (ก่อน)** — เพิ่มใน `spec/requests/project_traces_spec.rb`:
 
 ```ruby
   it "shows the four stops in order, each explaining only its own settings" do
@@ -1531,8 +1531,8 @@ end
 
 + ใน `ui_snapshots_spec.rb`: `project-trace` (ครบ 4 จุด + fold ทั้งสอง + note), `project-trace-no-route`, `project-trace-not-forwarded`
 
-- [ ] **Step 2:** FAIL → ทำ UI (ใช้ mark เดิม `.route-method`, `.scope`; ลำดับ plugin เป็น `<ol>`; ส่วนของ path ที่ตัด/คง/เติม เป็น struck/highlight/boxed พร้อมป้ายข้อความ ไม่พึ่งสีอย่างเดียว) · hints ใหม่: `hints.pages.project_trace.intro`, `hints.risks.trace_approximation` (มี `%{env}` `%{time}`), `hints.fields.trace.{env,method,host,path}`, `hints.pages.project_trace.plugin_note_tail` · PASS · snapshot · detect ไม่เพิ่ม
-- [ ] **Step 3:** Commit `feat(R5.8): request tracer shows the request's journey through route, plugins and service`
+- [x] **Step 2:** FAIL → ทำ UI (ใช้ mark เดิม `.route-method`, `.scope`; ลำดับ plugin เป็น `<ol>`; ส่วนของ path ที่ตัด/คง/เติม เป็น struck/highlight/boxed พร้อมป้ายข้อความ ไม่พึ่งสีอย่างเดียว) · hints ใหม่: `hints.pages.project_trace.intro`, `hints.risks.trace_approximation` (มี `%{env}` `%{time}`), `hints.fields.trace.{env,method,host,path}`, `hints.pages.project_trace.plugin_note_tail` · PASS · snapshot · detect ไม่เพิ่ม
+- [x] **Step 3:** Commit `feat(R5.8): request tracer shows the request's journey through route, plugins and service`
 
 ---
 
@@ -1540,16 +1540,26 @@ end
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R5.0–R5.8
 
-- [ ] compose `local/dev`: สร้าง service `echo` (`http://httpbin.internal:80/anything`) + route `/echo` (hosts `api.example.com`) + rate-limiting (service) + cors (global) + key-auth (route) ผ่าน UI → sync → tracer `GET api.example.com/echo/x`: จุด 2 route `echo` ตัด `/echo`; จุด 3 cors → key-auth → rate-limiting ตาม priority พร้อม note (key-auth 401, rate-limiting 429); จุด 4 `http://httpbin.internal/anything/x` · ลบทุกอย่างที่สร้างผ่าน UI เมื่อจบ
-- [ ] `bin/rails kong:project_notes[local]` → แก้ไฟล์ด้วยข้อความไทย/อังกฤษ → overview แสดงผล → **ไม่ commit ไฟล์ notes ทดสอบ**
-- [ ] ปิด network ของเครื่อง (หรือ stop compose) แล้วเปิด overview + tracer → ยังทำงาน (อ่าน DB อย่างเดียว)
+- [x] compose `local/dev`: สร้าง service `echo` (`http://httpbin.internal:80/anything`) + route `/echo` (hosts `api.example.com`) + rate-limiting (service) + cors (global) + key-auth (route) ผ่าน UI → sync → tracer `GET api.example.com/echo/x`: จุด 2 route `echo` ตัด `/echo`; จุด 3 cors → key-auth → rate-limiting ตาม priority พร้อม note (key-auth 401, rate-limiting 429); จุด 4 `http://httpbin.internal/anything/x` · ลบทุกอย่างที่สร้างผ่าน UI เมื่อจบ
+- [x] `bin/rails kong:project_notes[local]` → แก้ไฟล์ด้วยข้อความไทย/อังกฤษ → overview แสดงผล → **ไม่ commit ไฟล์ notes ทดสอบ**
+- [x] ปิด network ของเครื่อง (หรือ stop compose) แล้วเปิด overview + tracer → ยังทำงาน (อ่าน DB อย่างเดียว)
 - [ ] **สคริปต์ทดสอบ 5 นาที (เจ้าของงานเป็นผู้ตรวจ):** คนที่ไม่เคยดู project `local` ตอบภายใน 5 นาทีด้วย Kongsole อย่างเดียว: "request `GET api.example.com/echo/x` ผ่าน route อะไร, plugin ใดทำงานบ้างตามลำดับ, service ได้รับ request อะไร (URL), และใครเป็น owner" — จดเวลาและคำตอบ
-- [ ] ภาพหน้าจอ 390/1280 ของ overview และ tracer เทียบกับ canvas
+- [x] ภาพหน้าจอ 390/1280 ของ overview และ tracer เทียบกับ canvas
+
+**ผล R5.9 (2026-09-27, compose `local/dev`):**
+- สร้างผ่าน Admin API ของ compose (tag `r5-verify`) แทน UI — service `r5-echo` (`http://httpbin.internal:80/anything`), route `r5-echo` (`api.example.com` + `/echo`), rate-limiting (service), cors + key-auth (route) · ไม่สร้าง plugin global เพราะจะทำงานบน admin path ด้วย (ลำดับของ global มี test แล้วใน R5.3)
+- sync `local/dev` → tracer `GET api.example.com/echo/x`: จุด 2 route `r5-echo` ตัด `/echo` · จุด 3 cors (2000) → key-auth (1250) → rate-limiting (910) พร้อม note key-auth 401 / rate-limiting 429 · จุด 4 `GET http://httpbin.internal/anything/x`
+- `kong:project_notes[local]` เขียน skeleton 4 หัวข้อ → เติมไทย/อังกฤษ → overview แสดงผล → ลบไฟล์ ไม่ commit
+- stop Kong ทั้งสอง node (admin ตอบ 000) → overview 200 (0.06 s), tracer 200 (0.08 s) พร้อม URL ที่ forward → start กลับ admin 200
+- ลบ entity `r5-verify` ครบ (เหลือ 0) → sync ใหม่ removed 5
+- ภาพหน้าจอ 390/1280 เทียบ canvas: ทำใน R5.7 (overview ครบ 6 env + notes/ไม่มี notes) และ R5.8 (tracer เต็ม / ไม่มี route / request-termination)
+- rspec 1421/0 · `hints:todo` = 5 (เท่าเดิม) · `bundler-audit` สะอาด
+- **เหลือ:** สคริปต์ทดสอบ 5 นาที — เจ้าของงานเป็นผู้ตรวจ
 
 ## เกณฑ์ปิดงาน R5
 
 - [ ] เกณฑ์ใน `R5-project-understanding.md` (ฉบับแก้ §C6) ครบ พร้อมหลักฐาน
-- [ ] fixture R5.0 ผ่านทุกแถวใน R5.2 และ R5.4
-- [ ] test "ไม่เรียก Kong" ผ่านทั้ง overview และ tracer
-- [ ] `bundler-audit` สะอาดหลังเพิ่ม `commonmarker`
-- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่ม · `hints:todo` รายงาน
+- [x] fixture R5.0 ผ่านทุกแถวใน R5.2 และ R5.4 (ordering 9/9, join 14/14)
+- [x] test "ไม่เรียก Kong" ผ่านทั้ง overview และ tracer
+- [x] `bundler-audit` สะอาดหลังเพิ่ม `commonmarker` (2.10.0)
+- [x] `bundle exec rspec` 0 failures (1421/0) · detect: หน้าใหม่ไม่มี pattern ใหม่ (เหลือเฉพาะ divider ของ R1.15 และ mark `.scope` ที่มีอยู่เดิม) · `hints:todo` = 5
