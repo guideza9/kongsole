@@ -70,6 +70,7 @@ module Kong
       after = compute_after(before)
       validate_against_kong_schema!(after)
 
+      sweep_expired_seals!
       pr_mode? ? create_in_changeset!(before, after) : create_plan!(before, after)
     end
 
@@ -77,6 +78,29 @@ module Kong
 
     def pr_mode?
       @connection.apply_mode == "pr"
+    end
+
+    # R4.10: a direct-mode plugin's secrets are kept out of the plan's
+    # after/diff -- sealed apart, encrypted, for the applier alone
+    # (Kong::PlanSecretSeal). Nothing to look up for anything else.
+    def seal_secrets(before, after, diff)
+      unsealed = { after: after, diff: diff, sealed: nil }
+      return unsealed unless @entity_type == "plugin" && !pr_mode? && @operation != "delete"
+      unless Kong::PlanSecretSeal.available?
+        Rails.logger.warn("kong: no Active Record encryption keys -- plugin plan secrets stay in plain text (R4.10)")
+        return unsealed
+      end
+
+      name = (after["name"] || before["name"]).to_s
+      secret_paths = Kong::PluginSecretFields.new.fetch(client: @client, plugin_name: name)
+      Kong::PlanSecretSeal.split(entity_type: @entity_type, apply_mode: @connection.apply_mode, after: after, diff: diff,
+        secret_paths: secret_paths)
+    end
+
+    # A plan that expired unapplied never needs its sealed secrets again.
+    def sweep_expired_seals!
+      ChangePlan.pending.where(kong_connection: @connection, changeset_id: nil).where(expires_at: ...Time.current)
+        .where.not(sealed_secrets: nil).find_each { |plan| plan.update_columns(sealed_secrets: nil) }
     end
 
     # R4.4: a PR-mode plugin goes into git, so its schema-marked secrets must
@@ -95,6 +119,7 @@ module Kong
     end
 
     def create_plan!(before, after, **changeset_fields)
+      sealed = seal_secrets(before, after || {}, compute_diff(before, after))
       ChangePlan.create!(
         **changeset_fields,
         kong_connection: @connection,
@@ -106,8 +131,9 @@ module Kong
         target_kong_id: @target_kong_id,
         parent_kong_id: @parent_kong_id,
         before: before,
-        after: after || {},
-        diff: compute_diff(before, after),
+        after: sealed[:after],
+        diff: sealed[:diff],
+        sealed_secrets: sealed[:sealed]&.to_json,
         apply_mode: @connection.apply_mode,
         base_updated_at: before["updated_at"] ? Time.zone.at(before["updated_at"]) : nil,
         status: "pending",

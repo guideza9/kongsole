@@ -27,6 +27,11 @@ module Kong
       raise Kong::ChangeGuardrails::Violation, "this plan is #{@change_plan.status}, not pending" unless @change_plan.status == "pending"
       refuse_pr_mode!
       raise Kong::ChangeGuardrails::Violation, "this plan expired -- re-propose the change" if @change_plan.expired?
+      # R4.10: a body that still says "[REDACTED]" would write the mark into
+      # Kong as the secret -- its sealed real value is gone.
+      if @change_plan.redacted_payload?
+        raise Kong::ChangeGuardrails::Violation, "this plan no longer holds the secret it would write -- propose the change again"
+      end
 
       Kong::ChangeGuardrails.check_write_access!(connection: @connection)
       Kong::ChangeGuardrails.check_plan_mode_current!(plan: @change_plan, connection: @connection)
@@ -146,7 +151,7 @@ module Kong
     end
 
     def execute_create!
-      response = @client.post(@definition.create_path(parent_kong_id: @change_plan.parent_kong_id), body: @change_plan.after)
+      response = @client.post(@definition.create_path(parent_kong_id: @change_plan.parent_kong_id), body: @change_plan.unsealed_after)
       raw = parse(response)
       entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)
       refresh_parent_certificate(entity.parent_kong_id) if @change_plan.entity_type == "sni"
@@ -160,7 +165,7 @@ module Kong
     # between propose and apply is left alone rather than clobbered with the
     # value this plan happened to read.
     def execute_update!
-      body = @change_plan.diff.each_with_object({}) { |(field, change), acc| acc[field] = change["to"] }
+      body = @change_plan.unsealed_diff.each_with_object({}) { |(field, change), acc| acc[field] = change["to"] }
       response = @client.patch(member_path, body: body)
       raw = parse(response)
       entity = Kong::EntitySync.new(connection: @connection, client: @client, entity_type: @change_plan.entity_type).upsert(raw)

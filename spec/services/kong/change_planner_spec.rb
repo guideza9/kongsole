@@ -370,9 +370,60 @@ RSpec.describe Kong::ChangePlanner do
       expect(a_request(:post, %r{/schemas/plugins/validate})).not_to have_been_made
     end
 
+    # R4.10: a direct-mode plugin's secret never sits in the plan in the clear.
+    describe "sealing a plugin's secrets (direct mode)" do
+      let(:lambda_schema) do
+        { fields: [ { config: { type: "record", fields: [
+          { aws_secret: { type: "string", encrypted: true, referenceable: true } }, { function_name: { type: "string" } } ] } } ] }.to_json
+      end
+
+      before do
+        stub_request(:get, "https://kong-admin.internal/schemas/plugins/aws-lambda").to_return(status: 200, body: lambda_schema)
+        stub_request(:post, "https://kong-admin.internal/schemas/plugins/validate").to_return(status: 200, body: "{}")
+      end
+
+      it "stores a new plugin's secret redacted, with the real value sealed" do
+        plan = planner(entity_type: "plugin", operation: "create",
+          attributes: { "name" => "aws-lambda", "config" => { "aws_secret" => "sk_PLAIN", "function_name" => "f" } }).call
+        expect(plan.after.to_json).not_to include("sk_PLAIN")
+        expect(plan.after.dig("config", "aws_secret")).to eq(Kong::Redactor::MARK)
+        expect(plan.unsealed_after.dig("config", "aws_secret")).to eq("sk_PLAIN")
+        expect(ChangePlan.connection.select_value("SELECT sealed_secrets FROM change_plans WHERE id = #{plan.id}")).not_to include("sk_PLAIN")
+      end
+
+      it "stores an update's changed secret redacted on both sides of the diff" do
+        plugin_id = SecureRandom.uuid
+        live = { "id" => plugin_id, "name" => "aws-lambda", "config" => { "aws_secret" => "old", "function_name" => "f" }, "updated_at" => 1 }
+        stub_request(:get, "https://kong-admin.internal/plugins/#{plugin_id}").to_return(status: 200, body: live.to_json)
+        plan = planner(entity_type: "plugin", operation: "update", target_kong_id: plugin_id,
+          attributes: { "config" => { "aws_secret" => "sk_NEW", "function_name" => "f" } }).call
+        expect(plan.diff.to_json).not_to include("sk_NEW")
+        expect(plan.unsealed_diff.dig("config", "to", "aws_secret")).to eq("sk_NEW")
+      end
+
+      # Owner's call (2026-09-26): where sealing cannot work -- no Active
+      # Record encryption keys on this machine -- keep plain text, as before.
+      it "keeps the plain value, and proposes anyway, where no encryption keys are set" do
+        allow(ActiveRecord::Encryption.config).to receive(:primary_key)
+          .and_raise(ActiveRecord::Encryption::Errors::Configuration, "Missing Active Record encryption credential")
+        plan = planner(entity_type: "plugin", operation: "create",
+          attributes: { "name" => "aws-lambda", "config" => { "aws_secret" => "sk_PLAIN", "function_name" => "f" } }).call
+        expect(plan.after.dig("config", "aws_secret")).to eq("sk_PLAIN")
+        expect(plan.sealed_secrets).to be_nil
+      end
+
+      it "clears the seal of this connection's plans that expired unapplied" do
+        stale = create(:change_plan, kong_connection: connection, entity_type: "plugin", expires_at: 1.minute.ago,
+          sealed_secrets: { "after" => { "config" => { "aws_secret" => "x" } } }.to_json)
+        planner(entity_type: "plugin", operation: "create", attributes: { "name" => "aws-lambda", "config" => {} }).call
+        expect(stale.reload.sealed_secrets).to be_nil
+      end
+    end
+
     it "allows proposing a plugin change on an ordinary, non-admin-path target" do
       route_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
       stub_request(:post, "https://kong-admin.internal/schemas/plugins/validate").to_return(status: 200, body: "{}")
+      stub_request(:get, "https://kong-admin.internal/schemas/plugins/cors").to_return(status: 200, body: { fields: [] }.to_json)
       plan = planner(entity_type: "plugin", operation: "create", attributes: { "name" => "cors", "route" => { "id" => route_id } }).call
 
       expect(plan).to be_persisted

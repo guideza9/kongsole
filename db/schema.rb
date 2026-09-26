@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_26_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -59,6 +59,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_26_100000) do
     t.string "pr_url"
     t.uuid "provisional_kong_id"
     t.bigint "replaces_plan_id"
+    t.text "sealed_secrets"
     t.string "status", default: "pending", null: false
     t.uuid "target_kong_id"
     t.datetime "updated_at", null: false

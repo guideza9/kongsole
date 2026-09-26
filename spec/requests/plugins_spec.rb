@@ -64,6 +64,7 @@ RSpec.describe "Plugins (web)", type: :request do
   describe "POST /plugins (create)" do
     it "proposes a plugin scoped to a service, landing on the same review pipeline as everything else" do
       sign_in
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/cors").to_return(status: 200, body: { fields: [] }.to_json)
       stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
       service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "payments-api")
 
@@ -81,6 +82,7 @@ RSpec.describe "Plugins (web)", type: :request do
 
     it "proposes a global plugin when no scope is given at all" do
       sign_in
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/prometheus").to_return(status: 200, body: { fields: [] }.to_json)
       stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
 
       post plugins_path, params: { plugin_name: "prometheus", payload_json: { name: "prometheus", config: {} }.to_json }

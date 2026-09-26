@@ -223,6 +223,68 @@ RSpec.describe Kong::ChangeApplier do
 
   # R8.7: PR mode writes only through a changeset (Kong::ChangesetSubmitter);
   # the examples this block used to hold live in changeset_submitter_spec.rb.
+  # R4.10: the plan shows "[REDACTED]"; Kong gets the sealed real value.
+  describe "a plugin plan with sealed secrets" do
+    let(:plugin_id) { "44444444-4444-4444-4444-444444444444" }
+    let(:real_after) { { "name" => "aws-lambda", "config" => { "aws_secret" => "sk_PLAIN", "function_name" => "f" } } }
+    let(:shown_after) { { "name" => "aws-lambda", "config" => { "aws_secret" => Kong::Redactor::MARK, "function_name" => "f" } } }
+
+    before do
+      stub_request(:get, "https://kong-admin.internal/schemas/plugins/aws-lambda").to_return(status: 200, body: { fields: [
+        { config: { type: "record", fields: [ { aws_secret: { type: "string", encrypted: true } }, { function_name: { type: "string" } } ] } } ] }.to_json)
+    end
+
+    def sealed_plan(**attributes)
+      create(:change_plan, kong_connection: connection, entity_type: "plugin", target_kong_id: nil, before: {}, **attributes)
+    end
+
+    it "creates with the real value, audits the redacted diff, and drops the seal" do
+      plan = sealed_plan(operation: "create", after: shown_after, diff: { "operation" => "create" },
+        sealed_secrets: { "after" => real_after, "diff" => { "operation" => "create" } }.to_json)
+      post = stub_request(:post, "https://kong-admin.internal/plugins").with(body: real_after)
+        .to_return(status: 201, body: real_after.merge("id" => plugin_id).to_json)
+
+      result = applier(plan).call
+
+      expect(post).to have_been_requested
+      expect(result.audit_event.diff.to_json).not_to include("sk_PLAIN")
+      expect(plan.reload.sealed_secrets).to be_nil
+      expect(plan.after.to_json).not_to include("sk_PLAIN")
+    end
+
+    it "PATCHes an update with the real changed value" do
+      shown_diff = { "config" => { "from" => { "aws_secret" => Kong::Redactor::MARK }, "to" => { "aws_secret" => Kong::Redactor::MARK } } }
+      real_diff = { "config" => { "from" => { "aws_secret" => Kong::Redactor::MARK }, "to" => { "aws_secret" => "sk_NEW" } } }
+      plan = sealed_plan(operation: "update", target_kong_id: plugin_id, before: { "id" => plugin_id, "name" => "aws-lambda", "updated_at" => 1_700_000_000 },
+        after: shown_after, diff: shown_diff, sealed_secrets: { "after" => real_after, "diff" => real_diff }.to_json)
+      stub_request(:get, "https://kong-admin.internal/plugins/#{plugin_id}")
+        .to_return(status: 200, body: { id: plugin_id, name: "aws-lambda", updated_at: 1_700_000_000 }.to_json)
+      patch = stub_request(:patch, "https://kong-admin.internal/plugins/#{plugin_id}").with(body: { "config" => { "aws_secret" => "sk_NEW" } })
+        .to_return(status: 200, body: { id: plugin_id, name: "aws-lambda", config: {}, updated_at: 1_700_000_500 }.to_json)
+
+      result = applier(plan).call
+
+      expect(patch).to have_been_requested
+      expect(result.audit_event.diff.to_json).not_to include("sk_NEW")
+    end
+
+    it "drops the seal when Kong refuses the write" do
+      plan = sealed_plan(operation: "create", after: shown_after, diff: { "operation" => "create" },
+        sealed_secrets: { "after" => real_after, "diff" => { "operation" => "create" } }.to_json)
+      stub_request(:post, "https://kong-admin.internal/plugins").to_return(status: 400, body: { message: "schema violation" }.to_json)
+
+      expect { applier(plan).call }.to raise_error(Kong::Client::Error)
+      expect(plan.reload).to have_attributes(status: "failed", sealed_secrets: nil)
+    end
+
+    it "refuses a body that still says [REDACTED], without calling Kong" do
+      plan = sealed_plan(operation: "create", after: shown_after, diff: { "operation" => "create" })
+
+      expect { applier(plan).call }.to raise_error(Kong::ChangeGuardrails::Violation, /propose/)
+      expect(a_request(:post, %r{/plugins})).not_to have_been_made
+    end
+  end
+
   describe "#call on a PR-mode plan" do
     it "refuses to apply a PR-mode plan on its own, without touching git" do
       plan = create(:change_plan, apply_mode: "pr", status: "pending", changeset: create(:changeset))

@@ -20,6 +20,12 @@ class ChangePlan < ApplicationRecord
 
   scope :pending, -> { where(status: "pending") }
 
+  # R4.10: the real values behind a direct-mode plugin plan's "[REDACTED]"
+  # (Kong::PlanSecretSeal) -- JSON of {"after" => ..., "diff" => ...}, read
+  # only by Kong::ChangeApplier and gone once the plan stops being pending.
+  encrypts :sealed_secrets
+  before_save { self.sealed_secrets = nil unless status == "pending" }
+
   def expired?
     return false if in_changeset?
 
@@ -38,5 +44,26 @@ class ChangePlan < ApplicationRecord
 
   def delete?
     operation == "delete"
+  end
+
+  def sealed
+    sealed_secrets.present? ? JSON.parse(sealed_secrets) : nil
+  end
+
+  # What the applier sends Kong: the sealed real values when there are any.
+  def unsealed_after
+    sealed ? sealed["after"] : after
+  end
+
+  def unsealed_diff
+    sealed ? sealed["diff"] : diff
+  end
+
+  # Whether the body the applier would send still says "[REDACTED]" -- a
+  # plan whose seal is gone (a rollback, a hand edit) must not write the
+  # mark into Kong as the secret.
+  def redacted_payload?
+    body = operation == "update" ? unsealed_diff.to_h.values.filter_map { |change| change["to"] if change.is_a?(Hash) } : unsealed_after
+    body.to_json.include?(Kong::Redactor::MARK)
   end
 end
