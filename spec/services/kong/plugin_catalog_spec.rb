@@ -44,6 +44,18 @@ RSpec.describe Kong::PluginCatalog do
     expect(entry.summary).to eq("Caps requests per window.")
   end
 
+  # R4.8: every plugin bundled with Kong is described in hints.en.yml.
+  it "has a one-line summary for every plugin bundled with Kong" do
+    missing = described_class.bundled.reject { |name| I18n.exists?("hints.plugins.#{name}.summary", :en) }
+    expect(missing).to be_empty
+    expect(described_class.bundled.size).to eq(43)
+  end
+
+  it "says how to describe a custom plugin that has no metadata" do
+    expect(I18n.t("hints.plugins.custom_missing_description", name: "team-headers"))
+      .to include("No description provided for this custom plugin", "config/custom_plugins/team-headers.yml")
+  end
+
   it "lists nothing for a connection that has not read its node yet" do
     expect(described_class.for(create(:kong_connection, plugins_available: {}), metadata_dir: dir)).to eq([])
   end

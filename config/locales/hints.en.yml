@@ -15,6 +15,7 @@
 #   hints.risks.<situation>.{title,body}
 #   hints.errors.<key>.{title,cause,next_step}
 #   hints.pages.<page>.intro
+#   hints.plugins.<name>.summary  -- one line per bundled Kong plugin (R4)
 #   hints.ui.*  -- the few words the hint pieces themselves print
 en:
   hints:
@@ -490,3 +491,95 @@ en:
         intro: "An agent uses it to reach Kongsole through MCP, as you."
       certificates_expiring:
         intro: "Certificates on this connection that expire soon, as of the last sync."
+
+    # R4.8: one line per plugin bundled with Kong (config/kong_bundled_plugins.yml)
+    # -- what it does, then when to reach for it. A custom plugin is described
+    # by config/custom_plugins/<name>.yml instead.
+    plugins:
+      custom_missing_description: "No description provided for this custom plugin. Add one in config/custom_plugins/%{name}.yml."
+      acl:
+        summary: "Lets only consumers in the groups you list through. Pair it with an auth plugin that identifies the consumer."
+      acme:
+        summary: "Gets and renews Let's Encrypt (ACME) certificates for your hosts. Use it when Kong terminates TLS and nothing else issues the certificates."
+      ai-prompt-decorator:
+        summary: "Adds fixed messages before or after every prompt sent to an LLM. Use it with ai-proxy to set a system prompt for all callers."
+      ai-prompt-guard:
+        summary: "Allows or blocks LLM prompts that match patterns you set. Use it with ai-proxy to keep certain topics out of prompts."
+      ai-prompt-template:
+        summary: "Lets callers fill in prompt templates you define instead of sending free text. Use it with ai-proxy to limit what reaches the LLM."
+      ai-proxy:
+        summary: "Turns a route into a gateway to an LLM provider such as OpenAI or Azure, with one request format. Requests and prompts leave for that provider."
+      ai-request-transformer:
+        summary: "Asks an LLM to rewrite the request body before it goes upstream. The body is sent to the LLM provider you configure."
+      ai-response-transformer:
+        summary: "Asks an LLM to rewrite the upstream's response before the client gets it. The body is sent to the LLM provider you configure."
+      aws-lambda:
+        summary: "Calls an AWS Lambda function instead of an upstream service. Use it to put a Lambda behind a Kong route."
+      azure-functions:
+        summary: "Calls an Azure Function instead of an upstream service. Use it to put a function behind a Kong route."
+      basic-auth:
+        summary: "Asks for a username and password (HTTP Basic) and ties the request to a consumer. Use it for simple credential checks."
+      bot-detection:
+        summary: "Turns away requests whose User-Agent looks like a known bot or matches a list you set."
+      correlation-id:
+        summary: "Adds a unique ID header to every request and response. Use it to follow one request across Kong and upstream logs."
+      cors:
+        summary: "Answers CORS preflights and adds CORS headers. Use it when a browser app on another origin calls this API."
+      datadog:
+        summary: "Sends request metrics (counts, latency, status) to a Datadog agent over StatsD."
+      file-log:
+        summary: "Writes a JSON line per request to a file on each Kong node. Use it for local debugging; the file grows on every node."
+      grpc-gateway:
+        summary: "Lets clients call a gRPC service with JSON over HTTP, mapped by the service's proto file."
+      grpc-web:
+        summary: "Lets browsers call a gRPC service with gRPC-Web, translated to gRPC on the way upstream."
+      hmac-auth:
+        summary: "Checks an HMAC signature on each request and ties it to a consumer. Use it when callers sign requests with a shared secret."
+      http-log:
+        summary: "Sends a JSON record of every request and response to an HTTP endpoint, such as a log collector."
+      ip-restriction:
+        summary: "Allows or denies requests by client IP address or CIDR range."
+      jwt:
+        summary: "Checks a signed JWT on each request and ties it to a consumer. Use it when callers bring tokens from an issuer you trust."
+      key-auth:
+        summary: "Asks for an API key in a header or query string and ties the request to a consumer. The simplest way to identify callers."
+      ldap-auth:
+        summary: "Checks a username and password against an LDAP directory. Use it when accounts live in LDAP or Active Directory."
+      loggly:
+        summary: "Sends a record of every request and response to Loggly over UDP."
+      oauth2:
+        summary: "Makes Kong an OAuth 2.0 authorization server that issues and checks tokens itself. Rarely needed when you already have an identity provider."
+      opentelemetry:
+        summary: "Sends traces of requests through Kong to an OpenTelemetry collector over OTLP. Use it to see Kong inside distributed traces."
+      post-function:
+        summary: "Runs Lua code you write, late in the request. A last resort for logic no plugin covers; the code runs on every matching request."
+      pre-function:
+        summary: "Runs Lua code you write, early in the request. A last resort for logic no plugin covers; the code runs on every matching request."
+      prometheus:
+        summary: "Exposes request metrics (counts, latency, status codes) for Prometheus to scrape. Use it to watch traffic in Prometheus or Grafana."
+      proxy-cache:
+        summary: "Caches upstream responses in Kong's memory and serves repeats from there. Use it for responses that are the same for every caller."
+      rate-limiting:
+        summary: "Caps how many requests a consumer, credential or IP can make per second, minute, hour or longer. Use it to protect an upstream from bursts."
+      request-size-limiting:
+        summary: "Turns away requests whose body is larger than the limit you set."
+      request-termination:
+        summary: "Answers every matching request with a fixed status and body, without calling the upstream. Use it to take a route offline on purpose."
+      request-transformer:
+        summary: "Adds, removes, renames or replaces headers, query parameters and body fields before the request goes upstream."
+      response-ratelimiting:
+        summary: "Limits calls by counts the upstream reports in a response header, rather than by the number of requests."
+      response-transformer:
+        summary: "Adds, removes, renames or replaces headers and JSON body fields in the response before the client gets it."
+      session:
+        summary: "Keeps a caller logged in with a session cookie after an auth plugin identifies them. Use it with an auth plugin for browser logins."
+      statsd:
+        summary: "Sends request metrics to a StatsD server."
+      syslog:
+        summary: "Writes a record of every request to the syslog of each Kong node."
+      tcp-log:
+        summary: "Sends a JSON record of every request and response to a TCP server, such as a log collector."
+      udp-log:
+        summary: "Sends a JSON record of every request and response to a UDP server. Records can be lost; use tcp-log or http-log when that matters."
+      zipkin:
+        summary: "Sends traces of requests through Kong to a Zipkin collector."
