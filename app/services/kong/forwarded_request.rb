@@ -7,7 +7,8 @@ module Kong
   module ForwardedRequest
     Result = Struct.new(:route_effect, :service_effect, :answered_by, keyword_init: true)
     RouteEffect = Struct.new(:removed, :kept, :query, :host_header, :preserve_host, :strip_path, :path_handling, keyword_init: true)
-    ServiceEffect = Struct.new(:url, :protocol, :host, :port, :added_path, :tls_verify, :upstream, :not_forwarded, :timeouts, :retries, keyword_init: true)
+    ServiceEffect = Struct.new(:url, :protocol, :host, :port, :added_path, :path_parts, :tls_verify, :upstream, :not_forwarded,
+      :timeouts, :retries, keyword_init: true)
     Upstream = Struct.new(:name, :algorithm, :targets, :host_header, keyword_init: true)
     DEFAULT_PORTS = { "http" => 80, "https" => 443 }.freeze
 
@@ -25,39 +26,61 @@ module Kong
       upstream = upstream_for(connection, match.service)
 
       route_effect = RouteEffect.new(removed: removed, kept: kept, query: query.presence,
-        host_header: data["preserve_host"] ? host.to_s.downcase.sub(/:\d+\z/, "") : host_header(match.service, upstream),
+        # preserve_host passes the client's Host on as sent -- case and port included.
+        host_header: data["preserve_host"] ? host.to_s.strip : host_header(match.service, upstream),
         preserve_host: !!data["preserve_host"], strip_path: strip, path_handling: handling)
 
-      Result.new(route_effect: route_effect, service_effect: service_effect(match.service, upstream, kept, handling, query),
+      Result.new(route_effect: route_effect,
+        service_effect: service_effect(match.service, upstream, kept, query, request_path: path, stripped: removed.present?),
         answered_by: answered_by(steps))
     end
 
-    def service_effect(service, upstream, kept, handling, query)
+    def service_effect(service, upstream, kept, query, request_path:, stripped:)
       return nil unless service
 
       data = service.data
       protocol = data["protocol"].presence || "http"
       port = data["port"]
       authority = [ data["host"], (port unless port == DEFAULT_PORTS[protocol]) ].compact.join(":")
-      url = "#{protocol}://#{authority}#{join(data['path'], kept, handling)}#{"?#{query}" if query.present?}"
+      joined = join(data["path"], kept, request_path: request_path, stripped: stripped)
+      url = "#{protocol}://#{authority}#{joined}#{"?#{query}" if query.present?}"
 
       ServiceEffect.new(url: url, protocol: protocol, host: data["host"], port: port, added_path: data["path"].presence,
+        path_parts: path_parts(joined, data["path"], kept),
         tls_verify: data["tls_verify"], upstream: upstream,
         not_forwarded: (503 if upstream && upstream.targets.empty?),
         timeouts: { connect: data["connect_timeout"], read: data["read_timeout"], write: data["write_timeout"] },
         retries: data["retries"])
     end
 
-    # One "/" between the service's path and what the route left; nothing
-    # left -> the service's path, or "/". Kong's docs describe path_handling
-    # v1 as joining without the slash, but Kong 3.7's traditional_compatible
-    # router joins v1 exactly like v0 (join.json, recorded from compose in
-    # R5.0), so `handling` does not change the result on this router.
-    def join(base, rest, _handling)
+    # Kong's v0 join of the service's path and what the route left, as
+    # recorded from compose Kong 3.7.1 (join.json, R5.0): one "/" between the
+    # two; nothing left after stripping -> the service's path without a
+    # trailing slash, unless the request itself ended in "/"; a request of
+    # exactly "/" with strip_path off -> the service's path as configured.
+    # Kong's docs describe path_handling v1 as joining without the slash, but
+    # traditional_compatible joins v1 exactly like v0, so it is not an input.
+    def join(base, rest, request_path:, stripped:)
       base = base.presence || "/"
-      return base if rest.empty?
+      return base if !stripped && rest == "/"
+
+      if rest.empty?
+        return "/" if base == "/"
+
+        return request_path.end_with?("/") ? "#{base.chomp('/')}/" : base.chomp("/")
+      end
 
       "#{base.chomp('/')}/#{rest.delete_prefix('/')}"
+    end
+
+    # The joined path as [what the service adds, what the route left], the
+    # two adding up to exactly the path in the URL -- for stop 4's boxes.
+    # Where Kong's join is not a plain "base + / + rest", the whole path is
+    # the service's part.
+    def path_parts(joined, base, rest)
+      added = base.to_s.chomp("/")
+      left = "/#{rest.delete_prefix('/')}"
+      rest.present? && added + left == joined ? [ added, left ] : [ joined, "" ]
     end
 
     def upstream_for(connection, service)

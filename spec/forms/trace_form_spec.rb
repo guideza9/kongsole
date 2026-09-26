@@ -4,6 +4,7 @@ RSpec.describe TraceForm do
   let(:project) { create(:project, key: "project-a") }
   let(:env) { create(:project_env, project: project, name: "dev") }
   let!(:connection) { create(:kong_connection, project_env: env) }
+  let!(:synced) { create(:kong_entity, kong_connection: connection) }
 
   def form(**attrs)
     described_class.new(project: project, env: "dev", http_method: "GET", host: "api.example.com", path: "/b", **attrs)
@@ -25,6 +26,12 @@ RSpec.describe TraceForm do
     expect(errors_of(form(host: ""))).to include(:host)
     expect(errors_of(form(env: "nope"))).to include(:env)
     expect(errors_of(form(path: "/#{'a' * 2048}"))).to include(:path)
+  end
+
+  it "refuses an env this machine has never synced, instead of tracing an empty read-model (final review)" do
+    uat = create(:project_env, project: project, name: "uat")
+    create(:kong_connection, project_env: uat)
+    expect(errors_of(form(env: "uat"))).to include(:env)
   end
 
   it "finds the env's connection" do

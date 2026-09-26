@@ -68,6 +68,19 @@ RSpec.describe Kong::RouteMatcher do
     expect(trace("/api").skipped.map { _1[:route].name }).to eq(%w[expr])
   end
 
+  it "does not let a route that needs headers or SNI catch a traced request, and says why (final review)" do
+    route("billing", paths: %w[/billing])
+    route("billing-canary", paths: %w[/billing], headers: { "x-canary" => [ "1" ] })
+    route("billing-tls", paths: %w[/billing], snis: %w[api.example.com])
+
+    result = trace("/billing/x")
+
+    expect(result.route.name).to eq("billing")
+    expect(result.skipped.map { [ _1[:route].name, _1[:reason] ] }).to contain_exactly(
+      [ "billing-canary", "matches on headers the tracer does not send" ],
+      [ "billing-tls", "matches on SNI the tracer does not send" ])
+  end
+
   it "ignores routes that take no http traffic" do
     route("tcp-only", protocols: %w[tcp], paths: [])
     expect(trace("/api").route).to be_nil
@@ -93,7 +106,7 @@ RSpec.describe Kong::RouteMatcher do
         kase.fetch("routes").each_with_index do |attrs, index|
           route(attrs.fetch("name"), created: Time.utc(2026, 1, 1) + index,
             hosts: attrs.fetch("hosts", [ host ]), paths: attrs.fetch("paths", []), methods: attrs.fetch("methods", []),
-            regex_priority: attrs.fetch("regex_priority", 0))
+            regex_priority: attrs.fetch("regex_priority", 0), headers: attrs.fetch("headers", {}))
         end
 
         result = trace(kase.dig("request", "path"), host: host, method: kase.dig("request", "method"))

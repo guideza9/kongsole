@@ -72,7 +72,8 @@ ORDER_CASES = [
   { name: "exact host beats wildcard", host: "api.o6.r5.test", request: %w[GET /x], routes: [ { name: "wild", hosts: [ "*.o6.r5.test" ], paths: %w[/x] }, { name: "exact", hosts: [ "api.o6.r5.test" ], paths: %w[/x] } ] },
   { name: "older route wins a tie", request: %w[GET /tie], routes: [ { name: "first", paths: %w[/tie] }, { name: "second", paths: %w[/tie] } ] },
   { name: "a method the route does not allow", request: %w[POST /reads], routes: [ { name: "reads", paths: %w[/reads], methods: %w[GET] } ] },
-  { name: "the best of a route's paths counts", request: %w[GET /api/v1/x], routes: [ { name: "many-paths", paths: %w[/a /api/v1] }, { name: "mid", paths: %w[/api] } ] }
+  { name: "the best of a route's paths counts", request: %w[GET /api/v1/x], routes: [ { name: "many-paths", paths: %w[/a /api/v1] }, { name: "mid", paths: %w[/api] } ] },
+  { name: "a route that needs a header is passed by", request: %w[GET /hdr], routes: [ { name: "plain", paths: %w[/hdr] }, { name: "needs-header", paths: %w[/hdr], headers: { "x-canary" => [ "1" ] } } ] }
 ].freeze
 
 JOIN_CASES = [
@@ -90,7 +91,10 @@ JOIN_CASES = [
   [ "keep, no service path", nil, "/ledger", false, "v0", "/ledger/entries/9" ],
   [ "regex strip", "/v2", "~/reports/\\d{4}", true, "v0", "/reports/2026/q3" ],
   [ "query passed on", "/api", "/billing/v1", true, "v0", "/billing/v1/invoices/42?status=paid" ],
-  [ "preserve_host on", "/api", "/ph", true, "v0", "/ph/x", true ]
+  [ "preserve_host on", "/api", "/ph", true, "v0", "/ph/x", true ],
+  [ "strip, nothing left, service slash", "/s/", "/notify", true, "v0", "/notify" ],
+  [ "strip, route slash, nothing left", "/api", "/notify/", true, "v0", "/notify/" ],
+  [ "keep, request is /", "/api", "/", false, "v0", "/" ]
 ].freeze
 
 begin

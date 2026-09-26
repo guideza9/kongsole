@@ -1,7 +1,7 @@
 {
   "kong_version": "3.7.1",
   "router_flavor": "traditional_compatible",
-  "recorded_at": "2026-09-26T18:29:55Z",
+  "recorded_at": "2026-09-26T19:09:05Z",
   "cases": [
     {
       "name": "v0 strip, plain",
@@ -255,6 +255,60 @@
         "path": "/api/x",
         "query": {},
         "host": "j13.r5.test"
+      }
+    },
+    {
+      "name": "strip, nothing left, service slash",
+      "service_path": "/s/",
+      "route_path": "/notify",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j14.r5.test",
+        "path": "/notify"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "strip, route slash, nothing left",
+      "service_path": "/api",
+      "route_path": "/notify/",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j15.r5.test",
+        "path": "/notify/"
+      },
+      "got": {
+        "status": 200,
+        "path": "/api/",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "keep, request is /",
+      "service_path": "/api",
+      "route_path": "/",
+      "strip_path": false,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j16.r5.test",
+        "path": "/"
+      },
+      "got": {
+        "status": 200,
+        "path": "/api",
+        "query": {},
+        "host": "127.0.0.1:8000"
       }
     }
   ]

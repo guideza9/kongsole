@@ -44,6 +44,22 @@ RSpec.describe Kong::ForwardedRequest do
     expect(forward("/b/x").route_effect.host_header).to eq("api.example.com")
   end
 
+  it "keeps the client's host exactly as sent, port included, when preserve_host is on (final review)" do
+    route(service, paths: %w[/b], preserve_host: true)
+    expect(forward("/b/x", host: "API.Example.com:8443").route_effect.host_header).to eq("API.Example.com:8443")
+  end
+
+  it "splits the service path into what the service adds and what the route left, adding up to the URL (final review)" do
+    route(service(path: "/s"), paths: %w[/tv0/])
+    result = forward("/tv0/req")
+    expect(result.service_effect.path_parts).to eq([ "/s", "/req" ])
+    expect(result.service_effect.path_parts.join).to eq(URI(result.service_effect.url).path)
+
+    KongEntity.where(entity_type: %w[route service]).delete_all
+    route(service(path: "/s/"), paths: %w[/b])
+    expect(forward("/b/x").service_effect.path_parts).to eq([ "/s", "/x" ])
+  end
+
   it "goes to an upstream's weighted targets, and says 503 when there are none" do
     svc = service(host: "billing-upstream", port: 80)
     route(svc, paths: %w[/b])

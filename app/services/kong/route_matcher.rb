@@ -42,6 +42,15 @@ module Kong
       protocols = Array(data["protocols"])
       return nil if protocols.any? && (protocols & HTTP).empty?
 
+      # A traced request carries no headers and no SNI, so a route that needs
+      # them cannot catch it -- counting it would let it win on "more
+      # conditions" where Kong would pass it by.
+      unsent = { "headers" => "headers", "snis" => "SNI" }.find { |field, _| data[field].present? }
+      if unsent
+        skipped << { route: route, reason: "matches on #{unsent[1]} the tracer does not send" }
+        return nil
+      end
+
       host_kind = host_kind(Array(data["hosts"]), host) or return nil
       methods = Array(data["methods"])
       return nil unless methods.empty? || methods.include?(method)

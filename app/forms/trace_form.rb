@@ -35,7 +35,13 @@ class TraceForm
 
   private
 
+  # An env this machine never synced has an empty read-model: tracing it
+  # would answer "no route matched" for every request, which is not true.
   def env_of_project
-    errors.add(:env, "is not an environment of #{@project.name} with a connection") unless connection
+    if connection.nil?
+      errors.add(:env, "is not an environment of #{@project.name} with a connection")
+    elsif !KongEntity.where(kong_connection: connection).exists?
+      errors.add(:env, "has never been synced on this machine, so there is nothing to trace yet")
+    end
   end
 end

@@ -1,7 +1,7 @@
 {
   "kong_version": "3.7.1",
   "router_flavor": "traditional_compatible",
-  "recorded_at": "2026-09-26T18:29:55Z",
+  "recorded_at": "2026-09-26T19:09:05Z",
   "cases": [
     {
       "name": "longer prefix wins",
@@ -238,6 +238,37 @@
       "got": {
         "status": 200,
         "route": "many-paths"
+      }
+    },
+    {
+      "name": "a route that needs a header is passed by",
+      "request": {
+        "method": "GET",
+        "host": "o9.r5.test",
+        "path": "/hdr"
+      },
+      "routes": [
+        {
+          "name": "plain",
+          "paths": [
+            "/hdr"
+          ]
+        },
+        {
+          "name": "needs-header",
+          "paths": [
+            "/hdr"
+          ],
+          "headers": {
+            "x-canary": [
+              "1"
+            ]
+          }
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "plain"
       }
     }
   ]
