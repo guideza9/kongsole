@@ -122,12 +122,16 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - **Secret ของ plugin ในเส้นทางเขียน** — create/update plugin ยังเก็บค่าลับ plaintext ใน `change_plans.after` / `diff` /
   `deck_diff`, `audit_events.diff` และคืนผ่าน API (MCP) · rake `kong:redact_stored_plugin_secrets` ล้างได้เฉพาะของที่มีอยู่แล้ว ·
   เจ้าของงานเลือก "เปิดเป็น task แยกทีหลัง" (ทางเลือก: redact ตอนบันทึก audit + หลัง apply / เข้ารหัส column ระหว่าง pending) — หยุดถามก่อนทำ
+  · **ทำแล้ว 2026-09-26 เป็น R4.10** (`ec5bdcd`): plan ของ direct mode เก็บ `[REDACTED]`, ค่าจริงอยู่ใน `change_plans.sealed_secrets` (เข้ารหัส)
+  ใช้เฉพาะตอน apply แล้วล้าง · เครื่องที่ไม่มีกุญแจ encryption เก็บ plaintext เหมือนเดิม + log เตือน (เจ้าของงานสั่ง) — ขึ้นกับข้อ `master.key` ข้างล่าง ·
+  แถวเก่าที่มี plaintext อยู่แล้ว (เช่น plan ทดสอบ #79, #83 ใน DB dev) ล้างได้ด้วย `bin/rails kong:redact_stored_plugin_secrets`
 
 ### งานต่อที่รอ (จากตรวจ R1.12 บนเครื่อง compose, ตัดสิน 2026-09-25)
 
 - **connection `stored` login ใน development ไม่ได้บนเครื่องที่ไม่มี `config/master.key`** — ได้ 500
   `ActiveRecord::Encryption::Errors::Configuration` (T0.4 ตั้งกุญแจให้เฉพาะ test) · ทางเลือก: วาง `master.key` จริง / ตั้งกุญแจ dev แยก /
   แสดงข้อความแทน 500 · เจ้าของงานเลือก "จดไว้ก่อน ยังไม่ทำ" — หยุดถามก่อนทำ
+  · 2026-09-26: ข้อนี้ทำให้ R4.10 (ปิดผนึก secret ของ plugin ใน plan) ถอยไปเก็บ plaintext บนเครื่องที่ไม่มีกุญแจด้วย
 - **หน้า plan ขัดกันเองเมื่อ env เขียนไม่ได้แล้ว** (ข้อสังเกตของ R1.17) — plan ที่เสนอไว้ตอน env ยังเขียนได้ แสดงการ์ด
   "Direct apply → live write to Kong" และ "Guardrails: All clear" เหนือ notice "Nothing can be written" (server ปฏิเสธถูกต้อง) ·
   ทางแก้ที่น่าจะเล็กที่สุด: `ChangePlansController#show` ใช้ `write_block_reason` ตอนคำนวณการ์ด guardrail (backend) · ยังไม่ตัดสิน — หยุดถามก่อนทำ
@@ -160,6 +164,12 @@ R2, R3, R5, R7, T0 ไม่มี migration
 | กลาง | decK ไม่อยู่ในเครื่องนี้ | ติดตั้งก่อน R8/R7 verification |
 | ต่ำ | Route matcher ของ R5 เป็นการประมาณ router ของ Kong | บอกใน UI ว่า "approximation of Kong's traditional router"; regex ใช้ Ruby Regexp |
 
+### Known issue (บันทึกตามเจ้าของงาน 2026-09-26, ไม่แก้ตอนนี้)
+
+- **guard ของ admin path ตรวจแค่ตัวแรกของ service/route/consumer** — `ChangePlanner#plugin_scope_kong_id` คืน id ตัวแรกที่เจอ
+  ถ้า body จาก JSON editor หรือ MCP ส่งทั้ง `service` ปกติและ `route` ที่เป็น admin path มาพร้อมกัน `check_plugin_immutable!` จะไม่ปฏิเสธ
+  (มีมาก่อน R4 · ใกล้กฎข้อ 3 · พบใน final review ของ R4)
+
 ## ความคืบหน้า
 
 - [x] T0 — `docs/plans/T0-security-and-tooling.md` (ปิด 2026-09-25: rspec 889/0, vitest 28/28, PAT revoke แล้ว — เจ้าของงานยืนยัน)
@@ -167,7 +177,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - [x] R1 — `docs/plans/R1-multi-project-env.md` (ปิด 2026-09-25: R1.1–R1.21 เสร็จ, rspec 1085/0, vitest 30/30, detect 60 (R1.17 = 62), migration 4 ตัว up/down บนสำเนา DB — เจ้าของงานยืนยัน)
 - [x] R8 — `docs/plans/R8-pr-mode-changeset.md` (ปิด 2026-09-25: R8.1–R8.10 + final review, rspec 1174/0, vitest 31/31 · #5 "แก้รายการ" = ลบแล้วเสนอใหม่ — เจ้าของงานยืนยัน · ข้อจำกัด: entity ที่ไม่อยู่ใน git)
 - [x] R2 — `docs/plans/R2-create-service-route.md` (ปิด 2026-09-26: R2.1–R2.8 + final review + distill ตาม R3.7 รอบที่ 1, rspec 1240/0, vitest 31/31 — เจ้าของงานยืนยัน)
-- [ ] R4 — `docs/plans/R4-plugins.md` (R4.1–R4.9 + final review เสร็จ 2026-09-26, rspec 1322/0, vitest 31/31 · **รอเจ้าของงานตัดสิน:** secret ของ plugin ใน plan ของ direct mode (งานต่อที่รอ) — เกณฑ์ข้อสุดท้ายของ R4 ขึ้นกับข้อนี้)
+- [ ] R4 — `docs/plans/R4-plugins.md` (R4.1–R4.10 + final review เสร็จ 2026-09-26, rspec 1339/0, vitest 31/31 · R4.10 = secret ของ plugin ใน plan ถูกปิดผนึก (ตามที่เจ้าของงานสั่ง) · รอเจ้าของงานยืนยันปิด)
 - [ ] R5 — `docs/plans/R5-project-understanding.md`
 - [ ] R7 — `docs/plans/R7-export-config.md`
 - [ ] R6 — `docs/plans/R6-traffic-dashboard.md`

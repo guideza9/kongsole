@@ -444,16 +444,46 @@ end
 - [x] ภาพหน้าจอ 390/1280 จากแอปจริง (Edge + playwright-core): `tmp/shots/r49-*` (catalog, filtered, rate-limiting form/review, aws-lambda form/review,
   admin-route-readonly, uat-plaintext-refused, uat-changeset, uat-preview) + snapshot `tmp/shots/r46-*`, `r47-*`
 
+---
+
+### Task R4.10: เก็บค่าลับของ plugin ใน plan แบบปิดผนึก (backend) — เพิ่มตามการตัดสินของเจ้าของงาน 2026-09-26
+
+**ที่มา:** งานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน" (roadmap, ปิด T0) + เกณฑ์ปิดงาน R4 ข้อสุดท้าย · เจ้าของงาน: "ทำ task แยก หากลองทำแล้วไม่ได้ให้เก็บเป็น plain text"
+
+**ชั้น:** backend · **ต้องเสร็จก่อน:** R4.1–R4.9 · **ไฟล์ที่แก้ได้:** Create `db/migrate/<ts>_add_sealed_secrets_to_change_plans.rb`, `app/services/kong/plan_secret_seal.rb`, `spec/services/kong/plan_secret_seal_spec.rb`; Modify `app/models/change_plan.rb`, `app/services/kong/change_planner.rb`, `app/services/kong/change_applier.rb`, `spec/services/kong/change_planner_spec.rb`, `spec/services/kong/change_applier_spec.rb`, `spec/models/change_plan_spec.rb`
+
+**ปัญหา (วัดจริงใน R4.9):** direct mode — plugin ที่มีค่าลับ plaintext อยู่ใน `change_plans.after` / `diff`, หน้า review, `diff` ที่ API/MCP คืนตอน update, `audit_events.diff` ของ update (คัดลอกจาก `plan.diff`), และ SQL log ของ development
+
+**Architecture:** `after`/`diff` ของ plan เก็บแบบ redact (`[REDACTED]`) เสมอ · ค่าจริงเก็บใน column ใหม่ `sealed_secrets` (text, `encrypts` ของ Active Record Encryption แบบเดียวกับ `KongConnection#auth_secret`) เป็น JSON `{"after" => …, "diff" => …}` ที่ยังไม่ redact · ใช้เฉพาะ `Kong::ChangeApplier` ตอนส่งไป Kong · ล้าง (`nil`) ทันทีที่ plan ออกจาก `pending` (applied/failed/cancelled) และเมื่อหมดอายุ (กวาดตอนเสนอ plan ใหม่บน connection เดียวกัน) · ถ้าต้อง apply plan ที่ `after` มี `[REDACTED]` แต่ไม่มี seal → ปฏิเสธ "re-propose" (กันการเขียน "[REDACTED]" ลง Kong เป็นค่าลับ — รวมกรณี rollback migration)
+
+**Interfaces:**
+- `Kong::PlanSecretSeal.split(entity_type:, apply_mode:, after:, diff:, secret_paths:) -> { after:, diff:, sealed: Hash | nil }` — `sealed` ไม่ใช่ nil เฉพาะ plugin + direct + มีค่าที่ถูก redact จริง
+- `ChangePlan#sealed` -> `Hash | nil` (อ่าน JSON จาก `sealed_secrets`) · `ChangePlan#unsealed_after` / `#unsealed_diff` -> ค่าจริงถ้ามี seal ไม่งั้นค่าที่เก็บ
+- PR mode ไม่ปิดผนึก (plaintext ถูกปฏิเสธแล้วโดย `PluginSecretPolicy`; reference ต้องอยู่ใน YAML)
+
+**Migration / rollback (CAB):** `add_column :change_plans, :sealed_secrets, :text` · `down` = remove column · ก่อน rollback: apply หรือยกเลิก plan plugin ที่ยัง pending (ถ้าไม่ทำ applier จะปฏิเสธ plan นั้นให้เสนอใหม่ — ไม่มีค่าลับหลุดหรือ "[REDACTED]" ถูกเขียนลง Kong)
+
+- [x] **Step 1: test** — `plan_secret_seal_spec` (split: create มีค่าลับ → after redact + sealed มีค่าจริง; vault reference ไม่ถูกปิดผนึก; PR mode → sealed nil; entity อื่น → sealed nil; update diff ที่เปลี่ยนค่าลับ → from/to redact, sealed diff มีค่าจริง; schema อ่านไม่ได้ (secret_paths nil) → ปิดผนึกแบบ fail-closed ตามชื่อ field) · `change_planner_spec` (plan ที่บันทึกไม่มีค่าลับใน after/diff; `sealed` มีค่าจริง; กวาด seal ของ plan หมดอายุ) · `change_applier_spec` (POST/PATCH ได้ค่าจริง; audit diff ไม่มีค่าจริง; applied/failed → `sealed_secrets` nil; after มี MARK แต่ไม่มี seal → Violation และไม่เรียก Kong) · `change_plan_spec` (`sealed_secrets` ถูกเข้ารหัสใน DB: raw column ไม่มี plaintext)
+- [x] **Step 2:** FAIL → migration → implement → PASS · migrate/rollback/migrate · suite 0 failures (**1339/0**)
+- [x] **Step 3:** ตรวจกับ compose: aws-lambda plaintext บน `local/dev` → หน้า review / API / audit / DB / log ไม่มีค่า · apply แล้ว Kong ได้ค่าจริง (plugin ทำงาน) · ลบ plugin ทดสอบ
+  · **ผล (2026-09-26):** เครื่องนี้ไม่มีกุญแจ Active Record encryption (ไม่มี `config/master.key` — งานต่อที่รอจาก R1.12) → ครั้งแรกได้ 500 ·
+  เพิ่มทางถอยตามที่เจ้าของงานสั่ง: ไม่มีกุญแจ → เก็บ plaintext เหมือนเดิม + log เตือน (plan #83 ตรวจแล้ว: สร้าง/apply ได้, ไม่ 500) ·
+  รันด้วยกุญแจชั่วคราว (initializer ที่ไม่ commit, ลบแล้ว): plan #86 — หน้า review ไม่มีค่า, `after` = `[REDACTED]`, plan/audit/read-model ไม่มีค่า,
+  log มีแต่ query ค้นหาของผมเอง, `sealed_secrets` ถูกล้างหลัง apply, **Kong ได้ค่าจริง** · plan ที่ Kong ปฏิเสธ (#84, 409) ล้าง seal ด้วย ·
+  ลบ plugin ทดสอบผ่าน UI แล้ว (#85, #87) · ไม่มี plan ที่ค้าง seal ใน DB dev
+- [x] **Step 4:** Commit `fix(R4.10): plugin secrets in a direct-mode plan are sealed, used only to apply, then cleared` (`ec5bdcd`)
+- [x] **ถ้าทำไม่สำเร็จ:** คง plaintext ไว้ตามเดิม — ใช้เป็นทางถอยอัตโนมัติเมื่อเครื่องไม่มีกุญแจ encryption (`Kong::PlanSecretSeal.available?`)
+
 ## เกณฑ์ปิดงาน R4
 
-- [ ] เกณฑ์ใน `R4-plugins.md` (ฉบับแก้ §C5) ครบ พร้อมหลักฐาน — ครบทุกข้อ **ยกเว้น** "ค่าลับ … ไม่แสดงกลับใน UI หรือ MCP" (ดูข้อสุดท้าย)
+- [x] เกณฑ์ใน `R4-plugins.md` (ฉบับแก้ §C5) ครบ พร้อมหลักฐาน — "ค่าลับ … ไม่แสดงกลับใน UI หรือ MCP" ผ่านด้วย R4.10 บนเครื่องที่มีกุญแจ encryption
 - [x] migration `kong_schemas` up/down ผ่าน (R4.1: migrate → rollback STEP=1 → migrate บน DB dev)
 - [x] `bundle exec rspec` **1317 examples, 0 failures** · vitest 31/31 · `log_filtering_spec` ผ่าน · `grep "Basic " log/test.log` = fixture `"Basic abc"` เท่านั้น ·
   detect: หน้าเดิมไม่เพิ่ม (catalog 0, config 2 เท่าเดิม); หน้าใหม่มีแต่ชนิดที่มีอยู่แล้ว (`.scope` mark, panel ใน `<details>` ที่ปิด, `side-tab` ของ uat) ·
   `hints:todo` = 5 (ของ R3 ทั้งหมด, ไม่มีของ R4)
-- [ ] ไม่มีค่าลับของ plugin ใน read-model / plan / audit / YAML / response ของ MCP — **read-model ✓ · audit ✓ · YAML ✓ (PR mode ปฏิเสธ plaintext) ·
-  plan ✗ (`change_plans.after`/`diff` เก็บ plaintext ใน direct mode และหน้า review แสดง) · MCP: create ไม่คืนค่า ✓ แต่ update คืน `diff` ที่มีค่า ✗** —
-  ตรงกับงานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน" ที่เจ้าของงานให้หยุดถามก่อนทำ → **รอเจ้าของงานตัดสิน**
+- [x] ไม่มีค่าลับของ plugin ใน read-model / plan / audit / YAML / response ของ MCP — read-model ✓ · audit ✓ · YAML ✓ (PR mode ปฏิเสธ plaintext) ·
+  plan + API/MCP `diff` ✓ ด้วย R4.10 (ปิดผนึกใน `sealed_secrets` ที่เข้ารหัส) · **ข้อยกเว้นที่เจ้าของงานยอมรับ:** เครื่องที่ไม่มีกุญแจ
+  Active Record encryption เก็บ plaintext เหมือนเดิม (+ log เตือน) จนกว่าจะแก้งานต่อที่รอเรื่อง `master.key` (R1.12)
 
 ## Final review (2026-09-26, reviewer แยก บน Opus)
 
