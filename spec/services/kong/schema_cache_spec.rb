@@ -33,6 +33,18 @@ RSpec.describe Kong::SchemaCache do
     end
   end
 
+  # The plugin form explains why Kong could not be read (R3), so it asks for
+  # the error rather than nil when there is no copy to fall back on.
+  it "raises Kong's error when strict and no copy exists, and still serves a stale copy" do
+    stub_request(:get, "https://kong.test/schemas/plugins/acl").to_return(status: 503, body: "{}")
+    expect { described_class.fetch(connection: connection, client: client, kind: "plugin", name: "acl", strict: true) }
+      .to raise_error(Kong::Client::UpstreamUnavailable)
+
+    KongSchema.create!(kong_connection: connection, kind: "plugin", name: "acl", kong_version: "3.6.0", digest: "d",
+      body: schema, fetched_at: 2.days.ago)
+    expect(described_class.fetch(connection: connection, client: client, kind: "plugin", name: "acl", strict: true)).to eq(schema)
+  end
+
   it "refetches a copy older than a day" do
     stub = stub_request(:get, "https://kong.test/schemas/plugins/cors").to_return(status: 200, body: schema.to_json)
     described_class.fetch(connection: connection, client: client, kind: "plugin", name: "cors")

@@ -58,13 +58,14 @@ RSpec.describe Kong::EntityTypes do
   # Kong exposes POST /schemas/:name/validate, so a bad healthchecks block is
   # caught at plan time with per-field errors instead of failing at apply.
   describe "schema_name (Kong's /schemas/:name/validate)" do
-    it "is set for upstream and target only" do
+    it "is set for upstream and target, and for plugin (R4.5)" do
       expect(described_class.fetch("upstream").schema_name).to eq("upstreams")
       expect(described_class.fetch("target").schema_name).to eq("targets")
+      expect(described_class.fetch("plugin").schema_name).to eq("plugins")
     end
 
     it "is left nil for types M5a doesn't pre-validate, so their behaviour is unchanged" do
-      %w[service route consumer plugin keyauth_credential basicauth_credential].each do |type|
+      %w[service route consumer keyauth_credential basicauth_credential].each do |type|
         expect(described_class.fetch(type).schema_name).to be_nil
       end
     end

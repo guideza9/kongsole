@@ -64,6 +64,7 @@ RSpec.describe "Plugins (web)", type: :request do
   describe "POST /plugins (create)" do
     it "proposes a plugin scoped to a service, landing on the same review pipeline as everything else" do
       sign_in
+      stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
       service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "payments-api")
 
       post plugins_path, params: {
@@ -80,6 +81,7 @@ RSpec.describe "Plugins (web)", type: :request do
 
     it "proposes a global plugin when no scope is given at all" do
       sign_in
+      stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
 
       post plugins_path, params: { plugin_name: "prometheus", payload_json: { name: "prometheus", config: {} }.to_json }
 
@@ -116,6 +118,115 @@ RSpec.describe "Plugins (web)", type: :request do
       follow_redirect!
       expect(response.body).to include("read-only")
       expect(ChangePlan.count).to eq(0)
+    end
+  end
+
+  # R4.5: the catalog, the schema form, the scope picker and the version check.
+  describe "the schema-driven flow" do
+    let(:schema_json) { File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")) }
+
+    def stub_schema(host = "https://kong-admin.test")
+      stub_request(:get, "#{host}/schemas/plugins/rate-limiting").to_return(status: 200, body: schema_json)
+    end
+
+    it "lists the catalog as bundled and custom entries" do
+      sign_in
+      connection.update!(plugins_available: { "available_on_server" => { "rate-limiting" => { "version" => "3.7.1" }, "team-auth" => {} } })
+      get new_plugin_path
+      expect(response.body).to include("rate-limiting", "team-auth", "Bundled with Kong", "Custom")
+    end
+
+    it "offers every scope, without admin-path entities" do
+      sign_in
+      stub_schema
+      create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+      create(:kong_entity, kong_connection: connection, entity_type: "service", name: "admin-api", is_admin_path: true)
+      get new_plugin_path(plugin_name: "rate-limiting")
+      expect(response.body).to include("billing")
+      expect(response.body).not_to include("admin-api")
+    end
+
+    it "renders a control per config field, a secret one without a value" do
+      sign_in
+      stub_schema
+      get new_plugin_path(plugin_name: "rate-limiting")
+      expect(response.body).to include('name="plugin[config][minute]"', 'name="plugin[config][policy]"')
+      expect(response.body).to match(/<input[^>]*type="password"[^>]*name="plugin\[config\]\[api_key\]"|<input[^>]*name="plugin\[config\]\[api_key\]"[^>]*type="password"/)
+    end
+
+    it "creates from form fields and lands on the plan review (direct) with Kong's schema validation" do
+      sign_in
+      connection.update!(access_level: "rw")
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+      stub_schema
+      validate = stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
+
+      post plugins_path, params: { plugin_name: "rate-limiting", scope_type: "service", scope_kong_id: service.kong_id,
+        plugin: { config: { minute: "60" }, enabled: "1" } }
+
+      plan = ChangePlan.last
+      expect(response).to redirect_to(change_plan_path(plan))
+      expect(plan.after["config"]["minute"]).to eq(60)
+      expect(plan.after["service"]).to eq("id" => service.kong_id)
+      expect(validate).to have_been_requested
+    end
+
+    it "takes the scope from the picker's one select" do
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+      stub_schema
+      stub_request(:post, "https://kong-admin.test/schemas/plugins/validate").to_return(status: 200, body: "{}")
+
+      post plugins_path, params: { plugin_name: "rate-limiting", scope: "service:#{service.kong_id}", plugin: { config: { minute: "60" } } }
+
+      expect(ChangePlan.last.after["service"]).to eq("id" => service.kong_id)
+    end
+
+    it "re-renders with the field's own error for a bad value" do
+      sign_in
+      connection.update!(access_level: "rw")
+      stub_schema
+      post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { minute: "abc" } } }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).to include("config.minute")
+      expect(ChangePlan.count).to eq(0)
+    end
+
+    it "puts a PR-mode plugin into the changeset and refuses plaintext secrets" do
+      env = create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])
+      pr_connection = create(:kong_connection, admin_url: "https://kong-uat.test", project_env: env)
+      sign_in_to(pr_connection, access: :ro)
+      stub_schema("https://kong-uat.test")
+
+      post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { api_key: "sk_live_1" } } }
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.body).not_to include("sk_live_1")
+
+      post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { api_key: "{vault://env/rl-api-key}" } } }
+      expect(response).to redirect_to(changeset_path(ChangePlan.last.changeset))
+      expect(a_request(:any, /kong-uat\.test/).with { |req| req.method != :get && req.uri.path != Kong::AccessProbe::PROBE_PATH }).not_to have_been_made
+    end
+
+    # Review Focus 5.
+    it "warns when another env of the project has a different schema for the plugin" do
+      sign_in
+      stub_schema
+      uat = create(:kong_connection, kong_version: "3.8.0",
+        project_env: create(:project_env, project: connection.project, name: "uat", position: 9))
+      KongSchema.create!(kong_connection: uat, kind: "plugin", name: "rate-limiting", kong_version: "3.8.0",
+        digest: "other", body: {}, fetched_at: Time.current)
+
+      get new_plugin_path(plugin_name: "rate-limiting")
+
+      expect(response.body).to include("Schema differs on uat (Kong 3.8.0)")
+    end
+
+    it "explains why Kong's schema could not be read" do
+      sign_in
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 503, body: "{}")
+      get new_plugin_path(plugin_name: "rate-limiting")
+      expect(response).to redirect_to(new_plugin_path)
+      expect(flash[:error_explanation]).to be_present
     end
   end
 

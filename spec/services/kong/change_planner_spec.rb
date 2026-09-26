@@ -350,8 +350,29 @@ RSpec.describe Kong::ChangePlanner do
       expect(ChangePlan.count).to eq(0)
     end
 
+    # R4.5: Kong's own schema checks a new plugin, as it does an upstream.
+    it "refuses a new plugin Kong's schema rejects, with Kong's field message" do
+      stub_request(:post, "https://kong-admin.internal/schemas/plugins/validate")
+        .to_return(status: 400, body: { fields: { config: { minute: "expected a number" } } }.to_json)
+      expect { planner(entity_type: "plugin", operation: "create", attributes: { "name" => "rate-limiting", "config" => { "minute" => "x" } }).call }
+        .to raise_error(described_class::SchemaViolation, /config\.minute: expected a number/)
+    end
+
+    # An update's body has the redacted secrets pruned out, and Kong would
+    # call a required one missing though it still holds it.
+    it "does not ask Kong's schema about a plugin update" do
+      plugin_id = SecureRandom.uuid
+      live = { "id" => plugin_id, "name" => "aws-lambda", "config" => { "aws_key" => "AKIA" }, "updated_at" => 1 }
+      stub_request(:get, "https://kong-admin.internal/plugins/#{plugin_id}").to_return(status: 200, body: live.to_json)
+      stub_request(:get, "https://kong-admin.internal/schemas/plugins/aws-lambda").to_return(status: 200, body: { fields: [] }.to_json)
+      plan = planner(entity_type: "plugin", operation: "update", target_kong_id: plugin_id, attributes: { "enabled" => false }).call
+      expect(plan).to be_persisted
+      expect(a_request(:post, %r{/schemas/plugins/validate})).not_to have_been_made
+    end
+
     it "allows proposing a plugin change on an ordinary, non-admin-path target" do
       route_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+      stub_request(:post, "https://kong-admin.internal/schemas/plugins/validate").to_return(status: 200, body: "{}")
       plan = planner(entity_type: "plugin", operation: "create", attributes: { "name" => "cors", "route" => { "id" => route_id } }).call
 
       expect(plan).to be_persisted

@@ -5,11 +5,12 @@ module Kong
   # while the connection's Kong version is the one it was fetched from.
   # When Kong cannot be read, a stale copy is better than none; with no copy
   # at all the answer is nil and the caller decides (the redactor fails
-  # closed).
+  # closed). `strict: true` raises Kong's error instead of that nil, for a
+  # page that explains why Kong could not be read (R3).
   class SchemaCache
     MAX_AGE = 24.hours
 
-    def self.fetch(connection:, client:, kind:, name:)
+    def self.fetch(connection:, client:, kind:, name:, strict: false)
       cached = KongSchema.find_by(kong_connection: connection, kind: kind, name: name)
       return cached.body if fresh?(cached, connection)
 
@@ -17,6 +18,8 @@ module Kong
       store(connection, kind, name, body)
       body
     rescue Kong::Client::Error, JSON::ParserError
+      raise if strict && cached.nil?
+
       cached&.body
     end
 

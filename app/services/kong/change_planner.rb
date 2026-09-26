@@ -204,6 +204,9 @@ module Kong
       # PR mode reads Kong through a read-only route, which answers any POST
       # with the router's 404; `deck gateway validate` covers PR mode in CI.
       return if @connection.apply_mode == "pr"
+      # R4.5: a plugin update's body has its redacted secrets pruned out, and
+      # Kong would call a required one missing though it still holds it.
+      return if @entity_type == "plugin" && @operation != "create"
 
       body = after.except(*Kong::EntityTypes::KONG_MANAGED_FIELDS, *NOT_IN_KONG_SCHEMA.fetch(@entity_type, []))
       body = body.merge(@definition.parent_type => { "id" => @parent_kong_id }) if @definition.requires_parent? && @parent_kong_id.present?

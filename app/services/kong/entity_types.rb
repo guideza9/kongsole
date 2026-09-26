@@ -97,7 +97,7 @@ module Kong
       # Kong::EntitySync#identify's "plugin" branch, which resolves it per
       # instance instead. decK nests it under whichever of the three it is
       # scoped to (Kong::DeckRenderer resolves that per plan).
-      "plugin" => Definition.new(list_path: "/plugins", parent_type: nil, deck_collection: "plugins", deck_key: "name",
+      "plugin" => Definition.new(list_path: "/plugins", parent_type: nil, schema_name: "plugins", deck_collection: "plugins", deck_key: "name",
                                   deck_refs: %w[service route consumer]),
       "upstream" => Definition.new(list_path: "/upstreams", parent_type: nil, schema_name: "upstreams",
                                     deck_collection: "upstreams", deck_key: "name"),
