@@ -1,20 +1,22 @@
-<% content_for :title, "Trace a request" %>
+<% content_for :title, "Trace a request · #{@project.name}" %>
+<%# R5.8: one request's journey through this project's Kong, as this machine
+    last synced it (Kong::RequestTrace) -- the request, the route that
+    catches it, the plugins that run, and what the service receives. Each
+    stop explains only its own settings. No login and no call to Kong. %>
 <p class="page-back"><%= link_to @project.name, project_path(@project.key) %></p>
 <h1 class="page-title">Trace a request</h1>
-<%= form_with url: project_trace_path(@project.key), method: :get, local: true do |f| %>
-  <%= f.select :env, @trace_envs.map { |row| [ row.env.name, row.env.name, { disabled: row.synced_at.nil? } ] }, selected: @trace_form.env %>
-  <%= f.select :method, RouteForm::METHODS, selected: @trace_form.http_method %>
-  <%= f.text_field :host, value: @trace_form.host %>
-  <%= f.text_field :path, value: @trace_form.path %>
-  <%= f.submit "Trace" %>
-<% end %>
-<% @trace_errors&.full_messages&.each do |message| %><p><%= message %></p><% end %>
+<p class="trace-intro"><%= t("hints.pages.project_trace.intro") %></p>
+
+<%= render "project_traces/form" %>
+
 <% if @trace %>
-  <% if @trace.match.route %>
-    <p>Route: <%= @trace.match.route.name %></p>
-    <ol><% @trace.steps.each do |step| %><li><%= step.plugin.name %> (<%= step.scope %>)</li><% end %></ol>
-    <% if @trace.forwarded&.service_effect %><p>Service: <%= @trace.match.service.name %> — <%= @trace.forwarded.service_effect.url %></p><% end %>
-  <% else %>
-    <p>Kong would answer 404 — no route matched.</p>
-  <% end %>
+  <ol class="trace-stops">
+    <%= render "project_traces/request_stop" %>
+    <%= render "project_traces/route_stop" %>
+    <% if @trace.match.route %>
+      <%= render "project_traces/plugins_stop" %>
+      <%= render "project_traces/service_stop" %>
+    <% end %>
+  </ol>
+  <%= render "project_traces/folds" %>
 <% end %>

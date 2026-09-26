@@ -155,6 +155,55 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("project-overview")
     end
 
+    # R5.8: the tracer's journey with every part in use -- a route that won
+    # over another, plugins across scopes (one replacing the global one, one
+    # disabled), the note, a consumer-only plugin, a regex it could not read --
+    # then no route, then request-termination answering instead.
+    it "the request tracer: full, no route, not forwarded (R5.8)" do
+      project = create(:project, key: "payments", name: "Payments Gateway", source: "registry")
+      env = create(:project_env, project: project, name: "dev", position: 1)
+      priorities = { "correlation-id" => 100001, "cors" => 2000, "key-auth" => 1250, "request-size-limiting" => 951,
+        "acl" => 950, "rate-limiting" => 910, "request-transformer" => 801, "prometheus" => 13, "request-termination" => 2 }
+      connection = create(:kong_connection, project_env: env, admin_url: "https://kong-dev.payments.internal:8444",
+        plugins_available: { "available_on_server" => priorities.transform_values { { "priority" => _1 } } })
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing",
+        data: { "protocol" => "http", "host" => "billing.internal", "port" => 8080, "path" => "/api", "connect_timeout" => 60_000,
+                "read_timeout" => 60_000, "write_timeout" => 60_000, "retries" => 5 })
+      route = ->(name, created, **data) do
+        create(:kong_entity, kong_connection: connection, entity_type: "route", name: name, kong_created_at: created,
+          parent_type: "service", parent_kong_id: service.kong_id,
+          data: { "protocols" => %w[http https], "hosts" => %w[api.payments.example], "methods" => [], "regex_priority" => 0,
+                  "strip_path" => true, "path_handling" => "v0", "preserve_host" => false }.merge(data.stringify_keys))
+      end
+      v1 = route.call("billing-v1", 2.days.ago, paths: %w[/billing/v1], methods: %w[GET POST])
+      route.call("billing", 3.days.ago, paths: %w[/billing], methods: %w[GET POST PUT])
+      route.call("reports-pcre", 1.day.ago, paths: [ "~/reports/(?<y>\\d{4})(?(y)a|b)" ])
+      plugin = ->(name, scope = {}, enabled: true, config: {}) do
+        create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: name, enabled: enabled,
+          data: { "name" => name, "config" => config }.merge(scope))
+      end
+      plugin.call("correlation-id")
+      plugin.call("cors", { "service" => { "id" => service.kong_id } })
+      plugin.call("key-auth", { "service" => { "id" => service.kong_id } })
+      plugin.call("acl", { "route" => { "id" => v1.kong_id } })
+      plugin.call("rate-limiting")
+      plugin.call("rate-limiting", { "route" => { "id" => v1.kong_id } })
+      plugin.call("request-transformer", { "service" => { "id" => service.kong_id } }, enabled: false)
+      plugin.call("prometheus")
+      partner = create(:kong_entity, kong_connection: connection, entity_type: "consumer", name: "partner-x")
+      plugin.call("request-size-limiting", { "consumer" => { "id" => partner.kong_id } })
+
+      get project_trace_path(project.key), params: { env: "dev", method: "GET", host: "api.payments.example", path: "/billing/v1/invoices/42?status=paid" }
+      snapshot!("project-trace")
+
+      get project_trace_path(project.key), params: { env: "dev", method: "GET", host: "api.payments.example", path: "/ledger/7" }
+      snapshot!("project-trace-no-route")
+
+      plugin.call("request-termination", { "route" => { "id" => v1.kong_id } }, config: { "status_code" => 503, "message" => "Billing is under maintenance" })
+      get project_trace_path(project.key), params: { env: "dev", method: "GET", host: "api.payments.example", path: "/billing/v1/invoices/42" }
+      snapshot!("project-trace-not-forwarded")
+    end
+
     it "project and env forms (R1.9)" do
       project = create(:project, key: "payments", name: "Payments", source: "local")
       get new_project_path

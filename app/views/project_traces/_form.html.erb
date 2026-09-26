@@ -1,0 +1,37 @@
+<%# The request as one line -- env, method, host, path -- the way a client
+    sends it. A GET form, so a trace is a link someone can share. Envs this
+    machine has never synced are listed but cannot be picked. %>
+<% errors = @trace_errors || ActiveModel::Errors.new(@trace_form) %>
+<% synced_env = @trace_envs.find { |row| row.env.name == @trace_form.env && row.synced_at } %>
+<%= form_with url: project_trace_path(@project.key), method: :get, class: "trace-form" do |f| %>
+  <div class="trace-form__line">
+    <%= f.label :env, "Environment", class: "sr-only" %>
+    <%= f.select :env,
+          options_for_select(@trace_envs.map { |row|
+            [ row.synced_at ? row.env.name : t("hints.pages.project_trace.never_synced_env", env: row.env.name), row.env.name, { disabled: row.synced_at.nil? } ]
+          }, @trace_form.env),
+          {}, class: "trace-form__field trace-form__env", aria: { invalid: errors.include?(:env) || nil } %>
+    <%= f.label :method, "Method", class: "sr-only" %>
+    <%= f.select :method, RouteForm::METHODS, { selected: @trace_form.http_method },
+          class: "trace-form__field trace-form__method", aria: { invalid: errors.include?(:http_method) || nil } %>
+    <%= f.label :host, "Host", class: "sr-only" %>
+    <%= f.text_field :host, value: @trace_form.host, placeholder: "api.example.com", autocomplete: "off", spellcheck: false,
+          autocapitalize: "none", class: "trace-form__field trace-form__host", aria: { invalid: errors.include?(:host) || nil } %>
+    <%= f.label :path, "Path", class: "sr-only" %>
+    <%= f.text_field :path, value: @trace_form.path, placeholder: "/billing/v1/invoices/42", autocomplete: "off", spellcheck: false,
+          autocapitalize: "none", class: "trace-form__field trace-form__path", aria: { invalid: errors.include?(:path) || nil } %>
+    <%= f.submit "Trace", name: nil, class: "btn btn-primary trace-form__submit" %>
+  </div>
+  <% if errors.any? %>
+    <ul class="trace-form__errors" role="alert">
+      <% errors.full_messages.each do |message| %><li><%= message.sub(/\AHttp method/, "Method") %></li><% end %>
+    </ul>
+  <% end %>
+  <p class="trace-form__hint">
+    <% if synced_env %>
+      <%= t("hints.pages.project_trace.approximation_html", env: synced_env.env.name, time: plan_timestamp(synced_env.synced_at)) %>
+    <% else %>
+      <%= t("hints.pages.project_trace.form_hint") %>
+    <% end %>
+  </p>
+<% end %>

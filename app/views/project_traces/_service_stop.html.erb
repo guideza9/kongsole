@@ -1,0 +1,77 @@
+<%# Stop 4: what the service receives -- only the service's side: where it
+    sends (host, port, protocol, or an upstream's targets) and what path it
+    adds in front of what the route left. Or why nothing is forwarded:
+    request-termination answers, the upstream has no target, or the route has
+    no service. %>
+<% match = @trace.match %>
+<% forwarded = @trace.forwarded %>
+<% service = forwarded&.service_effect %>
+<li class="trace-stop trace-stop--last" data-stop="service">
+  <span class="trace-stop__node trace-stop__node--end" aria-hidden="true">4</span>
+  <div class="trace-stop__body">
+    <% if forwarded&.answered_by %>
+      <% answer = forwarded.answered_by %>
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.not_forwarded_title") %></h2>
+      <div class="trace-box">
+        <p class="trace-box__final trace-box__final--stop">Kong answers <%= answer[:status] %></p>
+        <dl class="trace-box__rows">
+          <dt>Answer</dt><dd><code><%= answer[:status] %></code><% if answer[:message].present? %> “<%= answer[:message] %>”<% end %></dd>
+          <dt>From</dt><dd>request-termination, from its own settings</dd>
+          <% if match.service %><dt>Service</dt><dd><%= match.service.name %> is never called while this plugin is enabled</dd><% end %>
+        </dl>
+      </div>
+    <% elsif match.service.nil? %>
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.no_service_title") %></h2>
+      <p class="trace-stop__text"><%= t("hints.pages.project_trace.no_service_body") %></p>
+    <% else %>
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.service_title_html", name: tag.span(match.service.name, class: "trace-stop__name")) %></h2>
+      <div class="trace-box">
+        <% if service.not_forwarded %>
+          <p class="trace-box__final trace-box__final--stop">Not forwarded: Kong answers <%= service.not_forwarded %></p>
+          <dl class="trace-box__rows">
+            <dt>Why</dt><dd><%= t("hints.pages.project_trace.no_targets", name: service.upstream.name) %></dd>
+          </dl>
+        <% else %>
+          <p class="trace-box__final"><span class="route-method"><%= @trace_form.http_method %></span><span class="trace-box__url"><%= service.url %></span></p>
+          <dl class="trace-box__rows">
+            <dt>Sends to</dt>
+            <dd>
+              <% if service.upstream %>
+                one of <%= pluralize(service.upstream.targets.size, "target") %> of upstream <strong><%= service.upstream.name %></strong>, <%= service.upstream.algorithm %>:
+                <%= safe_join(service.upstream.targets.map { |target| tag.code(target) }, " · ") %>
+                <span class="trace-box__why">target health is not in the read-model</span>
+              <% else %>
+                <code><%= service.host %></code>, port <code><%= service.port %></code>, over <code><%= service.protocol %></code>
+              <% end %>
+            </dd>
+            <dt>Adds</dt>
+            <dd>
+              <% if service.added_path %>
+                <span class="trace-seg trace-seg--added" title="Added by the service"><%= service.added_path %></span><span class="trace-seg trace-seg--kept" title="What the route left"><%= forwarded.route_effect.kept.presence || "/" %></span>
+                <span class="trace-box__why">the service's path goes in front of what the route left</span>
+              <% else %>
+                nothing: <span class="trace-seg trace-seg--kept" title="What the route left"><%= forwarded.route_effect.kept.presence || "/" %></span> arrives as the route left it
+              <% end %>
+            </dd>
+            <% if service.protocol == "https" %>
+              <dt>TLS</dt>
+              <dd>
+                <% case service.tls_verify
+                   when true then %>tls_verify on: Kong checks <%= match.service.name %>'s certificate<%
+                   when false then %>tls_verify off: Kong does not check <%= match.service.name %>'s certificate<%
+                   else %>tls_verify not set: Kong's own setting decides<% end %>
+              </dd>
+            <% end %>
+            <% if service.timeouts[:connect] || service.timeouts[:read] %>
+              <dt>Waits</dt>
+              <dd>up to <%= trace_seconds(service.timeouts[:connect]) %> to connect and <%= trace_seconds(service.timeouts[:read]) %> for an answer, then Kong answers 504</dd>
+            <% end %>
+            <% if service.retries %>
+              <dt>Retries</dt><dd>up to <%= pluralize(service.retries, "time") %> when it cannot connect</dd>
+            <% end %>
+          </dl>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+</li>

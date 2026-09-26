@@ -1,0 +1,39 @@
+<%# What the four stops leave out, folded: routes that matched too but lost
+    (and why), plugins that depend on who calls, and routes the tracer could
+    not check. Shown only when there is something in them. %>
+<% match = @trace.match %>
+<% folds = [ match.losers.any?, @trace.consumer_steps.any?, match.skipped.any? ] %>
+<% if folds.any? %>
+  <div class="trace-folds">
+    <% if match.losers.any? %>
+      <details class="disclosure">
+        <summary><%= t("hints.pages.project_trace.lost") %> <span><%= pluralize(match.losers.size, "route") %></span></summary>
+        <ul class="disclosure__body trace-folds__list">
+          <% match.losers.each do |loser| %>
+            <li><strong><%= loser[:route].name %></strong> <%= render "entities/route_match", match: route_match(loser[:route]) %><span class="trace-folds__why"><%= loser[:reason] %></span></li>
+          <% end %>
+        </ul>
+      </details>
+    <% end %>
+    <% if @trace.consumer_steps.any? %>
+      <details class="disclosure">
+        <summary><%= t("hints.pages.project_trace.consumer_only") %> <span><%= pluralize(@trace.consumer_steps.size, "plugin") %></span></summary>
+        <ul class="disclosure__body trace-folds__list">
+          <% @trace.consumer_steps.each do |step| %>
+            <li><%= t("hints.pages.project_trace.consumer_only_item_html", plugin: tag.strong(step.plugin.name), consumer: tag.strong(step.consumer)) %></li>
+          <% end %>
+        </ul>
+      </details>
+    <% end %>
+    <% if match.skipped.any? %>
+      <details class="disclosure">
+        <summary><%= t("hints.pages.project_trace.skipped") %> <span><%= pluralize(match.skipped.size, "route") %></span></summary>
+        <ul class="disclosure__body trace-folds__list">
+          <% match.skipped.each do |skipped| %>
+            <li><strong><%= skipped[:route].name %></strong> <span class="trace-folds__why"><%= skipped[:reason] %></span></li>
+          <% end %>
+        </ul>
+      </details>
+    <% end %>
+  </div>
+<% end %>

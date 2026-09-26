@@ -1,0 +1,47 @@
+<%# Stop 3: the plugins this request runs, in Kong's order (Kong::PluginChain),
+    then the ones that may stop or change it before it reaches the service.
+    Kongsole names them; it does not run them. %>
+<% match = @trace.match %>
+<% steps = @trace.steps %>
+<% noted = steps.filter_map { |step| (text = trace_effect(step)) && [ step, text ] } %>
+<li class="trace-stop" data-stop="plugins">
+  <span class="trace-stop__node" aria-hidden="true">3</span>
+  <div class="trace-stop__body">
+    <div class="trace-stop__head">
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.plugins_title") %></h2>
+      <% if steps.any? %><span class="trace-stop__aside" aria-hidden="true"><%= t("hints.pages.project_trace.priority") %></span><% end %>
+    </div>
+
+    <% if steps.empty? %>
+      <p class="trace-stop__text"><%= t("hints.pages.project_trace.no_plugins") %></p>
+    <% else %>
+      <% position = 0 %>
+      <ol class="trace-plugins">
+        <% steps.each do |step| %>
+          <li class="trace-plugin<%= " trace-plugin--off" unless step.enabled %>">
+            <span class="trace-plugin__step"><%= step.enabled ? (position += 1) : "off" %></span>
+            <span class="trace-plugin__name"><%= step.plugin.name %></span>
+            <span class="trace-plugin__scope">
+              <%= render "entities/scope", scope: trace_scope(step, match) %>
+              <% if step.overrides.any? %><span class="trace-plugin__note">replaces the <%= step.overrides.to_sentence %> one</span><% end %>
+              <% unless step.enabled %><%= status_badge("disabled") %><% end %>
+            </span>
+            <span class="trace-plugin__priority" aria-label="priority <%= step.priority || "unknown" %>"><%= step.priority || "not loaded" %></span>
+          </li>
+        <% end %>
+      </ol>
+    <% end %>
+
+    <% if noted.any? %>
+      <div class="trace-plugin-note" role="note">
+        <p class="trace-plugin-note__title"><%= t("hints.pages.project_trace.plugin_note_title", count: noted.size) %></p>
+        <ul>
+          <% noted.each do |step, text| %>
+            <li><strong><%= step.plugin.name %></strong>: <%= text %></li>
+          <% end %>
+        </ul>
+        <p><%= t("hints.pages.project_trace.plugin_note_tail") %></p>
+      </div>
+    <% end %>
+  </div>
+</li>

@@ -2908,3 +2908,490 @@ textarea.plugin-field__control {
   background: transparent;
   color: var(--color-ink);
 }
+
+/* R5.8 -- the request tracer. One request's journey drawn as numbered stops
+   on a hairline rail (the sequence is the information: Kong runs them in this
+   order), each stop explaining only its own settings. The request line reuses
+   the .route-method / .route-host / .route-path marks; path parts are struck
+   (removed by the route), tinted (kept) or boxed (added by the service), and
+   every part carries a title and a sentence, so colour is never the only
+   signal. */
+.trace-intro {
+  max-width: 65ch;
+  margin: 0.25rem 0 1.25rem;
+  font-size: 0.875rem;
+  color: var(--color-ink-soft);
+}
+
+.trace-form {
+  max-width: 56rem;
+  margin-bottom: 2rem;
+}
+
+.trace-form__line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.trace-form__field {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+
+.trace-form__field:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.trace-form__field[aria-invalid="true"] {
+  background: var(--color-danger-tint);
+}
+
+.trace-form__env {
+  border-right: 1px solid var(--color-border);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+.trace-form__method {
+  font-weight: 700;
+}
+
+.trace-form__host,
+.trace-form__path,
+.trace-form__submit {
+  grid-column: 1 / -1;
+}
+
+.trace-form__submit {
+  min-height: 2.75rem;
+  border-radius: 0;
+}
+
+.trace-form__errors {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+}
+
+.trace-form__hint {
+  margin: 0.5rem 0 0;
+  max-width: 70ch;
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+@media (min-width: 48rem) {
+  .trace-form__line {
+    grid-template-columns: 7rem 6.5rem minmax(0, 15rem) minmax(0, 1fr) auto;
+  }
+
+  .trace-form__field {
+    min-height: 2.5rem;
+    border-bottom: 0;
+    border-right: 1px solid var(--color-border);
+  }
+
+  .trace-form__host,
+  .trace-form__path,
+  .trace-form__submit {
+    grid-column: auto;
+  }
+
+  .trace-form__path {
+    border-right: 0;
+  }
+
+  .trace-form__submit {
+    min-height: 2.5rem;
+  }
+}
+
+.trace-stops {
+  max-width: 52rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0 1rem;
+}
+
+/* The rail: from under one node to the next. */
+.trace-stop::before {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  bottom: 0;
+  left: calc(1rem - 1px);
+  width: 2px;
+  background: var(--color-border);
+}
+
+.trace-stop--last::before {
+  display: none;
+}
+
+.trace-stop__node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--color-ink);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-stop__node--end {
+  background: var(--color-ink);
+  color: var(--color-surface);
+}
+
+.trace-stop__body {
+  min-width: 0;
+  padding: 0.25rem 0 2.25rem;
+}
+
+.trace-stop--last .trace-stop__body {
+  padding-bottom: 1rem;
+}
+
+.trace-stop__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.trace-stop__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-ink-soft);
+  text-wrap: balance;
+}
+
+.trace-stop__name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.trace-stop__aside {
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.trace-stop__line,
+.trace-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.375rem 0.5rem;
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.trace-request .route-host,
+.trace-request .route-path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.trace-request .route-path {
+  margin-left: -0.5rem;
+  font-weight: 600;
+}
+
+.trace-stop__text {
+  margin: 0.375rem 0 0;
+  max-width: 65ch;
+  font-size: 0.875rem;
+  color: var(--color-ink-soft);
+}
+
+.trace-why {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.trace-why li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.375rem;
+  overflow-wrap: anywhere;
+}
+
+.trace-why__icon {
+  flex: none;
+  align-self: center;
+  margin-right: 0.125rem;
+  color: var(--color-success);
+}
+
+.trace-why code,
+.trace-box code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.trace-box {
+  margin-top: 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.trace-box__cap {
+  margin: 0;
+  padding: 0.625rem 0.875rem 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.trace-box__final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.trace-box__final--stop {
+  background: var(--color-danger-tint);
+  color: var(--color-danger-ink);
+  font-family: var(--font-sans);
+}
+
+.trace-box__url {
+  min-width: 0;
+}
+
+.trace-box__rows {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: 0.5rem 0.875rem;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.625rem 0.875rem 0.75rem;
+  font-size: var(--text-xs);
+}
+
+.trace-box__rows dt {
+  font-weight: 600;
+  color: var(--color-ink-soft);
+}
+
+.trace-box__rows dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.trace-box__why {
+  color: var(--color-ink-soft);
+}
+
+/* A phone has no room for a label column: each label sits over its value. */
+@media (max-width: 40rem) {
+  .trace-box__rows {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.125rem;
+  }
+
+  .trace-box__rows dd + dt {
+    margin-top: 0.5rem;
+  }
+}
+
+.trace-seg {
+  padding: 0.0625rem 0.3rem;
+  border-radius: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.trace-seg--cut {
+  border: 1px dashed var(--color-border-strong);
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-faint);
+  text-decoration: line-through;
+}
+
+.trace-seg--kept {
+  background: var(--color-accent-tint);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.trace-seg--added {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.trace-plugins {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-plugin {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+  grid-template-areas: "step name priority" ". scope scope";
+  gap: 0.25rem 0.625rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.875rem;
+}
+
+.trace-plugin:first-child {
+  border-top: 0;
+}
+
+.trace-plugin__step {
+  grid-area: step;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+}
+
+.trace-plugin__name {
+  grid-area: name;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.trace-plugin__scope {
+  grid-area: scope;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  min-width: 0;
+}
+
+.trace-plugin__priority {
+  grid-area: priority;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+  text-align: right;
+}
+
+.trace-plugin__note {
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}
+
+.trace-plugin--off .trace-plugin__name {
+  color: var(--color-ink-soft);
+  text-decoration: line-through;
+}
+
+@media (min-width: 48rem) {
+  .trace-plugin {
+    grid-template-columns: 1.75rem 12rem minmax(0, 1fr) 5rem;
+    grid-template-areas: "step name scope priority";
+  }
+}
+
+.trace-plugin-note {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-radius: 0.5rem;
+  background: var(--color-warning-tint);
+  font-size: var(--text-xs);
+  color: var(--color-warning-ink);
+}
+
+.trace-plugin-note__title {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+}
+
+.trace-plugin-note ul {
+  margin: 0.25rem 0 0.375rem;
+  padding-left: 1.125rem;
+  list-style: disc;
+}
+
+.trace-plugin-note p {
+  margin: 0;
+}
+
+.trace-plugin-note strong {
+  color: var(--color-ink);
+}
+
+.trace-folds {
+  max-width: 52rem;
+  margin-top: 0.5rem;
+  padding-top: 0.375rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.trace-folds__list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.trace-folds__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+
+.trace-folds__why {
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+}

@@ -481,6 +481,39 @@ en:
         trace: "Trace a request"
         notes_heading: "Team notes"
         notes_source_html: "From %{path} · change it with a pull request to the Kongsole repo"
+      # R5.8: the request tracer (app/views/project_traces). Stops explain only
+      # their own settings: route (stop 2), plugins (3), service (4).
+      project_trace:
+        intro: "Follow one request through Kong, stop by stop, as this machine last synced it. Nothing is sent to Kong."
+        approximation_html: "An approximation of Kong's router (traditional_compatible), from %{env}'s sync at %{time}. Headers, SNI and expressions routes are not considered."
+        form_hint: "Environment, method, host and path, the way a client sends it."
+        never_synced_env: "%{env} (never synced)"
+        request_title: "The request"
+        route_title_html: "Caught by route %{name}"
+        no_route_title: "No route catches it"
+        no_route_body: "Kong would answer 404, no route matched. Check the host, the method and the start of the path against this environment's routes."
+        route_effect: "What the route does to the request"
+        plugins_title: "Plugins run, highest priority first"
+        priority: "Priority"
+        no_plugins: "No plugin runs on this request."
+        plugin_note_title:
+          one: "1 of these may stop or change the request before it reaches the service"
+          other: "%{count} of these may stop or change the request before it reaches the service"
+        plugin_note_tail: "Kongsole names these plugins; it does not run them."
+        effects:
+          may_stop: "may stop it; Kong answers %{status}"
+          may_change: "may change the path, headers or query"
+          may_answer: "may answer instead of the service"
+          unknown: "a custom plugin; Kongsole doesn't know what it does"
+        service_title_html: "Forwarded to service %{name}"
+        not_forwarded_title: "Not forwarded: Kong answers the client itself"
+        no_targets: "Upstream %{name} has no targets with a weight above 0, so Kong has no server to pick and answers 503."
+        no_service_title: "This route has no service"
+        no_service_body: "Kong has nowhere to forward the request unless a plugin answers it."
+        lost: "Also matched, but lost"
+        consumer_only: "Runs only for certain consumers"
+        consumer_only_item_html: "%{plugin} on consumer %{consumer} runs too when the request is identified as %{consumer}."
+        skipped: "Not checked"
       projects_new:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:

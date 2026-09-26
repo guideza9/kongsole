@@ -41,4 +41,34 @@ RSpec.describe "Project trace", type: :request do
     get project_trace_path("nope")
     expect(response).to have_http_status(:not_found)
   end
+
+  it "shows the four stops in order, each explaining only its own settings" do
+    get project_trace_path(project.key), params: { env: "dev", host: "api.example.com", path: "/billing/v1/invoices/42?status=paid", method: "GET" }
+    page = Nokogiri::HTML(response.body)
+
+    stops = page.css("ol.trace-stops > li")
+    expect(stops.map { _1["data-stop"] }).to eq(%w[request route plugins service])
+    expect(stops[1].text).to include("strip_path", "/billing/v1")
+    expect(stops[3].text.squish).to include("http://billing.internal:8080/api/invoices/42?status=paid")
+    expect(stops[3].text).not_to include("strip_path")
+    expect(page.text).to include("traditional_compatible")
+  end
+
+  it "names enabled plugins that may stop the request, and leaves disabled ones out of the note" do
+    create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "key-auth", enabled: true, data: { "name" => "key-auth" })
+    create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "acl", enabled: false, data: { "name" => "acl" })
+
+    get project_trace_path(project.key), params: { env: "dev", host: "api.example.com", path: "/billing/v1/x", method: "GET" }
+    note = Nokogiri::HTML(response.body).at_css(".trace-plugin-note")
+
+    expect(note.text.squish).to include("key-auth", "401", "it does not run them")
+    expect(note.text).not_to include("acl")
+  end
+
+  it "says the request is not forwarded when request-termination answers" do
+    create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "request-termination", enabled: true,
+      data: { "name" => "request-termination", "config" => { "status_code" => 503, "message" => "Billing is under maintenance" } })
+    get project_trace_path(project.key), params: { env: "dev", host: "api.example.com", path: "/billing/v1/x", method: "GET" }
+    expect(Nokogiri::HTML(response.body).text.squish).to include("Not forwarded", "503", "Billing is under maintenance")
+  end
 end

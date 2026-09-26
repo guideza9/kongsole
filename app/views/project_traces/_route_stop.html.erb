@@ -1,0 +1,58 @@
+<%# Stop 2: the route that catches the request, why it does, and what the
+    route itself does to the request (strip_path, the query, the Host header).
+    Nothing here comes from the service. %>
+<% match = @trace.match %>
+<% effect = @trace.forwarded&.route_effect %>
+<li class="trace-stop<%= " trace-stop--last" unless match.route %>" data-stop="route">
+  <span class="trace-stop__node" aria-hidden="true">2</span>
+  <div class="trace-stop__body">
+    <% if match.route %>
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.route_title_html", name: tag.span(match.route.name, class: "trace-stop__name")) %></h2>
+      <p class="trace-stop__line">
+        <%= render "entities/route_match", match: route_match(match.route) %>
+        <% if match.route.is_admin_path? %><span class="tag">admin path</span><% end %>
+      </p>
+      <ul class="trace-why">
+        <li><%= render "project_traces/check" %><% if match.matched_on[:host] %>host is <code><%= match.matched_on[:host] %></code><% else %>any host: the route names none<% end %></li>
+        <li><%= render "project_traces/check" %><% if match.matched_on[:method] %>method <code><%= match.matched_on[:method] %></code> is allowed<% else %>any method: the route names none<% end %></li>
+        <li><%= render "project_traces/check" %>
+          <% if match.matched_on[:path].nil? %>any path: the route names none
+          <% elsif match.matched_on[:regex] %>path matches <code><%= match.matched_on[:path] %></code>, which caught <code><%= match.matched_on[:matched] %></code>
+          <% else %>path starts with <code><%= match.matched_on[:path] %></code><% end %>
+        </li>
+      </ul>
+
+      <% if effect %>
+        <div class="trace-box">
+          <p class="trace-box__cap"><%= t("hints.pages.project_trace.route_effect") %></p>
+          <dl class="trace-box__rows">
+            <dt>Path</dt>
+            <dd>
+              <% if effect.removed.present? %>
+                <span class="trace-seg trace-seg--cut" title="Removed by the route"><%= effect.removed %></span><span class="trace-seg trace-seg--kept" title="Kept"><%= effect.kept.presence || "(nothing left)" %></span>
+                <span class="trace-box__why">strip_path on: the route removes the part it matched</span>
+              <% else %>
+                <span class="trace-seg trace-seg--kept" title="Kept"><%= effect.kept %></span>
+                <span class="trace-box__why">strip_path off: kept as sent</span>
+              <% end %>
+            </dd>
+            <% if effect.query %>
+              <dt>Query</dt><dd><code>?<%= effect.query %></code> passed on as sent</dd>
+            <% end %>
+            <dt>Host header</dt>
+            <dd>
+              <% if effect.preserve_host %>
+                <code><%= effect.host_header %></code> <span class="trace-box__why">preserve_host on: the client's host goes through</span>
+              <% else %>
+                set to the service's host <span class="trace-box__why">(preserve_host off)</span>
+              <% end %>
+            </dd>
+          </dl>
+        </div>
+      <% end %>
+    <% else %>
+      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.no_route_title") %></h2>
+      <p class="trace-stop__text"><%= t("hints.pages.project_trace.no_route_body") %></p>
+    <% end %>
+  </div>
+</li>

@@ -1,0 +1,11 @@
+<%# Stop 1: the request exactly as it was typed. %>
+<li class="trace-stop" data-stop="request">
+  <span class="trace-stop__node" aria-hidden="true">1</span>
+  <div class="trace-stop__body">
+    <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.request_title") %></h2>
+    <p class="trace-request">
+      <span class="route-method"><%= @trace_form.http_method %></span>
+      <span class="route-host"><%= @trace_form.host %></span><span class="route-path"><%= @trace_form.path %></span>
+    </p>
+  </div>
+</li>
