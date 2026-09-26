@@ -248,7 +248,7 @@ en:
       plugin:
         scope:
           help: "Where the plugin runs: on one service, route or consumer, or on every request when global."
-          detail: "The scope comes from the page you started on. A global plugin touches every request through this Kong, including the admin path."
+          detail: "Started from a service, route or consumer, the plugin goes there. Otherwise pick one here. A global plugin touches every request through this Kong, including the admin path."
         enabled:
           help: "Off keeps the plugin configured but not running."
         protocols:
@@ -470,7 +470,11 @@ en:
       entities_edit:
         intro: "This proposes a change. Nothing reaches Kong until you review and apply it on the next page."
       plugins_new:
-        intro: "Pick a plugin loaded on this node, then set its configuration."
+        intro: "These are the plugins this Kong node has loaded. Pick one; the next page sets its configuration and where it runs."
+        filter_label: "Find a plugin"
+        filter_placeholder: "Name or what it does, e.g. rate, auth, log"
+        filter_none: "No plugin matches. Try part of the name, or a word for what it does."
+        scope_filter_label: "Find a service, route or consumer"
       change_plans_index:
         intro: "Changes proposed on this connection and their pull requests."
       # R8.9

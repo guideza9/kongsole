@@ -1,0 +1,29 @@
+<%# R4.6: where a plugin from the catalog runs -- Global, or one service,
+    route or consumer from the read-model. Admin-path entities are never
+    offered (Kong::AdminPathGuard: a plugin there is read-only). One select
+    carries both halves as "service:<kong_id>"; the filter above it narrows
+    long lists and stays hidden without JS. %>
+<div class="scope-picker" data-controller="list-filter">
+  <label for="plugin-scope" class="block text-sm font-medium text-ink">Scope</label>
+  <% if options.values.sum(&:size) > 8 %>
+    <div class="scope-picker__filter" data-list-filter-target="field" hidden>
+      <label for="plugin-scope-filter" class="sr-only"><%= t("hints.pages.plugins_new.scope_filter_label") %></label>
+      <input type="search" id="plugin-scope-filter" autocomplete="off" spellcheck="false" class="field-input"
+             placeholder="<%= t("hints.pages.plugins_new.scope_filter_label") %>"
+             data-list-filter-target="input" data-action="input->list-filter#filter">
+    </div>
+  <% end %>
+  <select id="plugin-scope" name="scope" class="field-input mt-1" aria-describedby="plugin-scope-hint">
+    <option value="global" <%= "selected" if selected.blank? %>>Global — every request</option>
+    <% { "service" => "Services", "route" => "Routes", "consumer" => "Consumers" }.each do |type, label| %>
+      <% next if options[type].blank? %>
+      <optgroup label="<%= label %>" data-list-filter-target="group">
+        <% options[type].each do |name, kong_id| %>
+          <option value="<%= type %>:<%= kong_id %>" <%= "selected" if selected == "#{type}:#{kong_id}" %>
+                  data-list-filter-target="item" data-filter-text="<%= "#{type} #{name}".downcase %>"><%= name %></option>
+        <% end %>
+      </optgroup>
+    <% end %>
+  </select>
+  <%= field_hint(:plugin, :scope, id: "plugin-scope-hint") %>
+</div>

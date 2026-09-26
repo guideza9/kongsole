@@ -194,6 +194,28 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("plugins-new-catalog")
     end
 
+    it "plugins new: the catalog, custom and bundled, entered from a service (R4.6)" do
+      sign_in
+      loaded = YAML.safe_load_file(Rails.root.join("config/kong_bundled_plugins.yml"))
+        .each_with_index.to_h { |name, i| [ name, { "version" => "3.7.0", "priority" => 1000 - (i * 10) } ] }
+      connection.update!(plugins_available: { "available_on_server" => loaded.merge(
+        "team-headers" => { "version" => "1.0.0", "priority" => 800 },
+        "team-auth-with-a-rather-long-plugin-name" => { "version" => "0.3.0", "priority" => 1005 }) })
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "payments-api")
+      get new_plugin_path(scope_type: "service", scope_kong_id: service.kong_id)
+      snapshot!("plugins-new-catalog-r46")
+    end
+
+    it "plugins new: config step with the scope picker (R4.6)" do
+      sign_in
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting")
+        .to_return(status: 200, body: File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")))
+      12.times { |i| create(:kong_entity, kong_connection: connection, entity_type: "service", name: "service-#{i}") }
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "payments-route")
+      get new_plugin_path(plugin_name: "rate-limiting")
+      snapshot!("plugins-new-config-scope-r46")
+    end
+
     it "plugins new: config step" do
       sign_in
       stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 200, body: {

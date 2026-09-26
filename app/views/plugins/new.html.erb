@@ -1,37 +1,31 @@
-<% content_for :title, "Add plugin" %>
+<% content_for :title, @plugin_name ? "Add #{@plugin_name}" : "Add plugin" %>
+<%# The scope the flow was entered with, as the plugin list shows it. From
+    the catalog with no scope, the config step's picker chooses one. %>
+<% entered_scope = { kind: @scope_type || "global", name: @scope_label.to_s.delete_prefix("#{@scope_type}: ") } %>
 
-<h1 class="page-title mb-1">Add plugin</h1>
-<p class="text-sm mb-6 text-ink-soft">
-  Scope: <span class="font-mono"><%= @scope_label %></span><% if (lede = page_lede("hints.pages.plugins_new.intro")) %> · <%= lede %><% end %>
-</p>
+<p class="page-back"><%= link_to "Plugins", entities_path(type: "plugin") %></p>
+<div class="plugins-head">
+  <h1 class="page-title"><%= @plugin_name ? "Add #{@plugin_name}" : "Add plugin" %></h1>
+  <% if @scope_type.present? %>
+    <p class="plugins-head__scope"><span class="text-ink-soft">Adds to</span> <%= render "entities/scope", scope: entered_scope %></p>
+  <% end %>
+</div>
+<% if (lede = page_lede("hints.pages.plugins_new.intro")) %><p class="text-sm mt-1 text-ink-soft max-w-2xl"><%= lede %></p><% end %>
 
 <% if @catalog %>
-  <%# Step 1: pick a plugin -- what this node loaded (available_on_server),
-      bundled and custom apart (Kong::PluginCatalog). %>
-  <% if @catalog.empty? %>
-    <%= empty_state(:plugins_catalog) %>
-  <% else %>
-    <% [ [ "Bundled with Kong", @catalog.reject(&:custom) ], [ "Custom", @catalog.select(&:custom) ] ].each do |heading, entries| %>
-      <% next if entries.empty? %>
-      <h2 class="section-label mb-2 mt-4"><%= heading %></h2>
-      <div class="panel max-w-2xl">
-        <% entries.each do |entry| %>
-          <%= link_to new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id, plugin_name: entry.name), class: "entity-row-compact" do %>
-            <span class="font-semibold text-sm font-mono text-ink"><%= entry.name %></span>
-            <span class="text-xs text-ink-soft"><%= entry.summary %></span>
-            <span class="text-xs font-mono text-ink-faint"><%= entry.version %></span>
-          <% end %>
-        <% end %>
-      </div>
+  <%# Step 1: pick a plugin -- what this node loaded, the team's own apart
+      from Kong's (Kong::PluginCatalog). %>
+  <div class="mt-6">
+    <% if @catalog.empty? %>
+      <%= empty_state(:plugins_catalog) %>
+    <% else %>
+      <%= render "catalog", catalog: @catalog, scope_type: @scope_type, scope_kong_id: @scope_kong_id %>
     <% end %>
-  <% end %>
-  <div class="mt-4">
-    <%= link_to "Cancel", entities_path(type: @scope_type || "plugin"), class: "btn-sm btn-text" %>
   </div>
 <% else %>
   <%# Step 2: the config form, built from this plugin's schema on this
       connection (Kong::PluginSchemaForm). %>
-  <div class="max-w-4xl grid gap-4">
+  <div class="max-w-4xl grid gap-4 mt-6">
     <% @schema_mismatch.to_a.each do |mismatch| %>
       <%= render layout: "shared/notice", locals: { tone: :warning, tag: :p, class: "text-xs" } do %>
         Schema differs on <%= mismatch[:env] %> (Kong <%= mismatch[:kong_version] %>)
@@ -48,19 +42,7 @@
       <%= form_with url: plugins_path, method: :post, class: "panel p-4 grid gap-3" do %>
         <input type="hidden" name="plugin_name" value="<%= @plugin_name %>" />
         <% if @scope_options %>
-          <label class="grid gap-1 text-sm">
-            <span class="font-mono font-semibold">scope</span>
-            <select name="scope">
-              <option value="global">Global</option>
-              <% @scope_options.each do |type, options| %>
-                <optgroup label="<%= type %>">
-                  <% options.each do |label, kong_id| %>
-                    <option value="<%= type %>:<%= kong_id %>"><%= label %></option>
-                  <% end %>
-                </optgroup>
-              <% end %>
-            </select>
-          </label>
+          <%= render "scope_picker", options: @scope_options, selected: params[:scope] %>
         <% else %>
           <input type="hidden" name="scope_type" value="<%= @scope_type %>" />
           <input type="hidden" name="scope_kong_id" value="<%= @scope_kong_id %>" />

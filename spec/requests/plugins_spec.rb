@@ -136,6 +136,30 @@ RSpec.describe "Plugins (web)", type: :request do
       expect(response.body).to include("rate-limiting", "team-auth", "Bundled with Kong", "Custom")
     end
 
+    # R4.6: the catalog is searchable, grouped, and says when a custom plugin
+    # has no description and how to add one.
+    it "gives the catalog a labelled search, the two groups, and the missing-description hint" do
+      sign_in
+      connection.update!(plugins_available: { "available_on_server" => { "rate-limiting" => { "version" => "3.7.1" }, "team-headers" => {} } })
+      get new_plugin_path
+
+      page = Nokogiri::HTML(response.body)
+      search = page.at_css('input[type="search"]')
+      expect(search).to be_present
+      expect(page.at_css("label[for='#{search['id']}']")).to be_present
+      expect(page.css("h2").map { _1.text.strip }).to include("Bundled with Kong", "Custom")
+      expect(response.body).to include("No description provided for this custom plugin", "config/custom_plugins/team-headers.yml")
+      expect(response.body).to include(I18n.t("hints.plugins.rate-limiting.summary"))
+    end
+
+    it "shows the scope the plugin will be added to with the scope mark" do
+      sign_in
+      service = create(:kong_entity, kong_connection: connection, entity_type: "service", name: "billing")
+      get new_plugin_path(scope_type: "service", scope_kong_id: service.kong_id)
+      page = Nokogiri::HTML(response.body)
+      expect(page.at_css(".scope .scope__name")&.text).to eq("billing")
+    end
+
     it "offers every scope, without admin-path entities" do
       sign_in
       stub_schema

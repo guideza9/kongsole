@@ -1,0 +1,47 @@
+<%# R4.6: the plugins this node loaded (Kong::PluginCatalog), the team's own
+    first -- a short list, and the likelier pick -- then everything bundled
+    with Kong. One hairline row per plugin: name, what it does, its execution
+    priority. A bundled plugin's version is the node's Kong version, said once
+    in its group's heading instead of on 43 rows. The filter narrows rows as
+    it is typed; without JS it stays hidden and every row is on the page. %>
+<% groups = [ [ "Custom", catalog.select(&:custom) ], [ "Bundled with Kong", catalog.reject(&:custom) ] ] %>
+<div class="plugin-catalog" data-controller="list-filter">
+  <div class="plugin-catalog__filter" role="search" data-list-filter-target="field" hidden>
+    <label for="plugin-filter" class="plugin-catalog__filter-label"><%= t("hints.pages.plugins_new.filter_label") %></label>
+    <input type="search" id="plugin-filter" autocomplete="off" spellcheck="false" class="field-input"
+           placeholder="<%= t("hints.pages.plugins_new.filter_placeholder") %>"
+           aria-describedby="plugin-filter-count"
+           data-list-filter-target="input" data-action="input->list-filter#filter">
+    <p id="plugin-filter-count" class="plugin-catalog__count" role="status" data-list-filter-target="count"></p>
+  </div>
+
+  <% groups.each do |heading, entries| %>
+    <% next if entries.empty? %>
+    <section class="plugin-catalog__group" aria-labelledby="plugins-<%= heading.parameterize %>" data-list-filter-target="group">
+      <div class="plugin-catalog__group-head">
+        <h2 id="plugins-<%= heading.parameterize %>" class="section-label"><%= heading %></h2>
+        <span class="plugin-catalog__group-meta">
+          <%= entries.size %><% if !entries.first.custom && current_connection.kong_version.present? %> · Kong <%= current_connection.kong_version %><% end %>
+        </span>
+      </div>
+      <div class="panel plugin-catalog__list">
+        <% entries.each do |entry| %>
+          <%= link_to new_plugin_path(scope_type: scope_type, scope_kong_id: scope_kong_id, plugin_name: entry.name), class: "plugin-row",
+                  data: { list_filter_target: "item", filter_text: [ entry.name, entry.summary ].compact.join(" ").downcase } do %>
+            <span class="plugin-row__name"><%= entry.name %></span>
+            <span class="plugin-row__meta">
+              <% if entry.custom && entry.version.present? %><%= entry.version %> · <% end %><% if entry.priority %>priority <%= entry.priority %><% end %>
+            </span>
+            <% if entry.summary.present? %>
+              <span class="plugin-row__summary"><%= entry.summary %></span>
+            <% elsif entry.custom %>
+              <span class="plugin-row__summary plugin-row__summary--missing"><%= t("hints.plugins.custom_missing_description", name: entry.name) %></span>
+            <% end %>
+          <% end %>
+        <% end %>
+      </div>
+    </section>
+  <% end %>
+
+  <p class="plugin-catalog__none text-sm text-ink-soft" data-list-filter-target="none" hidden><%= t("hints.pages.plugins_new.filter_none") %></p>
+</div>
