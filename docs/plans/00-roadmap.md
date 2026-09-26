@@ -167,7 +167,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - [x] R1 — `docs/plans/R1-multi-project-env.md` (ปิด 2026-09-25: R1.1–R1.21 เสร็จ, rspec 1085/0, vitest 30/30, detect 60 (R1.17 = 62), migration 4 ตัว up/down บนสำเนา DB — เจ้าของงานยืนยัน)
 - [x] R8 — `docs/plans/R8-pr-mode-changeset.md` (ปิด 2026-09-25: R8.1–R8.10 + final review, rspec 1174/0, vitest 31/31 · #5 "แก้รายการ" = ลบแล้วเสนอใหม่ — เจ้าของงานยืนยัน · ข้อจำกัด: entity ที่ไม่อยู่ใน git)
 - [x] R2 — `docs/plans/R2-create-service-route.md` (ปิด 2026-09-26: R2.1–R2.8 + final review + distill ตาม R3.7 รอบที่ 1, rspec 1240/0, vitest 31/31 — เจ้าของงานยืนยัน)
-- [ ] R4 — `docs/plans/R4-plugins.md`
+- [ ] R4 — `docs/plans/R4-plugins.md` (R4.1–R4.9 + final review เสร็จ 2026-09-26, rspec 1322/0, vitest 31/31 · **รอเจ้าของงานตัดสิน:** secret ของ plugin ใน plan ของ direct mode (งานต่อที่รอ) — เกณฑ์ข้อสุดท้ายของ R4 ขึ้นกับข้อนี้)
 - [ ] R5 — `docs/plans/R5-project-understanding.md`
 - [ ] R7 — `docs/plans/R7-export-config.md`
 - [ ] R6 — `docs/plans/R6-traffic-dashboard.md`

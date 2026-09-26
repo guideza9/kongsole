@@ -454,3 +454,21 @@ end
 - [ ] ไม่มีค่าลับของ plugin ใน read-model / plan / audit / YAML / response ของ MCP — **read-model ✓ · audit ✓ · YAML ✓ (PR mode ปฏิเสธ plaintext) ·
   plan ✗ (`change_plans.after`/`diff` เก็บ plaintext ใน direct mode และหน้า review แสดง) · MCP: create ไม่คืนค่า ✓ แต่ update คืน `diff` ที่มีค่า ✗** —
   ตรงกับงานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน" ที่เจ้าของงานให้หยุดถามก่อนทำ → **รอเจ้าของงานตัดสิน**
+
+## Final review (2026-09-26, reviewer แยก บน Opus)
+
+Critical 1 + Important 4 → แก้ในรอบเดียว (`fac4318`), ทุกข้อมี test ที่เห็น RED ก่อน · rspec **1322/0**:
+#1 (Critical, กฎข้อ 4) ค่า config ของฟอร์ม plugin ที่เป็น JSON (เช่น `headers` ที่มี `Authorization`, `redis.password`) ลง log ไม่ถูกกรอง → กรองทุก `plugin[config][*]` ·
+#2 กรอง scope picker แล้วตัวเลือกที่เลือกไว้หาย → plugin กลายเป็น global เงียบๆ → server ปฏิเสธเมื่อไม่มี scope + JS ไม่ disable/ซ่อนตัวที่เลือก (ตรวจในแอปจริงแล้ว) ·
+#3 PR mode: key ที่ schema ไม่มี (พิมพ์ผิด `apikey`) หรือ update ที่ส่ง `name` อื่น → plaintext เข้า changeset ได้ → ปฏิเสธ key ที่ไม่รู้จักทุกชั้น record + ตรวจกับชื่อ plugin จริง ·
+#4 secret ที่ซ้อนใน JSON (`redis.password`) ถูกส่งกลับตอน re-render และไม่มี hint → ไม่ส่งกลับ, มี hint, error ติดที่ช่อง ·
+#5 hint ของ direct mode บอกว่า "ไม่แสดงอีก" ซึ่งไม่จริงตอนนี้ → แก้ข้อความ
+
+Minor ที่เลื่อนไว้: `scope_type` ไม่ตรวจกับ SCOPE_TYPES (ก่อน R4) · Kong ตอบ 200 ที่ไม่ใช่ JSON และไม่มี cache → 500 · param `plugin[config]` ที่ถูกแก้เป็น string → 500 ·
+array ของ record ที่มี secret บังคับทุกค่าเป็น reference · JSON ใน PR mode ที่ไม่มี `name` ได้ข้อความผิดเหตุ · JSON editor ถูกปฏิเสธแล้วกลับไป catalog (ก่อน R4) ·
+ช่อง required ไม่มี `required`/`aria-required` · help ของ custom plugin รองรับแค่ชื่อระดับบน, `docs_url` ยังไม่แสดง ·
+cache `kong_schemas` ที่สร้างก่อน `57b2c58` ให้ digest เก่า → เตือนผิดได้ถึง 24 ชม. (ล้างแถว plugin ครั้งเดียวหลัง merge)
+
+**ส่งเจ้าของงาน:** (1) เกณฑ์ข้อสุดท้าย — secret ของ plugin ใน direct mode ยังอยู่ใน `change_plans.after`/`diff`, หน้า review และ `diff` ของ update ที่ API คืน
+= งานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน" · (2) guard ของ admin path ตรวจแค่ตัวแรกใน service/route/consumer ของ body JSON/MCP (ก่อน R4, ใกล้กฎข้อ 3)
+
