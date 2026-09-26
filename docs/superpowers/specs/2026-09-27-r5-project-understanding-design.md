@@ -52,8 +52,9 @@ Each unit is a plain Ruby object with one job, tested alone. None of them touche
 `Row = Struct(:env, :connection, :status, :last_connected_at, :synced_at, :counts)`.
 
 - One row per env in `position` order, `connection` nil when the env has none.
-- `synced_at` is `connection.last_synced_at`; nil means **never synced on this machine** — the view says so
-  instead of showing zeros.
+- `synced_at` is the latest `kong_entities.synced_at` of the connection (deleted rows included).
+  `kong_connections.last_synced_at` exists but nothing writes it, so it is not used. nil means **never synced on
+  this machine** — the view says so instead of showing zeros.
 - `counts`: `{"service","route","plugin","consumer","upstream","certificate" => Integer}` from **one** grouped
   query over non-deleted `kong_entities` for the project's connections (no N+1).
 
