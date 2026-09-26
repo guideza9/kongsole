@@ -1,0 +1,51 @@
+# Plugins that ship with Kong Gateway CE (R4.2). A name here is "Bundled with
+# Kong" in the plugin catalog and is described by hints.plugins.<name>.summary;
+# a name the node loads that is not here is the team's own (custom) plugin,
+# described by config/custom_plugins/<name>.yml.
+#
+# Measured 2026-09-26 from plugins.available_on_server of the compose node
+# (Kong 3.7.1, local/dev-ro, read at login through the read-only route).
+# When Kong is upgraded, compare with the new node's list and add what is new.
+- acl
+- acme
+- ai-prompt-decorator
+- ai-prompt-guard
+- ai-prompt-template
+- ai-proxy
+- ai-request-transformer
+- ai-response-transformer
+- aws-lambda
+- azure-functions
+- basic-auth
+- bot-detection
+- correlation-id
+- cors
+- datadog
+- file-log
+- grpc-gateway
+- grpc-web
+- hmac-auth
+- http-log
+- ip-restriction
+- jwt
+- key-auth
+- ldap-auth
+- loggly
+- oauth2
+- opentelemetry
+- post-function
+- pre-function
+- prometheus
+- proxy-cache
+- rate-limiting
+- request-size-limiting
+- request-termination
+- request-transformer
+- response-ratelimiting
+- response-transformer
+- session
+- statsd
+- syslog
+- tcp-log
+- udp-log
+- zipkin

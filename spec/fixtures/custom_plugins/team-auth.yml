@@ -1,0 +1,4 @@
+description: Checks the team's signed header before proxying.
+docs_url: https://git.example.internal/team/kong-plugins/team-auth
+fields:
+  upstream_header: Header the plugin adds before proxying.
