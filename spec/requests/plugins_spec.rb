@@ -254,6 +254,78 @@ RSpec.describe "Plugins (web)", type: :request do
     end
   end
 
+  # R4.7: the config form built from the node's schema.
+  describe "the config form" do
+    let(:schema_json) { File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")) }
+
+    def config_page(host = "https://kong-admin.test", **params)
+      stub_request(:get, "#{host}/schemas/plugins/rate-limiting").to_return(status: 200, body: schema_json)
+      get new_plugin_path(plugin_name: "rate-limiting", **params)
+      Nokogiri::HTML(response.body)
+    end
+
+    it "masks a secret field, never fills it, and suggests a vault reference" do
+      sign_in
+      page = config_page
+      secret = page.at_css('input[name="plugin[config][api_key]"]')
+      expect(secret["type"]).to eq("password")
+      expect(secret["autocomplete"]).to eq("off")
+      expect(secret["value"]).to be_nil
+      expect(response.body).to include("{vault://env/rate-limiting-api-key}")
+    end
+
+    it "says a PR-mode secret must be a reference" do
+      env = create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])
+      pr_connection = create(:kong_connection, admin_url: "https://kong-uat.test", project_env: env)
+      sign_in_to(pr_connection, access: :ro)
+      config_page("https://kong-uat.test")
+      expect(response.body).to include("must be a vault reference or decK placeholder")
+    end
+
+    it "puts fields with a default in a folded section that names each default" do
+      sign_in
+      page = config_page
+      folded = page.at_css("details.disclosure.plugin-defaults")
+      expect(folded).to be_present
+      expect(folded.at_css('select[name="plugin[config][policy]"]')).to be_present
+      expect(folded.text).to include("Default: local")
+      expect(page.at_css('input[name="plugin[config][minute]"]').ancestors("details")).to be_empty
+      expect(page.at_css('input[name="plugin[config][api_key]"]').ancestors("details")).to be_empty
+    end
+
+    it "labels every control and ties its error to it" do
+      sign_in
+      connection.update!(access_level: "rw")
+      stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 200, body: schema_json)
+      post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { minute: "abc", policy: "cluster" } } }
+      page = Nokogiri::HTML(response.body)
+      page.css('[name^="plugin[config]"]').reject { _1["type"] == "hidden" }.each do |control|
+        expect(page.at_css("label[for='#{control['id']}']")).to be_present, "no label for #{control['name']}"
+      end
+      minute = page.at_css('input[name="plugin[config][minute]"]')
+      expect(minute["aria-invalid"]).to eq("true")
+      expect(page.at_css("##{minute['aria-describedby'].split.last}").text).to include("must be a number")
+      expect(minute["value"]).to eq("abc")
+      expect(page.at_css('select[name="plugin[config][policy]"] option[selected]')["value"]).to eq("cluster")
+      expect(page.at_css("details.plugin-defaults")["open"]).not_to be_nil
+    end
+
+    it "shows a plugin on an admin-path scope as read-only, with nothing to submit" do
+      sign_in
+      admin_route_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+      connection.update!(admin_path_fingerprint: { "route_ids" => [ admin_route_id ] })
+      page = config_page(scope_type: "route", scope_kong_id: admin_route_id)
+      expect(response.body).to include("read-only")
+      expect(page.css('form[action="/plugins"] button[type="submit"]')).to be_empty
+    end
+
+    it "keeps the whole-plugin JSON editor as a disclosure" do
+      sign_in
+      page = config_page
+      expect(page.at_css("details.disclosure.plugin-advanced > summary").text).to include("Advanced: edit the whole plugin as JSON")
+    end
+  end
+
   describe "read-only admin-path plugins" do
     it "shows no edit/delete controls for the plugin fronting this connection's own admin path" do
       sign_in

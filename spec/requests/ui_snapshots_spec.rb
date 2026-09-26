@@ -216,6 +216,62 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("plugins-new-config-scope-r46")
     end
 
+    describe "plugin config form (R4.7)" do
+      let(:rl_schema) { File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")) }
+      let(:lambda_schema) do
+        { fields: [ { config: { type: "record", fields: [
+          { aws_key: { type: "string", encrypted: true, referenceable: true } },
+          { aws_secret: { type: "string", encrypted: true, referenceable: true } },
+          { aws_region: { type: "string", description: "The AWS region of the function." } },
+          { function_name: { type: "string", required: true } },
+          { timeout: { type: "number", default: 60_000, required: true } },
+          { invocation_type: { type: "string", default: "RequestResponse", one_of: %w[RequestResponse Event DryRun] } },
+          { forward_request_body: { type: "boolean", default: false } }
+        ] } } ] }.to_json
+      end
+
+      it "rate-limiting, direct, sent back with errors" do
+        sign_in
+        stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 200, body: rl_schema)
+        post plugins_path, params: { plugin_name: "rate-limiting", plugin: { config: { minute: "1e3", policy: "cluster", redis: "{" } } }
+        snapshot!("plugins-config-rate-limiting-errors", status: :unprocessable_entity)
+      end
+
+      it "aws-lambda with secrets, on a PR env, with a schema that differs on another env" do
+        env = create(:project_env, name: "uat", apply_mode: "pr", source: "registry", select_tags: %w[managed-by-kongctl])
+        pr_connection = create(:kong_connection, admin_url: "https://kong-uat.test", project_env: env, kong_version: "3.7.1")
+        other = create(:kong_connection, kong_version: "3.8.0",
+          project_env: create(:project_env, project: env.project, name: "prod", position: 9, rank: 3, apply_mode: "pr", source: "registry"))
+        KongSchema.create!(kong_connection: other, kind: "plugin", name: "aws-lambda", kong_version: "3.8.0", digest: "x", body: {}, fetched_at: Time.current)
+        sign_in_to(pr_connection, access: :ro)
+        stub_request(:get, "https://kong-uat.test/schemas/plugins/aws-lambda").to_return(status: 200, body: lambda_schema)
+        service = create(:kong_entity, kong_connection: pr_connection, entity_type: "service", name: "payments-api")
+        get new_plugin_path(plugin_name: "aws-lambda", scope_type: "service", scope_kong_id: service.kong_id)
+        snapshot!("plugins-config-aws-lambda-pr")
+      end
+
+      it "a custom plugin described by its metadata file" do
+        sign_in
+        connection.update!(plugins_available: { "available_on_server" => { "team-auth" => { "version" => "0.3.0", "priority" => 1005 } } })
+        allow(Kong::PluginCatalog).to receive(:for).and_wrap_original do |original, conn, **|
+          original.call(conn, metadata_dir: Rails.root.join("spec/fixtures/custom_plugins"))
+        end
+        stub_request(:get, "https://kong-admin.test/schemas/plugins/team-auth").to_return(status: 200, body: { fields: [ { config: {
+          type: "record", fields: [ { upstream_header: { type: "string", default: "X-Team" } }, { shared_key: { type: "string", referenceable: true, required: true } } ] } } ] }.to_json)
+        get new_plugin_path(plugin_name: "team-auth")
+        snapshot!("plugins-config-custom")
+      end
+
+      it "an admin-path scope, read-only" do
+        sign_in
+        admin_route_id = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        connection.update!(admin_path_fingerprint: { "route_ids" => [ admin_route_id ] })
+        stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 200, body: rl_schema)
+        get new_plugin_path(plugin_name: "rate-limiting", scope_type: "route", scope_kong_id: admin_route_id)
+        snapshot!("plugins-config-admin-path")
+      end
+    end
+
     it "plugins new: config step" do
       sign_in
       stub_request(:get, "https://kong-admin.test/schemas/plugins/rate-limiting").to_return(status: 200, body: {

@@ -257,6 +257,16 @@ en:
         tags:
           help: "Labels on this plugin, as a JSON array."
           example: "[\"payment\"]"
+        # R4.7: the config form built from the plugin's schema.
+        tags_list:
+          help: "Labels on this plugin, separated by commas."
+          example: "payments, team-a"
+        list:
+          help: "One value per line."
+        json:
+          help: "JSON for this field and everything inside it. Advanced, below, lists what it holds."
+        secret_direct: "Kong keeps what you type and Kongsole never shows it again. Better: a vault reference such as %{example}, and Kong reads %{env_var} on every node instead."
+        secret_pr: "This goes into git, so it must be a vault reference such as %{example} (Kong reads %{env_var} on every node) or a decK placeholder such as %{deck}."
 
     empty_states:
       connections:
@@ -322,6 +332,16 @@ en:
           body: "Credentials let this consumer log in through key-auth or basic-auth. Their secrets are never shown here."
 
     risks:
+      # R4.7
+      plugin_secret_pr:
+        title: "In PR mode, a secret must be a vault reference or decK placeholder"
+        body: "This plugin is written into the project's git repo, where a plain value would be readable by anyone with the repo. Kongsole refuses one."
+      schema_mismatch:
+        title: "Schema differs on %{env} (Kong %{version})"
+        body: "A config that works here may be refused there. Check this plugin's fields on %{env} before carrying the change over."
+      plugin_admin_path:
+        title: "This scope is Kongsole's own way into Kong"
+        body: "A plugin here guards the admin route, so it is read-only: nothing can be added to it or changed on it, by a person or an agent."
       route_overlap:
         # One route gets each request, so an overlap means one of them stops
         # getting it. A warning: the change can still go ahead.
@@ -475,6 +495,9 @@ en:
         filter_placeholder: "Name or what it does, e.g. rate, auth, log"
         filter_none: "No plugin matches. Try part of the name, or a word for what it does."
         scope_filter_label: "Find a service, route or consumer"
+        defaults_summary: "Settings with defaults (%{count})"
+        defaults_body: "Leave any of these alone to keep the default shown."
+        form_errors: "Nothing was proposed. Fix %{count} and send it again."
       change_plans_index:
         intro: "Changes proposed on this connection and their pull requests."
       # R8.9

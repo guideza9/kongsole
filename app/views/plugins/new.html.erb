@@ -24,68 +24,104 @@
   </div>
 <% else %>
   <%# Step 2: the config form, built from this plugin's schema on this
-      connection (Kong::PluginSchemaForm). %>
-  <div class="max-w-4xl grid gap-4 mt-6">
+      connection (Kong::PluginSchemaForm). What must be decided comes first;
+      everything with a default is folded, its default showing. Warnings sit
+      above the form: a different schema on another env of the project, the
+      PR-mode rule for secrets, an admin-path scope (then nothing submits). %>
+  <% needed, folded = plugin_fields_split(@fields.to_a) %>
+  <% values = @values.to_h %>
+  <% errors = @field_errors.to_h %>
+  <% pr = @secret_policy == :reference_required %>
+  <div class="plugin-config mt-6">
     <% @schema_mismatch.to_a.each do |mismatch| %>
-      <%= render layout: "shared/notice", locals: { tone: :warning, tag: :p, class: "text-xs" } do %>
-        Schema differs on <%= mismatch[:env] %> (Kong <%= mismatch[:kong_version] %>)
-      <% end %>
+      <%= risk_notice(:schema_mismatch, env: mismatch[:env], version: mismatch[:kong_version]) %>
+    <% end %>
+    <% if @admin_path_scope %>
+      <%= risk_notice(:plugin_admin_path) %>
+    <% elsif pr && @fields.to_a.any?(&:secret) %>
+      <%= risk_notice(:plugin_secret_pr) %>
     <% end %>
 
-    <% if @form_error.present? %>
-      <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", tag: :p, class: "text-xs" } do %>
-        <%= @form_error %>
+    <% if @form_error.present? || errors.any? %>
+      <%= render layout: "shared/notice", locals: { tone: :danger, role: "alert", class: "text-sm" } do %>
+        <% if @form_error.present? %><p class="font-medium"><%= @form_error %></p><% end %>
+        <% if errors.any? %>
+          <p class="font-medium"><%= t("hints.pages.plugins_new.form_errors", count: pluralize(errors.size, "problem")) %></p>
+          <ul class="mt-1 list-disc pl-5">
+            <% @fields.select { errors[_1.path] }.each do |field| %>
+              <li><a href="#<%= plugin_field_id(field) %>" class="font-mono"><%= field.path %></a>: <%= errors[field.path].to_sentence %></li>
+            <% end %>
+          </ul>
+        <% end %>
       <% end %>
     <% end %>
 
     <% if @fields.present? %>
-      <%= form_with url: plugins_path, method: :post, class: "panel p-4 grid gap-3" do %>
-        <input type="hidden" name="plugin_name" value="<%= @plugin_name %>" />
+      <%= form_with url: plugins_path, method: :post, class: "plugin-form" do %>
+        <input type="hidden" name="plugin_name" value="<%= @plugin_name %>">
         <% if @scope_options %>
-          <%= render "scope_picker", options: @scope_options, selected: params[:scope] %>
+          <section class="panel plugin-form__section">
+            <%= render "scope_picker", options: @scope_options, selected: params[:scope] %>
+          </section>
         <% else %>
-          <input type="hidden" name="scope_type" value="<%= @scope_type %>" />
-          <input type="hidden" name="scope_kong_id" value="<%= @scope_kong_id %>" />
+          <input type="hidden" name="scope_type" value="<%= @scope_type %>">
+          <input type="hidden" name="scope_kong_id" value="<%= @scope_kong_id %>">
         <% end %>
 
-        <% @fields.each do |field| %>
-          <% value = @values.to_h[field.name] %>
-          <% input_name = "plugin[config][#{field.name}]" %>
-          <label class="grid gap-1 text-sm">
-            <span class="font-mono font-semibold"><%= field.name %><%= " (required)" if field.required %></span>
-            <% case field.kind %>
-            <% when :enum %>
-              <select name="<%= input_name %>">
-                <option value="">Default<%= ": #{field.default}" unless field.default.nil? %></option>
-                <% field.one_of.each do |option| %>
-                  <option value="<%= option %>" <%= "selected" if value.to_s == option.to_s %>><%= option %></option>
-                <% end %>
-              </select>
-            <% when :boolean %>
-              <input type="hidden" name="<%= input_name %>" value="0" />
-              <input type="checkbox" name="<%= input_name %>" value="1" <%= "checked" if (value.nil? ? field.default : value.to_s == "1") %> />
-            <% when :list, :json %>
-              <textarea name="<%= input_name %>" rows="3" spellcheck="false" <%= 'autocomplete="off"'.html_safe if field.secret %>><%= value unless field.secret %></textarea>
-            <% else %>
-              <% if field.secret %>
-                <input type="password" name="<%= input_name %>" autocomplete="off" />
-              <% else %>
-                <input type="text" name="<%= input_name %>" value="<%= value %>" placeholder="<%= "Default: #{field.default}" unless field.default.nil? %>" />
+        <% if needed.any? %>
+          <section class="panel plugin-form__section" aria-labelledby="plugin-needed">
+            <h2 id="plugin-needed" class="section-label">Config</h2>
+            <div class="plugin-form__fields">
+              <% needed.each do |field| %>
+                <%= render(field.secret ? "secret_field" : "field", field: field, values: values, errors: errors,
+                      plugin_name: @plugin_name, secret_policy: @secret_policy) %>
               <% end %>
-            <% end %>
-            <% if field.help || field.description %>
-              <span class="text-xs text-ink-soft"><%= field.help || field.description %></span>
-            <% end %>
-            <% Array(@field_errors[field.path]).each do |message| %>
-              <span class="text-xs text-danger" role="alert"><%= field.path %>: <%= message %></span>
-            <% end %>
-          </label>
+            </div>
+          </section>
         <% end %>
+
+        <% if folded.any? %>
+          <details class="disclosure plugin-defaults panel" <%= "open" if needed.empty? || folded.any? { plugin_field_attention?(_1, values, errors) } %>>
+            <summary><%= t("hints.pages.plugins_new.defaults_summary", count: folded.size) %></summary>
+            <div class="plugin-defaults__body">
+              <p class="text-sm text-ink-soft"><%= t("hints.pages.plugins_new.defaults_body") %></p>
+              <div class="plugin-form__fields">
+                <% folded.each do |field| %>
+                  <%= render "field", field: field, values: values, errors: errors %>
+                <% end %>
+              </div>
+            </div>
+          </details>
+        <% end %>
+
+        <section class="panel plugin-form__section" aria-labelledby="plugin-meta">
+          <h2 id="plugin-meta" class="section-label">Plugin</h2>
+          <div class="plugin-form__fields">
+            <div class="plugin-field plugin-field--switch">
+              <input type="hidden" name="plugin[enabled]" value="0">
+              <input type="checkbox" id="plugin-enabled" name="plugin[enabled]" value="1" class="plugin-field__switch"
+                     <%= "checked" if params.dig(:plugin, :enabled).nil? || params.dig(:plugin, :enabled) == "1" %>
+                     aria-describedby="hint-plugin-enabled">
+              <label for="plugin-enabled" class="plugin-field__label"><span class="plugin-field__name">enabled</span></label>
+              <%= field_hint(:plugin, :enabled, id: "hint-plugin-enabled") %>
+            </div>
+            <div class="plugin-field">
+              <label for="plugin-tags" class="plugin-field__label"><span class="plugin-field__name">tags</span></label>
+              <input type="text" id="plugin-tags" name="plugin[tags]" value="<%= params.dig(:plugin, :tags) %>" spellcheck="false" autocapitalize="off"
+                     class="field-input plugin-field__control font-mono" placeholder="<%= hint_placeholder(:plugin, :tags_list) %>"
+                     aria-describedby="hint-plugin-tags-list">
+              <% if current_connection.select_tags.present? %>
+                <p class="plugin-field__hint">Always added: <% current_connection.select_tags.each do |tag| %><code class="font-mono text-ink"><%= tag %></code> <% end %></p>
+              <% end %>
+              <%= field_hint(:plugin, :tags_list, id: "hint-plugin-tags-list", quiet: true) %>
+            </div>
+          </div>
+        </section>
 
         <% unless @admin_path_scope %>
-          <div class="flex gap-2">
-            <button type="submit" class="btn-primary btn">Review change</button>
-            <%= link_to "Back", new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id), class: "btn-sm btn-text" %>
+          <div class="plugin-form__actions">
+            <button type="submit" class="btn btn-primary">Review change</button>
+            <%= link_to "Back to the list", new_plugin_path(scope_type: @scope_type, scope_kong_id: @scope_kong_id), class: "btn-sm btn-text" %>
           </div>
         <% end %>
       <% end %>
@@ -93,9 +129,10 @@
 
     <%# Advanced: the whole plugin as JSON, seeded from the schema's defaults,
         with a read-only reference panel built from the same schema. %>
-    <details <%= "open" if @payload_error.present? || @fields.blank? %>>
-      <summary class="text-sm font-semibold">Advanced: edit the whole plugin as JSON</summary>
+    <details class="disclosure plugin-advanced" <%= "open" if @payload_error.present? || @fields.blank? %>>
+      <summary>Advanced: edit the whole plugin as JSON</summary>
       <div class="grid gap-4 sm:grid-cols-2 mt-3">
+        <% unless @admin_path_scope %>
         <%= form_with url: plugins_path, method: :post, data: { controller: "json-editor" } do %>
           <input type="hidden" name="scope_type" value="<%= @scope_type %>" />
           <input type="hidden" name="scope_kong_id" value="<%= @scope_kong_id %>" />
@@ -134,6 +171,7 @@
               <button type="button" class="btn-sm btn-secondary" data-action="json-editor#format">Format</button>
             </div>
           </section>
+        <% end %>
         <% end %>
 
         <section class="panel p-4">

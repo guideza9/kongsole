@@ -1,0 +1,65 @@
+<%# R4.7: one config field, its control chosen by its kind in the schema
+    (Kong::PluginSchemaForm): a select for allowed values, a switch for on/off,
+    one-per-line for a list, JSON for anything nested, text otherwise. A blank
+    control sends the schema's default, which shows as the placeholder and
+    under the field. The error, when there is one, is read with the label. %>
+<% id = plugin_field_id(field) %>
+<% error = errors[field.path].presence %>
+<% value = plugin_field_value(field, values) %>
+<% describedby = [ plugin_field_hint_id(field), (plugin_field_error_id(field) if error) ].compact.join(" ") %>
+<% placeholder = field.default.nil? ? nil : "Default: #{plugin_default_text(field)}" %>
+<% name = "plugin[config][#{field.name}]" %>
+
+<div class="plugin-field<%= ' plugin-field--switch' if field.kind == :boolean %>">
+  <% if field.kind == :boolean %>
+    <input type="hidden" name="<%= name %>" value="0">
+    <input type="checkbox" id="<%= id %>" name="<%= name %>" value="1" class="plugin-field__switch"
+           <%= "checked" if plugin_switch_on?(field, values) %>
+           aria-describedby="<%= describedby %>" <%= 'aria-invalid="true"'.html_safe if error %>>
+  <% end %>
+
+  <label for="<%= id %>" class="plugin-field__label">
+    <span class="plugin-field__name"><%= field.name %></span>
+    <% if field.required && field.default.nil? %><span class="tag plugin-field__required">Required</span><% end %>
+  </label>
+
+  <% case field.kind %>
+  <% when :boolean %>
+  <% when :enum %>
+    <select id="<%= id %>" name="<%= name %>" class="field-input plugin-field__control font-mono"
+            aria-describedby="<%= describedby %>" <%= 'aria-invalid="true"'.html_safe if error %>>
+      <option value=""><%= placeholder || "Not set" %></option>
+      <% Array(field.one_of).each do |option| %>
+        <option value="<%= option %>" <%= "selected" if value.to_s == option.to_s %>><%= option %></option>
+      <% end %>
+    </select>
+  <% when :list %>
+    <textarea id="<%= id %>" name="<%= name %>" rows="3" spellcheck="false" autocapitalize="off"
+              class="field-input plugin-field__control font-mono" placeholder="<%= placeholder %>"
+              aria-describedby="<%= describedby %>" <%= 'aria-invalid="true"'.html_safe if error %>><%= value %></textarea>
+  <% when :json %>
+    <div data-controller="json-field">
+      <textarea id="<%= id %>" name="<%= name %>" rows="4" spellcheck="false" autocapitalize="off"
+                class="field-input plugin-field__control font-mono" placeholder="<%= placeholder %>"
+                data-json-field-target="input" data-action="input->json-field#check"
+                aria-describedby="<%= describedby %> <%= id %>-status" <%= 'aria-invalid="true"'.html_safe if error %>><%= value %></textarea>
+      <p id="<%= id %>-status" class="plugin-field__status" role="status" data-json-field-target="status"></p>
+    </div>
+  <% else %>
+    <input type="text" id="<%= id %>" name="<%= name %>" value="<%= value %>" spellcheck="false" autocapitalize="off"
+           class="field-input plugin-field__control<%= ' font-mono tabular-nums' if %i[number integer].include?(field.kind) %>"
+           <%= %(inputmode="#{field.kind == :integer ? 'numeric' : 'decimal'}").html_safe if %i[number integer].include?(field.kind) %>
+           placeholder="<%= placeholder %>"
+           aria-describedby="<%= describedby %>" <%= 'aria-invalid="true"'.html_safe if error %>>
+  <% end %>
+
+  <% if error %>
+    <p id="<%= plugin_field_error_id(field) %>" class="field-error"><%= error.to_sentence %></p>
+  <% end %>
+  <div id="<%= plugin_field_hint_id(field) %>" class="plugin-field__hint">
+    <% if (text = field.help.presence || field.description.presence) %><p><%= text %></p><% end %>
+    <% if field.kind == :list %><p><%= t("hints.fields.plugin.list.help") %></p><% end %>
+    <% if field.kind == :json %><p><%= t("hints.fields.plugin.json.help") %></p><% end %>
+    <% if placeholder %><p class="plugin-field__default"><%= placeholder %></p><% end %>
+  </div>
+</div>
