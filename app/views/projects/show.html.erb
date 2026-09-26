@@ -5,6 +5,8 @@
     under it, its envs follow in the project's own order. Only a local
     project is edited here; one from config/connections.yml says where it is. %>
 <% local = @project.source == "local" %>
+<%# R5.7: the tracer reads what this machine synced; with nothing synced there is nothing to trace. %>
+<% traceable = @overview.any?(&:synced_at) %>
 
 <p class="page-back"><%= link_to "All connections", connections_path %></p>
 
@@ -16,10 +18,18 @@
       <%= source_badge(@project.source) %>
     </p>
   </div>
-  <% if local %>
+  <% if local || traceable %>
     <div class="flex flex-wrap items-center gap-2 shrink-0">
-      <%= link_to "Edit project details", edit_project_path(@project), class: "btn btn-text" %>
-      <%= link_to "Add environment", new_project_env_path(project_id: @project.id), class: "btn btn-primary" %>
+      <% if local %>
+        <%= link_to "Edit project details", edit_project_path(@project), class: "btn btn-text" %>
+      <% end %>
+      <%# One primary per page: a local project's is Add environment; a shared one's is reading it. %>
+      <% if traceable %>
+        <%= link_to t("hints.pages.project_show.trace"), project_trace_path(@project.key), class: "btn #{local ? "btn-secondary" : "btn-primary"}" %>
+      <% end %>
+      <% if local %>
+        <%= link_to "Add environment", new_project_env_path(project_id: @project.id), class: "btn btn-primary" %>
+      <% end %>
     </div>
   <% end %>
 </div>
@@ -38,15 +48,22 @@
 <% end %>
 
 <section aria-labelledby="project-envs-heading">
-  <h2 id="project-envs-heading" class="section-label mb-2">Environments</h2>
+  <div class="project-envs__head">
+    <h2 id="project-envs-heading" class="section-label">Environments</h2>
+    <% if traceable %>
+      <p class="project-envs__note"><%= t("hints.pages.project_show.counts_note") %></p>
+    <% end %>
+  </div>
   <% if @project.project_envs.empty? %>
     <%# Add environment is the page's primary action, just above. %>
     <%= empty_state(:project_envs) %>
   <% else %>
     <ol class="env-list">
-      <%= render partial: "connections/env_row", collection: @project.project_envs.includes(:kong_connection), as: :env %>
+      <% @overview.each do |row| %>
+        <%= render "connections/env_row", env: row.env, overview_row: row %>
+      <% end %>
     </ol>
   <% end %>
 </section>
 
-<%= render "projects/overview" %>
+<%= render "projects/notes" %>

@@ -1,8 +1,13 @@
 <%# One env of a project: which env and how careful it is, whether it can be
     written and how, then what this machine knows of its Kong node. Only rows
     Kongsole owns (local) can be edited or removed here. %>
+<%# R5.7: the project page passes `overview_row` (ProjectOverview::Row) -- the
+    row then adds what this machine last synced: counts, the sync time, a
+    Trace link. The connections page passes nothing and stays as it was. %>
 <% connection = env.kong_connection %>
-<li class="row-card env-row<%= " env-row--empty" unless connection %>" data-env-name="<%= env.name %>">
+<% overview = local_assigns[:overview_row] %>
+<% synced = overview&.synced_at %>
+<li class="row-card env-row<%= " env-row--empty" unless connection %><%= " env-row--overview" if overview && connection %>" data-env-name="<%= env.name %>">
   <div class="env-row__body">
     <div class="env-row__id">
       <%= env_name_chip(env) %>
@@ -18,6 +23,12 @@
     <% if connection %>
       <%# One line, cut at the end: the host leads, and the full URL is in the title. %>
       <div class="env-row__url font-mono" title="<%= connection.admin_url %>"><%= connection.admin_url %></div>
+      <% if overview && connection.last_status == "unreachable" %>
+        <p class="env-row__alert">
+          <%= t(env.project.network_note.present? ? "hints.pages.project_show.unreachable_html" : "hints.pages.project_show.unreachable_no_note_html",
+                time: plan_timestamp(connection.last_connected_at) || "never") %>
+        </p>
+      <% end %>
     <% else %>
       <p class="env-row__note"><%= t("hints.pages.connections.env_without_connection") %></p>
     <% end %>
@@ -34,6 +45,10 @@
 
   <div class="env-row__actions">
     <% if connection %>
+      <% if synced %>
+        <%= link_to "Trace", project_trace_path(env.project.key, env: env.name), class: "btn-sm btn-text",
+              aria: { label: "Trace a request on #{env.qualified_name}" } %>
+      <% end %>
       <%= link_to "Log in", login_connection_path(connection), class: "btn-sm btn-secondary" %>
       <% if connection.editable_in_ui? %>
         <%# R1.15: the env (rank, apply mode, colour) and its connection (URL,
@@ -60,4 +75,25 @@
       </div>
     <% end %>
   </div>
+
+  <% if overview && connection %>
+    <div class="env-row__counts">
+      <% if synced %>
+        <ul class="env-row__count-list" aria-label="In Kong, as this machine last synced it">
+          <% ProjectOverview::COUNTED.each do |type| %>
+            <li><span class="env-row__count"><%= overview.counts[type] %></span> <%= type.pluralize(overview.counts[type]) %></li>
+          <% end %>
+        </ul>
+        <p class="env-row__sync">
+          <% if synced < 1.day.ago %>
+            <%= t("hints.pages.project_show.synced_stale_html", time: plan_timestamp(synced), age: time_ago_in_words(synced).delete_prefix("about ")) %>
+          <% else %>
+            <%= t("hints.pages.project_show.synced_html", time: plan_timestamp(synced)) %>
+          <% end %>
+        </p>
+      <% else %>
+        <p class="env-row__sync env-row__sync--never"><%= t("hints.pages.project_show.never_synced") %></p>
+      <% end %>
+    </div>
+  <% end %>
 </li>

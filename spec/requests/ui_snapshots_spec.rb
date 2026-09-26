@@ -106,6 +106,55 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("project-show-local")
     end
 
+    # R5.7: counts and sync per env, and the team's notes (long Thai text), or
+    # the steps to add them. Six envs: synced, stale, unreachable, never
+    # synced, never connected, and one without a connection.
+    it "a project's overview, with notes and without (R5.7)" do
+      notes_dir = Pathname(Dir.mktmpdir)
+      stub_const("ProjectNotes::DIR", notes_dir)
+      project = create(:project, key: "payments", name: "Payments Gateway", source: "registry",
+        network_note: "Office LAN or VPN corp-dc2. uat and prod admin APIs answer only from jump host jh-02.")
+      envs = %w[dev sit uat prod dr perf].each_with_index.map do |name, index|
+        create(:project_env, project: project, name: name, position: index + 1, rank: [ 0, 1, 2, 3, 3, 1 ][index])
+      end
+      synced = { 0 => 4.hours.ago, 1 => 6.days.ago, 2 => 9.days.ago }
+      envs.first(5).each_with_index do |env, index|
+        connection = create(:kong_connection, project_env: env, admin_url: "https://kong-#{env.name}.payments.internal:8444",
+          last_status: index == 2 ? "unreachable" : (index == 4 ? nil : "ok"), last_connected_at: 2.days.ago)
+        next unless synced[index]
+
+        { "service" => 12, "route" => 31, "plugin" => 18, "consumer" => 9, "upstream" => 3, "certificate" => 4 }.each do |type, count|
+          create_list(:kong_entity, count - index, kong_connection: connection, entity_type: type, synced_at: synced[index])
+        end
+      end
+
+      get project_path(project.key)
+      snapshot!("project-overview-empty-notes")
+
+      notes_dir.join("payments.md").write(<<~MARKDOWN)
+        ## Business flow
+
+        Mobile app → `api.payments.example` → `billing` → `ledger`. ทุกการชำระเงินผ่าน `billing` ก่อน แล้ว `ledger` บันทึกบัญชีแบบ async ผ่าน queue — ถ้า ledger ช้า ผู้ใช้ยังจ่ายได้ แต่ยอดจะขึ้นช้า และทีมบัญชีจะเห็นยอดไม่ตรงจนกว่า queue จะว่าง
+
+        ## Owners
+
+        - billing, ledger — Payments Core squad
+        - Kong config (this project) — Platform team
+
+        ## Who to contact
+
+        - เวลาทำการ: channel `#payments-core`
+        - นอกเวลา: on-call rotation “payments-core” — see [the runbook](https://wiki.example/payments/runbook)
+
+        ## Before you change anything
+
+        - `rate-limiting` บน route `billing-v1` ตั้งตามสัญญากับ partner — ห้ามลดโดยไม่แจ้ง owner
+        - prod เปลี่ยนผ่าน PR + CAB เท่านั้น รอบ CAB ทุกวันอังคาร
+      MARKDOWN
+      get project_path(project.key)
+      snapshot!("project-overview")
+    end
+
     it "project and env forms (R1.9)" do
       project = create(:project, key: "payments", name: "Payments", source: "local")
       get new_project_path

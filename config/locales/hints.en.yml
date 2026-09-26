@@ -277,6 +277,13 @@ en:
       connections_filtered:
         title: "No project or environment matches this filter"
         body: "Every word has to appear in a project's name or key, or in the name of one of its environments. Try fewer words."
+      # R5.7: the project page's notes section before the team has written any.
+      project_notes:
+        title: "No team notes for this project yet"
+        body: "Notes tell the next person the business flow, who owns it, who to call and what to be careful of. They live in the Kongsole repo, so everyone sees the same ones."
+        step_create_html: "Create the file with its four headings: %{command}"
+        step_fill_html: "Fill in %{path}"
+        step_pr: "Open a pull request to the Kongsole repo. The notes show here for everyone once it is merged."
       project_envs:
         title: "No environments in this project yet"
         body: "An environment is one stage of the project, like dev or uat, served by one Kong node. Add the first one, then connect it to its Kong node."
@@ -464,6 +471,16 @@ en:
       project_show:
         local: "This project lives on this machine only. Log in to an environment from its row, or connect one to its Kong node."
         registry: "This project comes from config/connections.yml and is shared with the team. Change it there, then run bin/rails kong:load_connections."
+        # R5.7: what each env row adds on the project page (never on the connections page).
+        counts_note: "Counts are what this machine last synced from each environment"
+        synced_html: "Synced %{time}"
+        synced_stale_html: "Synced %{time} · %{age} old"
+        never_synced: "Never synced on this machine, so there is nothing to count or trace yet. Log in once to read its Kong."
+        unreachable_html: "The last login, %{time}, could not reach it from this network; see Network above."
+        unreachable_no_note_html: "The last login, %{time}, could not reach it from this machine."
+        trace: "Trace a request"
+        notes_heading: "Team notes"
+        notes_source_html: "From %{path} · change it with a pull request to the Kongsole repo"
       projects_new:
         intro: "A project made here lives on this machine only. Projects the whole team shares come from config/connections.yml."
       projects_edit:

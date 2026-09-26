@@ -1,0 +1,25 @@
+<%# R5.7: what the team wrote about this project -- business flow, owners,
+    who to call, what to be careful of -- from config/projects/<key>.md in
+    the Kongsole repo, so everyone reads the same notes and changes go
+    through a pull request. Rendered by ProjectNotes (no raw HTML, only
+    http(s)/mailto links). Empty: the three steps that add them. %>
+<section aria-labelledby="project-notes-heading" class="project-notes">
+  <div class="project-notes__head">
+    <h2 id="project-notes-heading" class="section-label"><%= t("hints.pages.project_show.notes_heading") %></h2>
+    <% if @notes_html %>
+      <p class="project-notes__source"><%= t("hints.pages.project_show.notes_source_html", path: tag.span(@notes_path, class: "font-mono")) %></p>
+    <% end %>
+  </div>
+
+  <% if @notes_html %>
+    <article class="row-card prose-notes"><%= @notes_html %></article>
+  <% else %>
+    <%= empty_state(:project_notes) do %>
+      <ol class="project-notes__steps">
+        <li><%= t("hints.empty_states.project_notes.step_create_html", command: tag.code("bin/rails kong:project_notes[#{@project.key}]")) %></li>
+        <li><%= t("hints.empty_states.project_notes.step_fill_html", path: tag.code(@notes_path)) %></li>
+        <li><%= t("hints.empty_states.project_notes.step_pr") %></li>
+      </ol>
+    <% end %>
+  <% end %>
+</section>
