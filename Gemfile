@@ -75,3 +75,6 @@ group :development do
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
 end
+
+# R5.5: team notes in config/projects/<key>.md, rendered without raw HTML
+gem "commonmarker", "~> 2.0"

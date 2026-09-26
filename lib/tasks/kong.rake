@@ -48,4 +48,17 @@ namespace :kong do
 
     stdout
   end
+
+  desc "R5.5: create config/projects/<key>.md with the four team-note headings (never overwrites)"
+  task :project_notes, [ :key ] => :environment do |_, args|
+    project = Project.find_by!(key: args[:key])
+    notes = ProjectNotes.new(project, dir: ProjectNotes::DIR)
+    if notes.path.exist?
+      puts "#{notes.relative_path} already exists -- left as it is"
+    else
+      FileUtils.mkdir_p(notes.path.dirname)
+      notes.path.write(ProjectNotes.skeleton(project))
+      puts "wrote #{notes.relative_path} -- fill it in and open a pull request"
+    end
+  end
 end
