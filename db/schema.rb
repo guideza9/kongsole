@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_25_110100) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_26_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "citext"
   enable_extension "pg_catalog.plpgsql"
@@ -162,6 +162,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_110100) do
     t.index ["tags"], name: "index_kong_entities_on_tags", using: :gin
   end
 
+  create_table "kong_schemas", force: :cascade do |t|
+    t.jsonb "body", null: false
+    t.datetime "created_at", null: false
+    t.string "digest", null: false
+    t.datetime "fetched_at", null: false
+    t.string "kind", null: false
+    t.bigint "kong_connection_id", null: false
+    t.string "kong_version"
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["kong_connection_id", "kind", "name"], name: "index_kong_schemas_on_kong_connection_id_and_kind_and_name", unique: true
+    t.index ["kong_connection_id"], name: "index_kong_schemas_on_kong_connection_id"
+  end
+
   create_table "personal_access_token_connections", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "kong_connection_id", null: false
@@ -225,6 +239,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_25_110100) do
   add_foreign_key "changesets", "kong_connections"
   add_foreign_key "kong_connections", "project_envs"
   add_foreign_key "kong_entities", "kong_connections"
+  add_foreign_key "kong_schemas", "kong_connections", on_delete: :cascade
   add_foreign_key "personal_access_token_connections", "kong_connections"
   add_foreign_key "personal_access_token_connections", "personal_access_tokens"
   add_foreign_key "project_envs", "projects"

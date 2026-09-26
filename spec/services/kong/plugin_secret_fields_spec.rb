@@ -44,9 +44,22 @@ RSpec.describe Kong::PluginSecretFields do
     expect(described_class.paths(schema)).to contain_exactly(%w[config upstreams], %w[config by_team])
   end
 
-  it "returns nil when the schema cannot be read, so the caller fails closed" do
-    client = instance_double(Kong::Client)
-    allow(client).to receive(:get).and_raise(Kong::Client::UpstreamUnavailable.new("down"))
-    expect(described_class.new.fetch(client: client, plugin_name: "aws-lambda")).to be_nil
+  describe "#fetch" do
+    let(:connection) { create(:kong_connection, admin_url: "https://kong.test", kong_version: "3.7.1") }
+    let(:client) { Kong::Client.new(connection: connection, secret: "pw") }
+
+    it "returns nil when the schema cannot be read, so the caller fails closed" do
+      stub_request(:get, "https://kong.test/schemas/plugins/aws-lambda").to_return(status: 503, body: "{}")
+      expect(described_class.new.fetch(client: client, plugin_name: "aws-lambda")).to be_nil
+    end
+
+    # R4.1: one copy of the schema per connection and Kong version, shared by
+    # every sync run and the plugin form (Kong::SchemaCache).
+    it "reads the schema through the connection's schema cache" do
+      stub = stub_request(:get, "https://kong.test/schemas/plugins/aws-lambda").to_return(status: 200, body: schema.to_json)
+      2.times { expect(described_class.new.fetch(client: client, plugin_name: "aws-lambda")).to include(%w[config aws_key]) }
+      expect(stub).to have_been_requested.once
+      expect(KongSchema.digest_for(connection: connection, kind: "plugin", name: "aws-lambda")).to be_present
+    end
   end
 end

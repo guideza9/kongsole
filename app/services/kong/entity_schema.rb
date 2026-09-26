@@ -1,15 +1,12 @@
 module Kong
   # An entity type's schema as the connection's own Kong reports it
-  # (GET /schemas/<name>), flattened into reference rows for the JSON-editor
+  # (GET /schemas/<name>, through Kong::SchemaCache), flattened into reference rows for the JSON-editor
   # forms (R3). nil when Kong cannot be read -- the page then shows hints alone.
   class EntitySchema
     def self.fields(client:, entity_type:)
       name = Kong::EntityTypes.fetch(entity_type).schema_name || "#{entity_type}s"
-      body = client.get("/schemas/#{name}").body
-      body = JSON.parse(body) if body.is_a?(String)
-      rows(body).reject { |row| Kong::EntityTypes::KONG_MANAGED_FIELDS.include?(row[:name]) }
-    rescue Kong::Client::Error, JSON::ParserError
-      nil
+      body = Kong::SchemaCache.fetch(connection: client.connection, client: client, kind: "entity", name: name)
+      body && rows(body).reject { |row| Kong::EntityTypes::KONG_MANAGED_FIELDS.include?(row[:name]) }
     end
 
     def self.rows(schema)

@@ -37,15 +37,13 @@ module Kong
       @cache = {}
     end
 
-    # nil when Kong would not say -- the caller must then fail closed.
+    # nil when Kong would not say and no copy was ever cached -- the caller
+    # must then fail closed. The schema comes through Kong::SchemaCache.
     def fetch(client:, plugin_name:)
       return @cache[plugin_name] if @cache.key?(plugin_name)
 
-      body = client.get("/schemas/plugins/#{ERB::Util.url_encode(plugin_name)}").body
-      body = JSON.parse(body) if body.is_a?(String)
-      @cache[plugin_name] = self.class.paths(body)
-    rescue Kong::Client::Error, JSON::ParserError
-      @cache[plugin_name] = nil
+      schema = Kong::SchemaCache.fetch(connection: client.connection, client: client, kind: "plugin", name: plugin_name)
+      @cache[plugin_name] = schema && self.class.paths(schema)
     end
   end
 end

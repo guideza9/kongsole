@@ -57,6 +57,9 @@ module Kong
     DEFAULT_OPEN_TIMEOUT = 3
     ROUTER_REJECTION_MESSAGE = "no Route matched with those values"
 
+    # The connection this client talks to -- Kong::SchemaCache keys its copy by it.
+    attr_reader :connection
+
     def initialize(connection:, secret: nil, timeout: DEFAULT_TIMEOUT, open_timeout: DEFAULT_OPEN_TIMEOUT)
       @connection = connection
       @secret = secret || connection.auth_secret
