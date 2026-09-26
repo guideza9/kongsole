@@ -1,0 +1,261 @@
+{
+  "kong_version": "3.7.1",
+  "router_flavor": "traditional_compatible",
+  "recorded_at": "2026-09-26T18:29:55Z",
+  "cases": [
+    {
+      "name": "v0 strip, plain",
+      "service_path": "/s",
+      "route_path": "/tv0",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j0.r5.test",
+        "path": "/tv0req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v1 strip, plain",
+      "service_path": "/s",
+      "route_path": "/tv1",
+      "strip_path": true,
+      "path_handling": "v1",
+      "preserve_host": false,
+      "request": {
+        "host": "j1.r5.test",
+        "path": "/tv1req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v0 keep, plain",
+      "service_path": "/s",
+      "route_path": "/fv0",
+      "strip_path": false,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j2.r5.test",
+        "path": "/fv0req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/fv0req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v1 keep, plain",
+      "service_path": "/s",
+      "route_path": "/fv1",
+      "strip_path": false,
+      "path_handling": "v1",
+      "preserve_host": false,
+      "request": {
+        "host": "j3.r5.test",
+        "path": "/fv1req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/fv1req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v0 strip, route slash",
+      "service_path": "/s",
+      "route_path": "/tv0/",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j4.r5.test",
+        "path": "/tv0/req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v1 strip, route slash",
+      "service_path": "/s",
+      "route_path": "/tv1/",
+      "strip_path": true,
+      "path_handling": "v1",
+      "preserve_host": false,
+      "request": {
+        "host": "j5.r5.test",
+        "path": "/tv1/req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v0 strip, service slash",
+      "service_path": "/s/",
+      "route_path": "/tv0",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j6.r5.test",
+        "path": "/tv0/req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "v1 strip, service slash",
+      "service_path": "/s/",
+      "route_path": "/tv1",
+      "strip_path": true,
+      "path_handling": "v1",
+      "preserve_host": false,
+      "request": {
+        "host": "j7.r5.test",
+        "path": "/tv1/req"
+      },
+      "got": {
+        "status": 200,
+        "path": "/s/req",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "strip, nothing left, no service path",
+      "service_path": null,
+      "route_path": "/notify",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j8.r5.test",
+        "path": "/notify"
+      },
+      "got": {
+        "status": 200,
+        "path": "/",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "strip, nothing left, service path",
+      "service_path": "/api",
+      "route_path": "/notify",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j9.r5.test",
+        "path": "/notify"
+      },
+      "got": {
+        "status": 200,
+        "path": "/api",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "keep, no service path",
+      "service_path": null,
+      "route_path": "/ledger",
+      "strip_path": false,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j10.r5.test",
+        "path": "/ledger/entries/9"
+      },
+      "got": {
+        "status": 200,
+        "path": "/ledger/entries/9",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "regex strip",
+      "service_path": "/v2",
+      "route_path": "~/reports/\\d{4}",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j11.r5.test",
+        "path": "/reports/2026/q3"
+      },
+      "got": {
+        "status": 200,
+        "path": "/v2/q3",
+        "query": {},
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "query passed on",
+      "service_path": "/api",
+      "route_path": "/billing/v1",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": false,
+      "request": {
+        "host": "j12.r5.test",
+        "path": "/billing/v1/invoices/42?status=paid"
+      },
+      "got": {
+        "status": 200,
+        "path": "/api/invoices/42",
+        "query": {
+          "status": "paid"
+        },
+        "host": "127.0.0.1:8000"
+      }
+    },
+    {
+      "name": "preserve_host on",
+      "service_path": "/api",
+      "route_path": "/ph",
+      "strip_path": true,
+      "path_handling": "v0",
+      "preserve_host": true,
+      "request": {
+        "host": "j13.r5.test",
+        "path": "/ph/x"
+      },
+      "got": {
+        "status": 200,
+        "path": "/api/x",
+        "query": {},
+        "host": "j13.r5.test"
+      }
+    }
+  ]
+}

@@ -1,0 +1,244 @@
+{
+  "kong_version": "3.7.1",
+  "router_flavor": "traditional_compatible",
+  "recorded_at": "2026-09-26T18:29:55Z",
+  "cases": [
+    {
+      "name": "longer prefix wins",
+      "request": {
+        "method": "GET",
+        "host": "o0.r5.test",
+        "path": "/api/v1/x"
+      },
+      "routes": [
+        {
+          "name": "short",
+          "paths": [
+            "/api"
+          ]
+        },
+        {
+          "name": "long",
+          "paths": [
+            "/api/v1"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "long"
+      }
+    },
+    {
+      "name": "a prefix is a plain string prefix",
+      "request": {
+        "method": "GET",
+        "host": "o1.r5.test",
+        "path": "/billingx"
+      },
+      "routes": [
+        {
+          "name": "billing",
+          "paths": [
+            "/billing"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "billing"
+      }
+    },
+    {
+      "name": "more conditions win",
+      "request": {
+        "method": "GET",
+        "host": "o2.r5.test",
+        "path": "/api"
+      },
+      "routes": [
+        {
+          "name": "paths-only",
+          "paths": [
+            "/api"
+          ]
+        },
+        {
+          "name": "with-method",
+          "paths": [
+            "/api"
+          ],
+          "methods": [
+            "GET"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "with-method"
+      }
+    },
+    {
+      "name": "regex against prefix",
+      "request": {
+        "method": "GET",
+        "host": "o3.r5.test",
+        "path": "/api/v2"
+      },
+      "routes": [
+        {
+          "name": "prefix",
+          "paths": [
+            "/api"
+          ]
+        },
+        {
+          "name": "regex",
+          "paths": [
+            "~/api/v[0-9]+$"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "regex"
+      }
+    },
+    {
+      "name": "higher regex_priority wins",
+      "request": {
+        "method": "GET",
+        "host": "o4.r5.test",
+        "path": "/api/v2"
+      },
+      "routes": [
+        {
+          "name": "rx-low",
+          "paths": [
+            "~/api/v\\d"
+          ],
+          "regex_priority": 0
+        },
+        {
+          "name": "rx-high",
+          "paths": [
+            "~/api/v2"
+          ],
+          "regex_priority": 5
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "rx-high"
+      }
+    },
+    {
+      "name": "exact host beats wildcard",
+      "request": {
+        "method": "GET",
+        "host": "api.o6.r5.test",
+        "path": "/x"
+      },
+      "routes": [
+        {
+          "name": "wild",
+          "hosts": [
+            "*.o6.r5.test"
+          ],
+          "paths": [
+            "/x"
+          ]
+        },
+        {
+          "name": "exact",
+          "hosts": [
+            "api.o6.r5.test"
+          ],
+          "paths": [
+            "/x"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "exact"
+      }
+    },
+    {
+      "name": "older route wins a tie",
+      "request": {
+        "method": "GET",
+        "host": "o6.r5.test",
+        "path": "/tie"
+      },
+      "routes": [
+        {
+          "name": "first",
+          "paths": [
+            "/tie"
+          ]
+        },
+        {
+          "name": "second",
+          "paths": [
+            "/tie"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "first"
+      }
+    },
+    {
+      "name": "a method the route does not allow",
+      "request": {
+        "method": "POST",
+        "host": "o7.r5.test",
+        "path": "/reads"
+      },
+      "routes": [
+        {
+          "name": "reads",
+          "paths": [
+            "/reads"
+          ],
+          "methods": [
+            "GET"
+          ]
+        }
+      ],
+      "got": {
+        "status": 404,
+        "route": null
+      }
+    },
+    {
+      "name": "the best of a route's paths counts",
+      "request": {
+        "method": "GET",
+        "host": "o8.r5.test",
+        "path": "/api/v1/x"
+      },
+      "routes": [
+        {
+          "name": "many-paths",
+          "paths": [
+            "/a",
+            "/api/v1"
+          ]
+        },
+        {
+          "name": "mid",
+          "paths": [
+            "/api"
+          ]
+        }
+      ],
+      "got": {
+        "status": 200,
+        "route": "many-paths"
+      }
+    }
+  ]
+}
