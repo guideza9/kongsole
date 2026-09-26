@@ -23,7 +23,7 @@ module Kong
 
         kind = kind(spec)
         Field.new(path: "config.#{name}", name: name, kind: kind, required: spec["required"] == true,
-          default: spec["default"], one_of: spec["one_of"], secret: secret?(name, spec),
+          default: default(spec), one_of: spec["one_of"], secret: secret?(name, spec),
           description: spec["description"], help: custom_help[name],
           element_kind: kind == :list ? SCALARS[spec.dig("elements", "type")] : nil)
       end
@@ -45,6 +45,28 @@ module Kong
       :json
     end
     private_class_method :kind
+
+    # A record with no default of its own gets the defaults of its fields, as
+    # Kong fills it (Kong 3.7.1's rate-limiting marks `redis` required with no
+    # default) -- nil when none of them has one.
+    def self.default(spec)
+      return spec["default"] if spec.key?("default")
+      return nil unless spec["type"] == "record"
+
+      record_defaults(spec).presence
+    end
+    private_class_method :default
+
+    def self.record_defaults(spec)
+      Array(spec["fields"]).each_with_object({}) do |field, acc|
+        name, sub = field.first
+        next unless sub.is_a?(Hash)
+
+        value = sub.key?("default") ? sub["default"] : (record_defaults(sub).presence if sub["type"] == "record")
+        acc[name] = value unless value.nil?
+      end
+    end
+    private_class_method :record_defaults
 
     def self.secret?(name, spec)
       Kong::PluginSecretFields.paths("fields" => [ { name => spec } ]).include?([ name ])

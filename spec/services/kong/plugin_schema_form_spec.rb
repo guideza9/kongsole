@@ -59,6 +59,16 @@ RSpec.describe Kong::PluginSchemaForm do
     expect(described_class.fields(self.schema).first.description).to eq("Requests per minute.")
   end
 
+  # Found on Kong 3.7.1's rate-limiting (R4.9): `redis` is a required record
+  # with no default of its own; Kong fills it from its fields' defaults.
+  it "gives a record without a default of its own the defaults of its fields" do
+    schema = { "fields" => [ { "config" => { "type" => "record", "fields" => [
+      { "redis" => { "type" => "record", "required" => true, "fields" => [
+        { "host" => { "type" => "string" } }, { "port" => { "type" => "integer", "default" => 6379 } },
+        { "tls" => { "type" => "record", "fields" => [ { "verify" => { "type" => "boolean", "default" => false } } ] } } ] } } ] } } ] }
+    expect(described_class.fields(schema).first.default).to eq("port" => 6379, "tls" => { "verify" => false })
+  end
+
   it "has no fields for a plugin without config, or a schema that is not one" do
     expect(described_class.fields({ "fields" => [ { "protocols" => { "type" => "set" } } ] })).to eq([])
     expect(described_class.fields(nil)).to eq([])

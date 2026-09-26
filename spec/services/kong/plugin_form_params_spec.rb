@@ -57,6 +57,14 @@ RSpec.describe Kong::PluginFormParams do
     expect(errors["config.codes"].first).to include("line 2")
   end
 
+  it "sends a required record left blank as its fields' defaults, not as missing" do
+    fields = Kong::PluginSchemaForm.fields({ "fields" => [ { "config" => { "type" => "record", "fields" => [
+      { "redis" => { "type" => "record", "required" => true, "fields" => [ { "port" => { "type" => "integer", "default" => 6379 } } ] } } ] } } ] })
+    attrs, errors = described_class.call(fields: fields, params: { "config" => { "redis" => "" } })
+    expect(errors).to be_empty
+    expect(attrs["config"]["redis"]).to eq("port" => 6379)
+  end
+
   it "says a required field with no default is required" do
     fields = Kong::PluginSchemaForm.fields({ "fields" => [ { "config" => { "type" => "record", "fields" => [
       { "status_code" => { "type" => "integer", "required" => true } } ] } } ] })
