@@ -64,7 +64,7 @@
 
 **Interfaces:** `Kong::SchemaCache.fetch(connection:, client:, kind:, name:) -> Hash | nil` (`kind` ∈ `"plugin"`, `"entity"`); อายุ 24 ชม. หรือจน `kong_version` เปลี่ยน; ล้มแล้วคืน cache เก่าถ้ามี ไม่งั้น nil · `KongSchema.digest_for(connection:, kind:, name:)`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -95,7 +95,7 @@ RSpec.describe Kong::SchemaCache do
 end
 ```
 
-- [ ] **Step 2:** FAIL → migration
+- [x] **Step 2:** FAIL → migration
 
 ```ruby
 class CreateKongSchemas < ActiveRecord::Migration[8.1]
@@ -115,8 +115,8 @@ class CreateKongSchemas < ActiveRecord::Migration[8.1]
 end
 ```
 
-- [ ] **Step 3:** implement → PASS · migrate/rollback/migrate · suite 0 failures
-- [ ] **Step 4:** Commit `feat(R4.1): cache Kong schemas per connection and version`
+- [x] **Step 3:** implement → PASS · migrate/rollback/migrate · suite 0 failures
+- [x] **Step 4:** Commit `feat(R4.1): cache Kong schemas per connection and version`
 
 ---
 
@@ -126,7 +126,7 @@ end
 
 **Interfaces:** `Kong::PluginCatalog.for(connection, metadata_dir: Rails.root.join("config/custom_plugins")) -> Array<Entry>`; `Entry = Struct.new(:name, :custom, :summary, :docs_url, :version, :priority, :field_help, keyword_init: true)`; bundled summary = `I18n.t("hints.plugins.#{name}.summary", default: nil)`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -163,9 +163,9 @@ RSpec.describe Kong::PluginCatalog do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement (ชื่อ plugin ต้อง match `/\A[a-z0-9][a-z0-9_-]*\z/` ก่อนเปิดไฟล์) → PASS
-- [ ] **Step 3:** สร้าง `config/kong_bundled_plugins.yml` จาก `available_on_server` ของ compose (Kong 3.7.1, GET ผ่าน ro route) — ทั้ง 43 ชื่อ พร้อมคอมเมนต์ว่าวัดจาก Kong 3.7.1 เมื่อวันที่ทำ
-- [ ] **Step 4:** Commit `feat(R4.2): plugin catalog from the node, with custom plugin metadata from the repo`
+- [x] **Step 2:** FAIL → implement (ชื่อ plugin ต้อง match `/\A[a-z0-9][a-z0-9_-]*\z/` ก่อนเปิดไฟล์) → PASS
+- [x] **Step 3:** สร้าง `config/kong_bundled_plugins.yml` จาก `available_on_server` ของ compose (Kong 3.7.1, GET ผ่าน ro route) — ทั้ง 43 ชื่อ พร้อมคอมเมนต์ว่าวัดจาก Kong 3.7.1 เมื่อวันที่ทำ
+- [x] **Step 4:** Commit `feat(R4.2): plugin catalog from the node, with custom plugin metadata from the repo`
 
 ---
 
@@ -175,7 +175,7 @@ end
 
 **Interfaces:** `Kong::PluginSchemaForm.fields(schema, custom_help: {}) -> Array<Field>`; `Field = Struct.new(:path, :name, :kind, :required, :default, :one_of, :secret, :description, :help, keyword_init: true)`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 require "rails_helper"
@@ -215,7 +215,7 @@ RSpec.describe Kong::PluginSchemaForm do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS · Commit `feat(R4.3): turn a plugin schema into form fields`
+- [x] **Step 2:** FAIL → implement → PASS · Commit `feat(R4.3): turn a plugin schema into form fields`
 
 ---
 
@@ -227,7 +227,7 @@ end
 - `Kong::PluginFormParams.call(fields:, params:) -> [attributes Hash, errors Hash]`
 - `Kong::PluginSecretPolicy.check!(attributes, secret_paths:, apply_mode:)` raise `Kong::ChangePlanner::InvalidChange` (ข้อความไม่มีค่าที่ส่งมา)
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/services/kong/plugin_form_params_spec.rb
@@ -281,8 +281,8 @@ RSpec.describe Kong::PluginSecretPolicy do
 end
 ```
 
-- [ ] **Step 2:** FAIL → implement → PASS (planner ได้ secret_paths จาก `PluginSecretFields` ผ่าน SchemaCache; PR mode อ่าน schema ด้วย GET ผ่าน ro route ได้)
-- [ ] **Step 3:** suite 0 failures · Commit `feat(R4.4): build plugin bodies from the form; no plaintext secret reaches a PR`
+- [x] **Step 2:** FAIL → implement → PASS (planner ได้ secret_paths จาก `PluginSecretFields` ผ่าน SchemaCache; PR mode อ่าน schema ด้วย GET ผ่าน ro route ได้)
+- [x] **Step 3:** suite 0 failures · Commit `feat(R4.4): build plugin bodies from the form; no plaintext secret reaches a PR`
 
 ---
 
@@ -290,7 +290,7 @@ end
 
 **ชั้น:** backend · **ต้องเสร็จก่อน:** R4.2, R4.4, R8 · **ไฟล์ที่แก้ได้:** `app/controllers/plugins_controller.rb`, `app/views/plugins/new.html.erb` (render ตัวแปรใหม่แบบขั้นต่ำ — field loop ธรรมดา), `app/services/kong/schema_mismatch.rb` (create), `spec/services/kong/schema_mismatch_spec.rb` (create), `spec/requests/plugins_spec.rb`
 
-- [ ] **Step 1: test**
+- [x] **Step 1: test**
 
 ```ruby
 # spec/requests/plugins_spec.rb — เพิ่ม
@@ -379,8 +379,8 @@ end
 ```
 (`sign_in` คือ helper เดิมของไฟล์นี้; `sign_in_to` จาก `SignInHelper` ของ R1.7; fixture มี field `api_key` แบบ `encrypted: true`)
 
-- [ ] **Step 2:** FAIL → implement → PASS · suite 0 failures
-- [ ] **Step 3:** Commit `feat(R4.5): plugin flow uses the catalog, schema form, scope picker and version check`
+- [x] **Step 2:** FAIL → implement → PASS · suite 0 failures
+- [x] **Step 3:** Commit `feat(R4.5): plugin flow uses the catalog, schema form, scope picker and version check`
 
 ---
 
@@ -390,9 +390,9 @@ end
 
 **คำสั่ง:** `/impeccable distill app/views/plugins` (ข้อ critique เดิม: catalog ค้นหาไม่ได้) → `/impeccable onboard` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน) ใน `plugins_spec.rb`: มี `<input type="search">` ที่มี label; กลุ่ม "Bundled with Kong" และ "Custom"; custom ไม่มีคำอธิบายแสดง `hints.plugins.custom_missing_description` พร้อม path `config/custom_plugins/<name>.yml`
-- [ ] **Step 2:** FAIL → ทำ UI (filter ฝั่ง client; ไม่มี JS ทุกแถวยังอยู่) · scope mark ใช้ `.scope` เดิม
-- [ ] **Step 3:** PASS · snapshot · detect · Commit `feat(R4.6): searchable plugin catalog with descriptions and scope`
+- [x] **Step 1:** assertion (ก่อน) ใน `plugins_spec.rb`: มี `<input type="search">` ที่มี label; กลุ่ม "Bundled with Kong" และ "Custom"; custom ไม่มีคำอธิบายแสดง `hints.plugins.custom_missing_description` พร้อม path `config/custom_plugins/<name>.yml`
+- [x] **Step 2:** FAIL → ทำ UI (filter ฝั่ง client; ไม่มี JS ทุกแถวยังอยู่) · scope mark ใช้ `.scope` เดิม
+- [x] **Step 3:** PASS · snapshot · detect · Commit `feat(R4.6): searchable plugin catalog with descriptions and scope`
 
 ---
 
@@ -402,10 +402,10 @@ end
 
 **คำสั่ง:** `/impeccable shape schema-driven plugin form` → `/impeccable clarify` → `/impeccable harden`
 
-- [ ] **Step 1:** assertion (ก่อน): field ลับเป็น `type="password"` `autocomplete="off"` ไม่มี `value`, มี hint ตัวอย่าง `{vault://env/<plugin>-<field>}`; PR mode มีข้อความ "must be a vault reference or decK placeholder"; เตือน mismatch แสดงชื่อ env/เวอร์ชัน; plugin บน admin path แสดง notice read-only และไม่มีปุ่ม submit; "Advanced: edit as JSON" เป็น `.disclosure`
-- [ ] **Step 2:** FAIL → ทำ UI · control ตาม kind: `:enum` select, `:boolean` checkbox, `:list` textarea, `:json` sub-editor; required มีป้าย; default แสดงเป็น placeholder + "Default: …"
-- [ ] **Step 3:** PASS · snapshot (rate-limiting, aws-lambda secret, custom plugin, PR mode, mismatch) · detect · ภาพ 390/1280
-- [ ] **Step 4:** Commit `feat(R4.7): plugin config form built from the node's schema, secrets masked`
+- [x] **Step 1:** assertion (ก่อน): field ลับเป็น `type="password"` `autocomplete="off"` ไม่มี `value`, มี hint ตัวอย่าง `{vault://env/<plugin>-<field>}`; PR mode มีข้อความ "must be a vault reference or decK placeholder"; เตือน mismatch แสดงชื่อ env/เวอร์ชัน; plugin บน admin path แสดง notice read-only และไม่มีปุ่ม submit; "Advanced: edit as JSON" เป็น `.disclosure`
+- [x] **Step 2:** FAIL → ทำ UI · control ตาม kind: `:enum` select, `:boolean` checkbox, `:list` textarea, `:json` sub-editor; required มีป้าย; default แสดงเป็น placeholder + "Default: …"
+- [x] **Step 3:** PASS · snapshot (rate-limiting, aws-lambda secret, custom plugin, PR mode, mismatch) · detect · ภาพ 390/1280
+- [x] **Step 4:** Commit `feat(R4.7): plugin config form built from the node's schema, secrets masked`
 
 ---
 
@@ -415,9 +415,9 @@ end
 
 **คำสั่ง:** `/impeccable clarify config/locales/hints.en.yml`
 
-- [ ] **Step 1:** เขียน summary 1 บรรทัดต่อ plugin (สิ่งที่ทำ + ใช้เมื่อไร) · ที่ไม่มั่นใจ → `To Edit:`
-- [ ] **Step 2:** spec (เพิ่มใน `spec/services/kong/plugin_catalog_spec.rb`): ทุกชื่อใน `kong_bundled_plugins.yml` มี `hints.plugins.<name>.summary`
-- [ ] **Step 3:** Commit `docs(R4.8): one-line descriptions for Kong's bundled plugins`
+- [x] **Step 1:** เขียน summary 1 บรรทัดต่อ plugin (สิ่งที่ทำ + ใช้เมื่อไร) · ที่ไม่มั่นใจ → `To Edit:`
+- [x] **Step 2:** spec (เพิ่มใน `spec/services/kong/plugin_catalog_spec.rb`): ทุกชื่อใน `kong_bundled_plugins.yml` มี `hints.plugins.<name>.summary`
+- [x] **Step 3:** Commit `docs(R4.8): one-line descriptions for Kong's bundled plugins`
 
 ---
 
@@ -425,16 +425,32 @@ end
 
 **ชั้น:** — · **ต้องเสร็จก่อน:** R4.1–R4.8
 
-- [ ] `local/dev` (rw): catalog แสดง 43 plugin, ค้นหา "rate" เจอ rate-limiting; สร้าง rate-limiting ระดับ service ด้วยฟอร์ม → review → apply → `curl` เกิน limit ได้ 429
-- [ ] สร้าง aws-lambda ด้วย `aws_secret` plaintext (direct) → plan review และ read-model ไม่มีค่า (`grep` DB) → ลบ plugin
-- [ ] `local/uat` (pr): plugin ที่มี secret plaintext → ถูกปฏิเสธ; ด้วย `{vault://env/…}` → เข้า changeset; preview YAML มี reference ไม่มี plaintext
-- [ ] เปิด config ของ plugin บน admin route → read-only
-- [ ] custom plugin: เพิ่ม `config/custom_plugins/<name>.yml` จำลอง (ไม่ต้องติดตั้งใน Kong) → ยืนยันด้วย spec แทน (บันทึกว่าไม่มี custom plugin ใน compose)
-- [ ] ภาพหน้าจอ
+- [x] `local/dev` (rw): catalog แสดง **43** plugin, ค้นหา "rate" → rate-limiting + response-ratelimiting ("2 of 43 shown"), "zzzz" → บรรทัด none ·
+  สร้าง rate-limiting (`minute=3`) บน service `payments-api` ด้วยฟอร์ม → review (plan #78) → apply → proxy `/payments/api` ได้ 3 ครั้ง แล้ว **429**
+  (`RateLimit-Limit: 3`, `X-RateLimit-Remaining-Minute: 0`)
+  · **เจอบั๊กจริง (แก้แล้ว `c4d586b`):** schema จริงของ rate-limiting มี `config.redis` เป็น record `required` ที่ไม่มี default ของตัวเอง →
+  ฟอร์มตอบ "is required" ทุกครั้ง · แก้: default ของ record = default ของ field ข้างใน (อย่างที่ Kong เติมเอง)
+- [x] aws-lambda ด้วย `aws_secret` plaintext (direct, plan #79) → apply ได้ · read-model: `aws_secret = "[REDACTED]"` · audit ไม่มีค่า ·
+  **แต่ plan review แสดงค่า และ `change_plans.after` (#79) เก็บ plaintext** (+ SQL log ของ development) — คืองานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน"
+  (roadmap, ตัดสิน 2026-09-25: หยุดถามก่อนทำ) · ลบ plugin ทั้งสองผ่านหน้า entity → plan #80, #81 → apply · Kong ไม่มี plugin ทดสอบเหลือ
+- [x] `local/uat` (pr): aws-lambda ที่ `aws_secret` plaintext → **ถูกปฏิเสธ** (422, "config.aws_secret: a secret can't go into git as plain text…", หน้าไม่มีค่า) ·
+  ด้วย `{vault://env/…}` → เข้า changeset #4 (item #82) · preview ทั้ง changeset render ไม่ได้เพราะรายการของเจ้าของงาน (`auth-api` ไม่อยู่ใน git — ข้อจำกัดของ R8) ·
+  render เฉพาะ item #82 ด้วย renderer ตัวเดียวกัน: YAML มี `aws_secret: "{vault://env/aws-lambda-aws-secret}"`, ไม่มี plaintext, มี `managed-by-kongctl`, CI gate ผ่าน ·
+  เอา item #82 ออกด้วยปุ่ม Remove แล้ว (cancelled; รายการของเจ้าของงานไม่แตะ)
+  · **เจอบั๊กจริง (แก้แล้ว `57b2c58`):** Kong 3.7.1 ตอบ schema เดียวกันต่างกันระหว่าง node (`protocols.elements` มี/ไม่มี `len_min`/`required`) →
+  เตือน "Schema differs on dev (Kong 3.7.1)" ทั้งที่เป็น cluster เดียวกัน · แก้: digest ของ plugin คิดจาก `config` เท่านั้น · ตรวจซ้ำแล้วไม่เตือน
+- [x] เปิด config ของ rate-limiting บน route `admin-api-rw` → notice "This scope is Kongsole's own way into Kong … read-only", ไม่มีปุ่ม submit
+- [x] custom plugin: ไม่มี custom plugin ใน compose → ยืนยันด้วย spec (`plugin_catalog_spec`, snapshot `plugins-config-custom` จาก `spec/fixtures/custom_plugins/team-auth.yml`)
+- [x] ภาพหน้าจอ 390/1280 จากแอปจริง (Edge + playwright-core): `tmp/shots/r49-*` (catalog, filtered, rate-limiting form/review, aws-lambda form/review,
+  admin-route-readonly, uat-plaintext-refused, uat-changeset, uat-preview) + snapshot `tmp/shots/r46-*`, `r47-*`
 
 ## เกณฑ์ปิดงาน R4
 
-- [ ] เกณฑ์ใน `R4-plugins.md` (ฉบับแก้ §C5) ครบ พร้อมหลักฐาน
-- [ ] migration `kong_schemas` up/down ผ่าน
-- [ ] `bundle exec rspec` 0 failures · detect ไม่เพิ่ม · `hints:todo` รายงาน
-- [ ] ไม่มีค่าลับของ plugin ใน read-model / plan / audit / YAML / response ของ MCP (`kong_plan` ของ plugin ที่มี secret คืน `[REDACTED]`)
+- [ ] เกณฑ์ใน `R4-plugins.md` (ฉบับแก้ §C5) ครบ พร้อมหลักฐาน — ครบทุกข้อ **ยกเว้น** "ค่าลับ … ไม่แสดงกลับใน UI หรือ MCP" (ดูข้อสุดท้าย)
+- [x] migration `kong_schemas` up/down ผ่าน (R4.1: migrate → rollback STEP=1 → migrate บน DB dev)
+- [x] `bundle exec rspec` **1317 examples, 0 failures** · vitest 31/31 · `log_filtering_spec` ผ่าน · `grep "Basic " log/test.log` = fixture `"Basic abc"` เท่านั้น ·
+  detect: หน้าเดิมไม่เพิ่ม (catalog 0, config 2 เท่าเดิม); หน้าใหม่มีแต่ชนิดที่มีอยู่แล้ว (`.scope` mark, panel ใน `<details>` ที่ปิด, `side-tab` ของ uat) ·
+  `hints:todo` = 5 (ของ R3 ทั้งหมด, ไม่มีของ R4)
+- [ ] ไม่มีค่าลับของ plugin ใน read-model / plan / audit / YAML / response ของ MCP — **read-model ✓ · audit ✓ · YAML ✓ (PR mode ปฏิเสธ plaintext) ·
+  plan ✗ (`change_plans.after`/`diff` เก็บ plaintext ใน direct mode และหน้า review แสดง) · MCP: create ไม่คืนค่า ✓ แต่ update คืน `diff` ที่มีค่า ✗** —
+  ตรงกับงานต่อที่รอ "Secret ของ plugin ในเส้นทางเขียน" ที่เจ้าของงานให้หยุดถามก่อนทำ → **รอเจ้าของงานตัดสิน**
