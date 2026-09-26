@@ -1,0 +1,20 @@
+<% content_for :title, "Trace a request" %>
+<p class="page-back"><%= link_to @project.name, project_path(@project.key) %></p>
+<h1 class="page-title">Trace a request</h1>
+<%= form_with url: project_trace_path(@project.key), method: :get, local: true do |f| %>
+  <%= f.select :env, @trace_envs.map { |row| [ row.env.name, row.env.name, { disabled: row.synced_at.nil? } ] }, selected: @trace_form.env %>
+  <%= f.select :method, RouteForm::METHODS, selected: @trace_form.http_method %>
+  <%= f.text_field :host, value: @trace_form.host %>
+  <%= f.text_field :path, value: @trace_form.path %>
+  <%= f.submit "Trace" %>
+<% end %>
+<% @trace_errors&.full_messages&.each do |message| %><p><%= message %></p><% end %>
+<% if @trace %>
+  <% if @trace.match.route %>
+    <p>Route: <%= @trace.match.route.name %></p>
+    <ol><% @trace.steps.each do |step| %><li><%= step.plugin.name %> (<%= step.scope %>)</li><% end %></ol>
+    <% if @trace.forwarded&.service_effect %><p>Service: <%= @trace.match.service.name %> — <%= @trace.forwarded.service_effect.url %></p><% end %>
+  <% else %>
+    <p>Kong would answer 404 — no route matched.</p>
+  <% end %>
+<% end %>

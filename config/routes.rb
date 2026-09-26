@@ -12,6 +12,8 @@ Rails.application.routes.draw do
   get "health" => "health#show", as: :health
 
   resources :projects, param: :key, only: %i[show new create edit update]
+  # R5.6: the request tracer -- read-model only, no login.
+  get "projects/:key/trace" => "project_traces#show", as: :project_trace
   resources :project_envs, only: %i[new create edit update destroy]
   resources :connections do
     member do

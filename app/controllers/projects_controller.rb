@@ -7,7 +7,13 @@ class ProjectsController < ApplicationController
   before_action :set_project, only: %i[show edit update]
   before_action :refuse_registry_project, only: %i[edit update]
 
+  # R5.6: the overview -- counts and sync per env, and the team's notes --
+  # from this machine's read-model and repo; still no login, no Kong call.
   def show
+    @overview = ProjectOverview.new(@project).rows
+    notes = ProjectNotes.new(@project, dir: ProjectNotes::DIR)
+    @notes_html = notes.html
+    @notes_path = notes.relative_path
   end
 
   def new
