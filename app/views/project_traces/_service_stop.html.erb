@@ -24,7 +24,10 @@
       <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.no_service_title") %></h2>
       <p class="trace-stop__text"><%= t("hints.pages.project_trace.no_service_body") %></p>
     <% else %>
-      <h2 class="trace-stop__title"><%= t("hints.pages.project_trace.service_title_html", name: tag.span(match.service.name, class: "trace-stop__name")) %></h2>
+      <h2 class="trace-stop__title">
+        <%= t("hints.pages.project_trace.service_title_html", name: tag.span(match.service.name, class: "trace-stop__name")) %>
+        <% if match.service.is_admin_path? %><span class="tag">admin path</span><% end %>
+      </h2>
       <div class="trace-box">
         <% if service.not_forwarded %>
           <p class="trace-box__final trace-box__final--stop">Not forwarded: Kong answers <%= service.not_forwarded %></p>
@@ -46,11 +49,16 @@
             </dd>
             <dt>Adds</dt>
             <dd>
-              <% if service.added_path %>
-                <span class="trace-seg trace-seg--added" title="Added by the service"><%= service.added_path %></span><span class="trace-seg trace-seg--kept" title="What the route left"><%= forwarded.route_effect.kept.presence || "/" %></span>
+              <%# ForwardedRequest#path_parts: the two add up to the path in the URL above. %>
+              <% added, left = service.path_parts %>
+              <% if left.blank? %>
+                <span class="trace-seg trace-seg--added" title="The path Kong sends"><%= added %></span>
+                <span class="trace-box__why">nothing was left after the route, so the service gets its own path</span>
+              <% elsif added.present? %>
+                <span class="trace-seg trace-seg--added" title="Added by the service"><%= added %></span><span class="trace-seg trace-seg--kept" title="What the route left"><%= left %></span>
                 <span class="trace-box__why">the service's path goes in front of what the route left</span>
               <% else %>
-                nothing: <span class="trace-seg trace-seg--kept" title="What the route left"><%= forwarded.route_effect.kept.presence || "/" %></span> arrives as the route left it
+                nothing: <span class="trace-seg trace-seg--kept" title="What the route left"><%= left %></span> arrives as the route left it
               <% end %>
             </dd>
             <% if service.protocol == "https" %>

@@ -10,7 +10,7 @@
         <summary><%= t("hints.pages.project_trace.lost") %> <span><%= pluralize(match.losers.size, "route") %></span></summary>
         <ul class="disclosure__body trace-folds__list">
           <% match.losers.each do |loser| %>
-            <li><strong><%= loser[:route].name %></strong> <%= render "entities/route_match", match: route_match(loser[:route]) %><span class="trace-folds__why"><%= loser[:reason] %></span></li>
+            <li><strong><%= loser[:route].name %></strong><% if loser[:route].is_admin_path? %> <span class="tag">admin path</span><% end %> <%= render "entities/route_match", match: route_match(loser[:route]) %><span class="trace-folds__why"><%= loser[:reason] %></span></li>
           <% end %>
         </ul>
       </details>
@@ -30,7 +30,7 @@
         <summary><%= t("hints.pages.project_trace.skipped") %> <span><%= pluralize(match.skipped.size, "route") %></span></summary>
         <ul class="disclosure__body trace-folds__list">
           <% match.skipped.each do |skipped| %>
-            <li><strong><%= skipped[:route].name %></strong> <span class="trace-folds__why"><%= skipped[:reason] %></span></li>
+            <li><strong><%= skipped[:route].name %></strong><% if skipped[:route].is_admin_path? %> <span class="tag">admin path</span><% end %> <span class="trace-folds__why"><%= skipped[:reason] %></span></li>
           <% end %>
         </ul>
       </details>

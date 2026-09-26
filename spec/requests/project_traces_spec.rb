@@ -71,4 +71,53 @@ RSpec.describe "Project trace", type: :request do
     get project_trace_path(project.key), params: { env: "dev", host: "api.example.com", path: "/billing/v1/x", method: "GET" }
     expect(Nokogiri::HTML(response.body).text.squish).to include("Not forwarded", "503", "Billing is under maintenance")
   end
+
+  describe "final review fixes" do
+    def trace_page(host: "api.example.com", path:)
+      get project_trace_path(project.key), params: { env: "dev", host: host, path: path, method: "GET" }
+      Nokogiri::HTML(response.body)
+    end
+
+    it "marks the admin path wherever it appears: a route that lost, and the service" do
+      KongEntity.where(entity_type: "service").update_all(is_admin_path: true)
+      service = KongEntity.find_by!(entity_type: "service")
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "billing-all", parent_type: "service",
+        parent_kong_id: service.kong_id, is_admin_path: true,
+        data: { "protocols" => %w[http https], "paths" => %w[/billing], "hosts" => [], "methods" => [] })
+
+      page = trace_page(path: "/billing/v1/x")
+
+      expect(page.at_css(".trace-folds").text).to include("billing-all", "admin path")
+      expect(page.at_css('[data-stop="service"]').text).to include("admin path")
+    end
+
+    it "shows the Host header value the service gets" do
+      page = trace_page(path: "/billing/v1/x")
+      expect(page.at_css('[data-stop="route"]').text.squish).to include("billing.internal:8080")
+    end
+
+    it "draws the service's part and the route's part so they add up to the URL" do
+      service = KongEntity.find_by!(entity_type: "service")
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "tv", parent_type: "service",
+        parent_kong_id: service.kong_id,
+        data: { "protocols" => %w[http https], "paths" => %w[/tv0/], "hosts" => [], "methods" => [], "strip_path" => true })
+
+      stop = trace_page(path: "/tv0/req").at_css('[data-stop="service"]')
+
+      expect(stop.css(".trace-seg").map(&:text)).to eq(%w[/api /req])
+      expect(stop.text).to include("http://billing.internal:8080/api/req")
+    end
+
+    it "says strip_path is on when it is, even for a route that names no path" do
+      service = KongEntity.find_by!(entity_type: "service")
+      create(:kong_entity, kong_connection: connection, entity_type: "route", name: "whole-host", parent_type: "service",
+        parent_kong_id: service.kong_id,
+        data: { "protocols" => %w[http https], "paths" => [], "hosts" => %w[other.example.com], "methods" => [], "strip_path" => true })
+
+      stop = trace_page(host: "other.example.com", path: "/x").at_css('[data-stop="route"]').text
+
+      expect(stop).to include("strip_path on")
+      expect(stop).not_to include("strip_path off")
+    end
+  end
 end

@@ -28,9 +28,12 @@
           <dl class="trace-box__rows">
             <dt>Path</dt>
             <dd>
-              <% if effect.removed.present? %>
+              <% if effect.strip_path && effect.removed.present? %>
                 <span class="trace-seg trace-seg--cut" title="Removed by the route"><%= effect.removed %></span><span class="trace-seg trace-seg--kept" title="Kept"><%= effect.kept.presence || "(nothing left)" %></span>
                 <span class="trace-box__why">strip_path on: the route removes the part it matched</span>
+              <% elsif effect.strip_path %>
+                <span class="trace-seg trace-seg--kept" title="Kept"><%= effect.kept %></span>
+                <span class="trace-box__why">strip_path on, but the route names no path, so nothing is removed</span>
               <% else %>
                 <span class="trace-seg trace-seg--kept" title="Kept"><%= effect.kept %></span>
                 <span class="trace-box__why">strip_path off: kept as sent</span>
@@ -42,9 +45,11 @@
             <dt>Host header</dt>
             <dd>
               <% if effect.preserve_host %>
-                <code><%= effect.host_header %></code> <span class="trace-box__why">preserve_host on: the client's host goes through</span>
+                <code><%= effect.host_header %></code> <span class="trace-box__why">preserve_host on: the client's host goes through as sent</span>
+              <% elsif effect.host_header %>
+                <code><%= effect.host_header %></code> <span class="trace-box__why">preserve_host off: the service's host</span>
               <% else %>
-                set to the service's host <span class="trace-box__why">(preserve_host off)</span>
+                <span class="trace-box__why">preserve_host off; the route has no service to take a host from</span>
               <% end %>
             </dd>
           </dl>
