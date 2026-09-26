@@ -1,0 +1,14 @@
+{
+  "fields": [
+    { "protocols": { "type": "set", "elements": { "type": "string", "one_of": ["grpc", "grpcs", "http", "https"] }, "default": ["grpc", "grpcs", "http", "https"], "required": true } },
+    { "config": { "type": "record", "fields": [
+      { "minute": { "type": "number", "description": "Requests per minute." } },
+      { "policy": { "type": "string", "default": "local", "one_of": ["local", "cluster", "redis"] } },
+      { "hide_client_headers": { "type": "boolean", "default": false, "required": true } },
+      { "header_name": { "type": "string", "len_min": 1 } },
+      { "allowed": { "type": "set", "elements": { "type": "string" } } },
+      { "redis": { "type": "record", "fields": [ { "password": { "type": "string", "referenceable": true } } ] } },
+      { "api_key": { "type": "string", "encrypted": true, "referenceable": true } }
+    ] } }
+  ]
+}

@@ -59,6 +59,7 @@ module Kong
       refuse_admin_path_in_changeset! if pr_mode?
 
       before = @operation == "create" ? {} : fetch_current
+      check_plugin_secrets!(before)
 
       if @actor_kind == "agent" && @operation == "delete"
         Kong::ChangeGuardrails.check_delete_confirmation!(
@@ -76,6 +77,18 @@ module Kong
 
     def pr_mode?
       @connection.apply_mode == "pr"
+    end
+
+    # R4.4: a PR-mode plugin goes into git, so its schema-marked secrets must
+    # be references (Kong::PluginSecretPolicy). Checked here so the form, the
+    # JSON editor and MCP all meet it. The schema is a GET, which PR mode's
+    # read-only route allows; direct mode needs no read.
+    def check_plugin_secrets!(before)
+      return unless @entity_type == "plugin" && pr_mode? && %w[create update].include?(@operation)
+
+      plugin = { "name" => before["name"] }.compact.merge(@attributes)
+      secret_paths = Kong::PluginSecretFields.new.fetch(client: @client, plugin_name: plugin["name"].to_s)
+      Kong::PluginSecretPolicy.check!(plugin, secret_paths: secret_paths, apply_mode: @connection.apply_mode)
     end
 
     def create_plan!(before, after, **changeset_fields)

@@ -579,6 +579,45 @@ RSpec.describe Kong::ChangePlanner do
         actor_username: "alice", attributes: { "name" => name, "url" => "http://#{name}.internal" }).call
     end
 
+    # R4.4: every path into a PR-mode plugin (the form, the JSON editor, MCP)
+    # goes through the planner, so the secret policy lives here.
+    describe "plugin secrets" do
+      let(:schema) { File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")) }
+
+      def plan_plugin(operation: "create", **attributes)
+        described_class.new(connection: connection, client: client, operation: operation, entity_type: "plugin",
+          actor_username: "alice", **attributes).call
+      end
+
+      before { stub_request(:get, "https://kong.test/schemas/plugins/rate-limiting").to_return(status: 200, body: schema) }
+
+      it "refuses a plaintext secret, naming the field and not the value" do
+        expect { plan_plugin(attributes: { "name" => "rate-limiting", "config" => { "api_key" => "sk_live_1" } }) }
+          .to raise_error(described_class::InvalidChange, /config\.api_key/) { |e| expect(e.message).not_to include("sk_live_1") }
+        expect(ChangePlan.count).to eq(0)
+      end
+
+      it "takes a vault reference into the changeset" do
+        plan = plan_plugin(attributes: { "name" => "rate-limiting", "config" => { "api_key" => "{vault://env/rl-api-key}" } })
+        expect(plan.changeset).to be_present
+        expect(plan.after.dig("config", "api_key")).to eq("{vault://env/rl-api-key}")
+      end
+
+      it "checks an update against the plugin's name on Kong" do
+        plugin_id = SecureRandom.uuid
+        live = { "id" => plugin_id, "name" => "rate-limiting", "config" => { "api_key" => nil }, "updated_at" => 1 }
+        stub_request(:get, "https://kong.test/plugins/#{plugin_id}").to_return(status: 200, body: live.to_json)
+        expect { plan_plugin(operation: "update", target_kong_id: plugin_id, attributes: { "config" => { "api_key" => "plain" } }) }
+          .to raise_error(described_class::InvalidChange, /config\.api_key/)
+      end
+
+      it "refuses when Kong's schema for the plugin cannot be read" do
+        stub_request(:get, "https://kong.test/schemas/plugins/rate-limiting").to_return(status: 503, body: "{}")
+        expect { plan_plugin(attributes: { "name" => "rate-limiting", "config" => {} }) }
+          .to raise_error(described_class::InvalidChange, /schema/)
+      end
+    end
+
     it "puts every plan into the connection's open changeset, in order, and makes no write call" do
       a = plan_create("billing")
       b = plan_create("ledger")

@@ -8,7 +8,10 @@ module Kong
   # `secret` is the schema's own mark (encrypted/referenceable, on the field
   # or its values -- Kong::PluginSecretFields): the form never prefills one.
   class PluginSchemaForm
-    Field = Struct.new(:path, :name, :kind, :required, :default, :one_of, :secret, :description, :help, keyword_init: true)
+    # `element_kind` is a :list's element type (:string, :number, :integer),
+    # so the submitted lines go back to Kong typed.
+    Field = Struct.new(:path, :name, :kind, :required, :default, :one_of, :secret, :description, :help, :element_kind,
+      keyword_init: true)
 
     SCALARS = { "string" => :string, "number" => :number, "integer" => :integer, "boolean" => :boolean }.freeze
     LISTS = %w[array set].freeze
@@ -18,9 +21,11 @@ module Kong
         name, spec = field.first
         next unless spec.is_a?(Hash)
 
-        Field.new(path: "config.#{name}", name: name, kind: kind(spec), required: spec["required"] == true,
+        kind = kind(spec)
+        Field.new(path: "config.#{name}", name: name, kind: kind, required: spec["required"] == true,
           default: spec["default"], one_of: spec["one_of"], secret: secret?(name, spec),
-          description: spec["description"], help: custom_help[name])
+          description: spec["description"], help: custom_help[name],
+          element_kind: kind == :list ? SCALARS[spec.dig("elements", "type")] : nil)
       end
     end
 
