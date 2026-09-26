@@ -58,6 +58,20 @@ RSpec.describe Kong::SchemaCache do
     expect(KongSchema.where(kong_connection: connection, kind: "entity", name: "upstreams").count).to eq(1)
   end
 
+  # Found on the compose node (R4.9): Kong 3.7.1 answers the same plugin's
+  # schema with or without `len_min`/`required` on `protocols.elements`,
+  # node to node. The mismatch warning is about config, so only config counts.
+  it "digests a plugin schema by its config alone" do
+    config = { "config" => { "type" => "record", "fields" => [ { "minute" => { "type" => "number" } } ] } }
+    stub_request(:get, "https://kong.test/schemas/plugins/a").to_return(status: 200,
+      body: { fields: [ { protocols: { type: "set", elements: { type: "string" } } }, config ] }.to_json)
+    stub_request(:get, "https://kong.test/schemas/plugins/b").to_return(status: 200,
+      body: { fields: [ { protocols: { type: "set", elements: { type: "string", len_min: 1, required: true } } }, config ] }.to_json)
+    %w[a b].each { described_class.fetch(connection: connection, client: client, kind: "plugin", name: _1) }
+    expect(KongSchema.digest_for(connection: connection, kind: "plugin", name: "a"))
+      .to eq(KongSchema.digest_for(connection: connection, kind: "plugin", name: "b"))
+  end
+
   it "gives the same digest for the same schema, whatever the key order" do
     stub_request(:get, "https://kong.test/schemas/plugins/a").to_return(status: 200, body: '{"x":1,"y":2}')
     stub_request(:get, "https://kong.test/schemas/plugins/b").to_return(status: 200, body: '{"y":2,"x":1}')

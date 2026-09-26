@@ -41,10 +41,20 @@ module Kong
     def self.store(connection, kind, name, body)
       KongSchema.upsert(
         { kong_connection_id: connection.id, kind: kind, name: name, kong_version: connection.kong_version,
-          digest: KongSchema.digest_of(body), body: body, fetched_at: Time.current },
+          digest: KongSchema.digest_of(digest_source(kind, body)), body: body, fetched_at: Time.current },
         unique_by: %i[kong_connection_id kind name]
       )
     end
     private_class_method :store
+
+    # A plugin's digest covers its config only: Kong 3.7.1 answers the rest
+    # (protocols' element spec) differently node to node, and the schema
+    # mismatch warning (Kong::SchemaMismatch) is about config.
+    def self.digest_source(kind, body)
+      return body unless kind == "plugin"
+
+      Array(body["fields"]).find { |field| field.is_a?(Hash) && field.key?("config") } || body
+    end
+    private_class_method :digest_source
   end
 end
