@@ -1,0 +1,15 @@
+<%# R7.3: the starter form -- which select tags to export. R7.5 shapes it. %>
+<% errors = @export_errors.to_h[:select_tags].to_a %>
+<%= form_with url: preview_export_path, method: :post, class: "max-w-xl" do %>
+  <section class="panel p-4">
+    <label for="select_tags" class="block text-sm font-medium text-ink">Select tags</label>
+    <%= text_field_tag :select_tags, Array(@select_tags).join(", "), required: true, autocapitalize: "off", spellcheck: false,
+          class: "field-input mt-1 font-mono", aria: { describedby: errors.any? ? "error-select-tags" : nil, invalid: errors.any? || nil } %>
+    <% if errors.any? %>
+      <p id="error-select-tags" class="field-error"><%= errors.to_sentence %></p>
+    <% end %>
+  </section>
+  <div class="mt-4">
+    <%= submit_tag "Preview", name: nil, class: "btn btn-primary" %>
+  </div>
+<% end %>

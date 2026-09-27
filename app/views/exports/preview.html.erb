@@ -1,0 +1,46 @@
+<% content_for :title, "Export preview" %>
+
+<p class="page-back"><%= link_to "Export", new_export_path %></p>
+<h1 class="page-title mb-6">Export preview</h1>
+
+<% if @result.matched_nothing %>
+  <p class="text-sm">Nothing in Kong matched these select tags.</p>
+<% end %>
+
+<section class="panel p-4 mt-4">
+  <h2 class="section-label mb-3">What the file holds</h2>
+  <ul class="text-sm">
+    <% @result.summary.each do |type, count| %><li><%= type %>: <%= count %></li><% end %>
+  </ul>
+</section>
+
+<% if @result.removed.any? %>
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Removed or replaced</h2>
+    <table class="text-sm">
+      <thead><tr><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Reason</th></tr></thead>
+      <tbody>
+        <% @result.removed.each do |row| %>
+          <tr><td><%= row[:type] %></td><td><%= row[:name] %></td><td><%= row[:reason] %></td></tr>
+        <% end %>
+      </tbody>
+    </table>
+  </section>
+<% end %>
+
+<% if @result.env_placeholders.any? %>
+  <section class="panel p-4 mt-4">
+    <h2 class="section-label mb-3">Variables to set before syncing</h2>
+    <ul class="text-sm font-mono"><% @result.env_placeholders.each do |name| %><li><%= name %></li><% end %></ul>
+  </section>
+<% end %>
+
+<section class="panel p-4 mt-4">
+  <h2 class="section-label mb-3">File</h2>
+  <pre class="text-xs font-mono overflow-auto" tabindex="0"><%= @result.yaml %></pre>
+</section>
+
+<%= form_with url: export_path, method: :post, class: "mt-4", data: { turbo: false } do %>
+  <%= hidden_field_tag :select_tags, @select_tags.join(",") %>
+  <%= submit_tag "Download", name: nil, class: "btn btn-primary" %>
+<% end %>

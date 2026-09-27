@@ -55,6 +55,11 @@ Rails.application.routes.draw do
 
   resources :audit_events, only: %i[index]
 
+  # R7: decK YAML of what Kong holds under some select tags, sanitized.
+  resource :export, only: %i[new create] do
+    post :preview
+  end
+
   resources :personal_access_tokens, only: %i[index new create] do
     member { post :revoke }
   end
