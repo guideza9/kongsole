@@ -157,6 +157,60 @@ RSpec.describe Kong::DeckCli do
           "--kong-addr", anything, "--headers", anything, "--json-output"
         )
       end
+
+      # R7.1: the same network kinds as the dump, so an off-VPN diff reads as a
+      # network problem, not "decK failed".
+      it "names the network problem when Kong is out of reach" do
+        allow(Open3).to receive(:capture3).and_return([ "", "Error: dial tcp 10.0.0.1:8000: connect: connection refused", failure ])
+
+        expect { described_class.diff(file, connection: connection, secret: "pw") }
+          .to raise_error(described_class::Unreachable) { |e| expect(e.kind).to eq(:refused) }
+      end
+    end
+
+    describe ".dump" do
+      let(:connection) { build(:kong_connection, admin_url: "http://kong-admin-ro.internal:8000", auth_username: "ro-kongctl") }
+
+      it "dumps to stdout with each select tag and the read-only credential, never to a file" do
+        status = instance_double(Process::Status, success?: true)
+        expect(Open3).to receive(:capture3) do |env, *argv, **_opts|
+          expect(env).to eq({})
+          expect(argv).to include("gateway", "dump", "-o", "-", "--select-tag", "managed-by-kongctl", "--select-tag", "team-a")
+          expect(argv).to include("--kong-addr", "http://kong-admin-ro.internal:8000",
+            "--headers", "Authorization:Basic #{Base64.strict_encode64('ro-kongctl:pw')}")
+          expect(argv.join(" ")).not_to match(/--output-file\s+[^-]/)
+          [ "_format_version: \"3.0\"\n", "", status ]
+        end
+        expect(described_class.dump(connection: connection, secret: "pw", select_tags: %w[managed-by-kongctl team-a]))
+          .to start_with("_format_version")
+      end
+
+      it "never puts the credential into its error message" do
+        status = instance_double(Process::Status, success?: false)
+        allow(Open3).to receive(:capture3).and_return([ "", "Error: Authorization:Basic cm8ta29uZ2N0bDpwdw== rejected", status ])
+        expect { described_class.dump(connection: connection, secret: "pw", select_tags: %w[a]) }
+          .to raise_error(Kong::DeckCli::Error) { |e| expect(e.message).not_to include("cm8ta29uZ2N0bDpwdw==") }
+      end
+
+      it "names the network problem when this project's Kong is out of reach" do
+        status = instance_double(Process::Status, success?: false)
+        allow(Open3).to receive(:capture3).and_return([ "", "Error: dial tcp: lookup kong-a-uat.internal: no such host", status ])
+        expect { described_class.dump(connection: connection, secret: "pw", select_tags: %w[a]) }
+          .to raise_error(Kong::DeckCli::Unreachable) { |e| expect(e.kind).to eq(:dns) }
+        expect(Kong::ErrorExplanation.for(Kong::DeckCli::Unreachable.new("x", kind: :dns)).key).to eq("network_dns_failed")
+      end
+
+      it "explains a missing decK binary" do
+        allow(Open3).to receive(:capture3).and_raise(Errno::ENOENT)
+        expect { described_class.dump(connection: connection, secret: "pw", select_tags: %w[a]) }
+          .to raise_error(Kong::DeckCli::Error, /decK is not installed.*DECK_BIN/)
+      end
+
+      it "refuses to dump without a select tag -- an untagged dump is the whole of Kong" do
+        expect { described_class.dump(connection: connection, secret: "pw", select_tags: []) }
+          .to raise_error(Kong::DeckCli::Error, /select tag/)
+        expect(Open3).not_to have_received(:capture3)
+      end
     end
   end
 

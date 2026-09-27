@@ -47,6 +47,13 @@ RSpec.describe Kong::ErrorExplanation do
     expect(result.next_step).to include("NONPROD VPN")
   end
 
+  it "explains a Kong decK cannot reach by its network kind, with the network note" do
+    error = Kong::DeckCli::Unreachable.new("deck gateway dump failed", kind: :refused)
+    result = described_class.for(error, network_note: "Reachable from the NONPROD VPN only")
+    expect(result.key).to eq("network_refused")
+    expect(result.next_step).to include("NONPROD VPN")
+  end
+
   it "explains a rejected git key or token as its own problem" do
     result = described_class.for(Kong::GitClient::AuthFailed.new("Permission denied (publickey)"))
     expect(result.key).to eq("git_auth_failed")

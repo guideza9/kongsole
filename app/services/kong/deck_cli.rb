@@ -16,6 +16,17 @@ module Kong
   class DeckCli
     class Error < StandardError; end
 
+    # Kong could not be reached from this machine (R7.1): each project sits on
+    # its own network, so this reads as "join the VPN", not "decK failed".
+    class Unreachable < Error
+      attr_reader :kind
+
+      def initialize(message = nil, kind: :other)
+        super(message)
+        @kind = kind
+      end
+    end
+
     # decK substitutes `${{ env "DECK_X" }}` as TEXT before it parses the file,
     # and both commands below run on this host, so each referenced variable must
     # exist. The real private key must never be here (M5b), so each one gets
@@ -23,6 +34,9 @@ module Kong
     PLACEHOLDER_VALUE = "kongsole-validation-placeholder".freeze
     ENV_REFERENCE = /\$\{\{ env "(DECK_[A-Z0-9_]+)" \}\}/
     MAX_MESSAGE = 2000
+    NETWORK_KINDS = %i[dns refused timeout tls].freeze
+    # decK can echo the header it was given; the credential never leaves.
+    BASIC_CREDENTIAL = %r{Basic [A-Za-z0-9+/=]+}
 
     # `extra_paths` (R8.4): the env's other decK files in the same repo, read
     # alongside the rendered one as more positional state files -- decK merges
@@ -33,6 +47,15 @@ module Kong
 
     def self.diff(file_path, connection:, secret:, extra_paths: [])
       new.diff(file_path, connection: connection, secret: secret, extra_paths: extra_paths)
+    end
+
+    # R7 (CLAUDE.md rule 2's one exception): a snapshot of what Kong holds under
+    # `select_tags`, read with the read-only credential and returned as text --
+    # `-o -` writes it to stdout, so it never touches the disk before
+    # Kong::ExportSanitizer has seen it. An untagged dump is the whole of Kong,
+    # so it is refused here as well as in the sanitizer.
+    def self.dump(connection:, secret:, select_tags:)
+      new.dump(connection: connection, secret: secret, select_tags: select_tags)
     end
 
     def validate(file_path, extra_paths: [])
@@ -50,9 +73,25 @@ module Kong
         "--json-output"
       ]
       stdout, stderr, status = run(args, [ file_path, *extra_paths ])
-      raise Error, "deck gateway diff failed: #{clean(stderr)}" unless status.success?
+      raise failure("deck gateway diff failed", stderr) unless status.success?
 
       parse_diff(stdout)
+    end
+
+    def dump(connection:, secret:, select_tags:)
+      tags = Array(select_tags)
+      raise Error, "an export needs at least one select tag -- without one decK dumps the whole of Kong" if tags.empty?
+
+      args = [
+        "gateway", "dump", "-o", "-",
+        *tags.flat_map { |tag| [ "--select-tag", tag.to_s ] },
+        "--kong-addr", connection.admin_url,
+        "--headers", "Authorization:#{basic_auth(connection.auth_username, secret)}"
+      ]
+      stdout, stderr, status = run(args, [])
+      raise failure("deck gateway dump failed", stderr) unless status.success?
+
+      stdout
     end
 
     private
@@ -71,7 +110,15 @@ module Kong
     def run(args, file_paths)
       Open3.capture3(placeholder_env(file_paths), bin, *args)
     rescue Errno::ENOENT
-      raise Error, "the deck binary (#{bin}) wasn't found -- install decK or point DECK_BIN at it"
+      raise Error, "decK is not installed here: the deck binary (#{bin}) wasn't found -- install decK or point DECK_BIN at it"
+    end
+
+    # An unreachable Kong gets its network kind, so the explanation can say
+    # which network problem it is (Kong::ErrorExplanation).
+    def failure(prefix, stderr)
+      message = "#{prefix}: #{clean(stderr)}"
+      kind = Kong::NetworkFailure.classify_text(stderr)
+      NETWORK_KINDS.include?(kind) ? Unreachable.new(message, kind: kind) : Error.new(message)
     end
 
     # Every file decK reads (the rendered one and the env's extra files) may
@@ -86,7 +133,7 @@ module Kong
     # decK's own message is what an operator needs; a pasted private key is
     # never allowed through (M5b), and a runaway message is cut.
     def clean(stderr)
-      Kong::CertificateKeyPolicy.scrub(stderr).strip.truncate(MAX_MESSAGE)
+      Kong::CertificateKeyPolicy.scrub(stderr).gsub(BASIC_CREDENTIAL, "Basic [credential removed]").strip.truncate(MAX_MESSAGE)
     end
 
     def basic_auth(username, secret)
