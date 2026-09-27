@@ -1,46 +1,115 @@
+<%# R7.5: the export before it downloads. Reading order follows the changeset
+    review (UI-DESIGN.md, Review page): title -> the tags, editable -> summary
+    strip (source, tags, what the file holds, variables to set) -> the sync
+    warning, always -> what was removed or replaced -> the variables to copy ->
+    the file itself -> the sticky Download bar. The download is the same bytes
+    as the YAML shown here: ExportsController#create re-runs the same export. %>
 <% content_for :title, "Export preview" %>
+<% result = @result %>
+<% tags = @select_tags %>
+<% tags_text = tags.join(", ") %>
+<% env_name = env_display_name(current_connection) %>
+<% lines = result.yaml.lines.map(&:chomp) %>
+<% entity_total = result.summary.values.sum %>
+<% vars = result.env_placeholders %>
 
 <p class="page-back"><%= link_to "Export", new_export_path %></p>
-<h1 class="page-title mb-6">Export preview</h1>
+<% lede = page_lede("hints.pages.export_preview.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Export preview</h1>
+<% if lede %><p class="text-sm mb-5 text-ink-soft max-w-2xl"><%= lede %></p><% end %>
 
-<% if @result.matched_nothing %>
-  <p class="text-sm">Nothing in Kong matched these select tags.</p>
-<% end %>
+<div class="grid grid-cols-[minmax(0,1fr)] gap-5">
+  <%= render "form", again: true %>
 
-<section class="panel p-4 mt-4">
-  <h2 class="section-label mb-3">What the file holds</h2>
-  <ul class="text-sm">
-    <% @result.summary.each do |type, count| %><li><%= type %>: <%= count %></li><% end %>
-  </ul>
-</section>
+  <dl class="plan-summary" aria-label="Export summary">
+    <div class="plan-summary__cell">
+      <dt>Source</dt>
+      <dd class="plan-summary__value"><%= env_badge(current_connection) %></dd>
+      <dd class="plan-summary__note">Read with your credential, read-only</dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Select tags</dt>
+      <dd class="plan-summary__value export-tags"><% tags.each do |tag| %><code class="font-mono"><%= tag %></code><% end %></dd>
+      <dd class="plan-summary__note">An entity needs every one</dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>The file holds</dt>
+      <dd class="plan-summary__value<%= " is-danger" if result.matched_nothing %>">
+        <span class="plan-summary__num"><%= entity_total %></span> <%= entity_total == 1 ? "entity" : "entities" %>
+      </dd>
+      <dd class="plan-summary__note"><%= result.matched_nothing ? "Nothing matched" : result.summary.map { |type, count| "#{count} #{type.pluralize(count)}" }.join(" · ") %></dd>
+    </div>
+    <div class="plan-summary__cell">
+      <dt>Variables</dt>
+      <dd class="plan-summary__value"><span class="plan-summary__num"><%= vars.size %></span> to set</dd>
+      <dd class="plan-summary__note"><%= vars.any? ? "Before a sync, on the machine that runs it" : "No secret needed a placeholder" %></dd>
+    </div>
+  </dl>
 
-<% if @result.removed.any? %>
-  <section class="panel p-4 mt-4">
-    <h2 class="section-label mb-3">Removed or replaced</h2>
-    <table class="text-sm">
-      <thead><tr><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Reason</th></tr></thead>
-      <tbody>
-        <% @result.removed.each do |row| %>
-          <tr><td><%= row[:type] %></td><td><%= row[:name] %></td><td><%= row[:reason] %></td></tr>
-        <% end %>
-      </tbody>
-    </table>
+  <% if result.matched_nothing %>
+    <%= risk_notice(:export_matched_nothing, tone: :danger, env: current_connection.name, tags: tags_text) %>
+  <% else %>
+    <%= risk_notice(:export_sync, tags: tags_text) %>
+  <% end %>
+
+  <% if result.removed.any? %>
+    <section class="panel" aria-labelledby="export-removed-heading">
+      <h2 id="export-removed-heading" class="section-label px-4 pt-3 pb-2">Removed or replaced</h2>
+      <div class="export-removed-wrap">
+        <table class="export-removed">
+          <thead>
+            <tr><th scope="col">Type</th><th scope="col">Name</th><th scope="col">Why</th></tr>
+          </thead>
+          <tbody>
+            <% result.removed.each do |row| %>
+              <tr class="export-removed__row--<%= row[:reason] %>">
+                <td><%= row[:type].to_s.humanize(capitalize: false) %></td>
+                <td class="export-removed__name font-mono"><%= row[:name] %></td>
+                <td><%= t("hints.pages.export_preview.reasons.#{row[:reason]}", default: row[:reason].to_s.humanize) %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% end %>
+
+  <% if vars.any? %>
+    <section class="panel p-4" aria-labelledby="export-vars-heading"
+             data-controller="copy" data-copy-done-value="Variable names copied." data-copy-failed-value="Could not copy -- the names are selected; copy them with your keyboard.">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 id="export-vars-heading" class="section-label">Variables to set before a sync</h2>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-ink-soft" role="status" data-copy-target="status"></span>
+          <button type="button" class="btn-sm btn-secondary" data-action="copy#copy">Copy names</button>
+        </div>
+      </div>
+      <p class="text-xs text-ink-soft mt-1 max-w-2xl">decK reads each one from the environment when it loads the file; a missing one stops the sync.</p>
+      <pre class="export-vars font-mono text-xs mt-3" tabindex="0" aria-label="Variable names" data-copy-target="source"><%= vars.join("\n") %></pre>
+    </section>
+  <% end %>
+
+  <% if result.matched_nothing %>
+    <%= empty_state(:export, env: current_connection.name, tags: tags_text) %>
+  <% end %>
+
+  <section class="panel" aria-labelledby="export-yaml-heading">
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pt-3 pb-2">
+      <h2 id="export-yaml-heading" class="section-label">File</h2>
+      <span class="text-xs text-ink-soft"><%= pluralize(lines.size, "line") %> · <%= number_to_human_size(result.yaml.bytesize) %></span>
+    </div>
+    <%# One block per line so CSS can number them; no newline between the spans or the <pre> would print blank lines. %>
+    <pre class="export-yaml" tabindex="0" aria-label="Exported decK YAML, <%= pluralize(lines.size, "line") %>"><% lines.each do |line| %><span class="export-yaml__line"><%= line.presence || " " %></span><% end %></pre>
   </section>
-<% end %>
 
-<% if @result.env_placeholders.any? %>
-  <section class="panel p-4 mt-4">
-    <h2 class="section-label mb-3">Variables to set before syncing</h2>
-    <ul class="text-sm font-mono"><% @result.env_placeholders.each do |name| %><li><%= name %></li><% end %></ul>
-  </section>
-<% end %>
-
-<section class="panel p-4 mt-4">
-  <h2 class="section-label mb-3">File</h2>
-  <pre class="text-xs font-mono overflow-auto" tabindex="0"><%= @result.yaml %></pre>
-</section>
-
-<%= form_with url: export_path, method: :post, class: "mt-4", data: { turbo: false } do %>
-  <%= hidden_field_tag :select_tags, @select_tags.join(",") %>
-  <%= submit_tag "Download", name: nil, class: "btn btn-primary" %>
-<% end %>
+  <%= form_with url: export_path, method: :post, class: "action-bar", data: { turbo: false } do %>
+    <%= hidden_field_tag :select_tags, tags.join(","), id: nil %>
+    <p class="action-bar__what">
+      <strong>Download the file above</strong>
+      <span>decK YAML from <%= env_name %> · recorded in Audit by its digest</span>
+    </p>
+    <div class="action-bar__buttons">
+      <%= submit_tag "Download", name: nil, class: "btn btn-primary" %>
+    </div>
+  <% end %>
+</div>

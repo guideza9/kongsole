@@ -314,6 +314,30 @@ RSpec.describe "UI snapshots", type: :request do
       snapshot!("plugins-new-config-scope-r46")
     end
 
+    # R7.5: the export page, its preview, one that matched nothing, and decK out of reach.
+    it "export: form, preview, matched nothing, decK error" do
+      connection.project_env.update!(select_tags: %w[managed-by-kongctl])
+      connection.update!(select_tags: %w[managed-by-kongctl])
+      sign_in
+      allow(Kong::SchemaCache).to receive(:fetch).and_return(nil)
+      allow(Kong::DeckCli).to receive(:dump).and_return(File.read(Rails.root.join("spec/fixtures/deck/export_with_secrets.yaml")))
+
+      get new_export_path
+      snapshot!("export-new")
+
+      post preview_export_path, params: { select_tags: "managed-by-kongctl, payments-team-owned-by-the-settlement-and-reconciliation-squad" }
+      snapshot!("export-preview")
+
+      allow(Kong::DeckCli).to receive(:dump).and_return("_format_version: \"3.0\"\n")
+      post preview_export_path, params: { select_tags: "no-such-tag" }
+      snapshot!("export-matched-nothing")
+
+      allow(Kong::DeckCli).to receive(:dump)
+        .and_raise(Kong::DeckCli::Unreachable.new("deck gateway dump failed: Error: dial tcp: lookup kong-a-uat.internal: no such host", kind: :dns))
+      post preview_export_path, params: { select_tags: "managed-by-kongctl" }
+      snapshot!("export-error", status: :bad_gateway)
+    end
+
     describe "plugin config form (R4.7)" do
       let(:rl_schema) { File.read(Rails.root.join("spec/fixtures/schemas/rate_limiting_like.json")) }
       let(:lambda_schema) do
@@ -487,7 +511,6 @@ RSpec.describe "UI snapshots", type: :request do
       get change_plan_path(ChangePlan.last)
       snapshot!("change-plan-route-overlap")
     end
-
   end
   # R8.9: the changeset pages in each state.
   describe "changesets" do
@@ -541,6 +564,5 @@ RSpec.describe "UI snapshots", type: :request do
       get changeset_path(changeset)
       snapshot!("changeset-submitted")
     end
-
   end
 end

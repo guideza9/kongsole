@@ -1,5 +1,10 @@
+<%# R7.5: pick the tags; the preview comes next and nothing downloads before it. %>
 <% content_for :title, "Export" %>
 
-<h1 class="page-title mb-6">Export</h1>
+<% lede = page_lede("hints.pages.export.intro") %>
+<h1 class="page-title <%= lede ? "mb-1" : "mb-6" %>">Export</h1>
+<% if lede %><p class="text-sm mb-5 text-ink-soft max-w-2xl"><%= lede %></p><% end %>
 
-<%= render "form" %>
+<div class="max-w-2xl">
+  <%= render "form" %>
+</div>

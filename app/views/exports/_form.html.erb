@@ -1,15 +1,20 @@
-<%# R7.3: the starter form -- which select tags to export. R7.5 shapes it. %>
+<%# R7.5: which select tags to export. On the export page it is the whole
+    form; on the preview it sits above the result so the tags can be changed
+    and previewed again without going back. A refused tag (ExportSanitizer)
+    comes back as @export_errors[:select_tags]. %>
 <% errors = @export_errors.to_h[:select_tags].to_a %>
-<%= form_with url: preview_export_path, method: :post, class: "max-w-xl" do %>
-  <section class="panel p-4">
-    <label for="select_tags" class="block text-sm font-medium text-ink">Select tags</label>
-    <%= text_field_tag :select_tags, Array(@select_tags).join(", "), required: true, autocapitalize: "off", spellcheck: false,
-          class: "field-input mt-1 font-mono", aria: { describedby: errors.any? ? "error-select-tags" : nil, invalid: errors.any? || nil } %>
-    <% if errors.any? %>
-      <p id="error-select-tags" class="field-error"><%= errors.to_sentence %></p>
-    <% end %>
-  </section>
-  <div class="mt-4">
-    <%= submit_tag "Preview", name: nil, class: "btn btn-primary" %>
+<% described = [ hint_describedby(:export, :select_tags), ("error-select-tags" if errors.any?) ].compact.join(" ") %>
+<% again = local_assigns.fetch(:again, false) %>
+<%= form_with url: preview_export_path, method: :post, class: "export-form panel p-4" do %>
+  <label for="select_tags" class="block text-sm font-medium text-ink">Select tags</label>
+  <div class="export-form__row mt-1">
+    <%= text_field_tag :select_tags, Array(@select_tags).join(", "), required: true, autocapitalize: "off", autocomplete: "off", spellcheck: false,
+          autofocus: !again && Array(@select_tags).empty?, placeholder: hint_placeholder(:export, :select_tags),
+          class: "field-input font-mono", aria: { describedby: described, invalid: errors.any? || nil } %>
+    <%= submit_tag again ? "Preview again" : "Preview", name: nil, class: again ? "btn btn-secondary" : "btn btn-primary" %>
   </div>
+  <% if errors.any? %>
+    <p id="error-select-tags" class="field-error"><%= errors.to_sentence %></p>
+  <% end %>
+  <%= field_hint(:export, :select_tags, quiet: again) %>
 <% end %>

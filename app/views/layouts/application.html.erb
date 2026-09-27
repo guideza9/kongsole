@@ -43,6 +43,8 @@
               <%= nav_link_to changeset_nav_label(current_open_changeset), changeset_nav_path(current_open_changeset),
                     current: primary_nav_current?(:changesets), class: "topbar-action hover:text-ink transition-colors" %>
             <% end %>
+            <%# R7.5: decK YAML of what this connection's Kong holds under some tags. %>
+            <%= nav_link_to "Export", new_export_path, current: controller_name == "exports", class: "topbar-action hover:text-ink transition-colors" %>
             <%= nav_link_to "Audit", audit_events_path, current: primary_nav_current?(:audit), class: "topbar-action hover:text-ink transition-colors" %>
             <%= nav_link_to "Tokens", personal_access_tokens_path, current: primary_nav_current?(:tokens), class: "topbar-action hover:text-ink transition-colors" %>
           <% end %>

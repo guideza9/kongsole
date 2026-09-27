@@ -106,7 +106,11 @@ RSpec.describe Kong::DeckCli do
         extra = Rails.root.join("tmp", "deck_cli_spec_extra.yaml")
         File.write(extra, %q(plugins: [{name: x, config: {key: "${{ env "DECK_EXTRA_ONLY" }}"}}]) + "\n")
         allow(Open3).to receive(:capture3).and_return([ { "changes" => {} }.to_json, "", success ])
-        described_class.diff(file, connection: connection, secret: "pw", extra_paths: [ extra.to_s ])
+        begin
+          described_class.diff(file, connection: connection, secret: "pw", extra_paths: [ extra.to_s ])
+        ensure
+          FileUtils.rm_f(extra)
+        end
         expect(Open3).to have_received(:capture3).with(
           { "DECK_EXTRA_ONLY" => described_class::PLACEHOLDER_VALUE }, "deck", "gateway", "diff", file.to_s, extra.to_s,
           "--kong-addr", "https://kong-uat-admin-ro.internal", "--headers", header, "--json-output"

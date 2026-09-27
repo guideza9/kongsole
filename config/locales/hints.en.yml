@@ -120,6 +120,12 @@ en:
           example: "payment, core"
         sort:
           help: "The order of the list. Updated (newest) shows the latest changes first."
+      # R7.5: the tags an export is cut by.
+      export:
+        select_tags:
+          help: "The export holds every entity Kong tags with all of these tags."
+          example: "managed-by-kongctl"
+          detail: "Separate tags with commas. kong-admin-path can't be exported: it marks Kongsole's own way into the Admin API."
       service:
         name:
           help: "How this service is known in Kong, decK files and routes. Letters, digits and . _ ~ - only."
@@ -277,6 +283,10 @@ en:
       connections_filtered:
         title: "No project or environment matches this filter"
         body: "Every word has to appear in a project's name or key, or in the name of one of its environments. Try fewer words."
+      # R7.5: an export whose tags no entity carries.
+      export:
+        title: "The file is only its header"
+        body: "No entity on %{env} matched %{tags}, so below there is nothing but _format_version and _info."
       # R5.7: the project page's notes section before the team has written any.
       project_notes:
         title: "No team notes for this project yet"
@@ -382,6 +392,14 @@ en:
       # R1.14: shown instead of the write controls (KongConnection#write_block_reason).
       # The fix differs by where the env is defined: a local env is edited in
       # the UI, a registry env only in config/connections.yml.
+      # R7.5: said on every export preview, before Download.
+      export_sync:
+        title: "Syncing this file deletes what it leaves out"
+        body: "deck gateway sync makes an env hold exactly this file under %{tags}: anything it has under these tags that the file lacks is deleted. A PR-mode env takes the file through a pull request to its project repo, never a manual sync."
+      # R7.5: the same, when the export matched nothing -- a sync would empty the tags.
+      export_matched_nothing:
+        title: "No entity on %{env} carries %{tags}"
+        body: "Syncing this file would delete everything the target env has under these tags. Check the tags for a typo first."
       # R8.9: git or Kong moved under a changeset (Kong::ChangesetDrift).
       changeset_drift:
         title: "Something changed since this changeset began"
@@ -557,6 +575,16 @@ en:
       changeset_show:
         intro: "What will go into one branch for %{env}, in the order it will be written. Remove what should not go; review the diff before you submit."
         submitted: "Pushed as one branch. Kong does not change until the pull request is approved and merged, and CI syncs it."
+      # R7.5
+      export:
+        intro: "Downloads what Kong holds under the tags you name, as decK YAML. Credentials and Kongsole's admin route are left out; private keys and plugin secrets become DECK_* variables to set before syncing."
+      export_preview:
+        intro: "The file exactly as it downloads. Nothing is stored; the download is recorded in Audit by its digest, not its content."
+        reasons:
+          admin_path: "Kongsole's admin route: left out"
+          credential: "Credential: left out"
+          private_key: "Private key: now a variable"
+          plugin_secret: "Plugin secret: now a variable"
       changeset_preview:
         intro: "The config file as it will be pushed, rendered on the latest config repo, with decK's check against Kong and the CI gate. Nothing is pushed until you submit."
       change_plan_show:
