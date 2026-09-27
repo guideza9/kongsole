@@ -38,6 +38,16 @@ RSpec.describe Kong::ConfigExport do
     expect(export(record: false).yaml).to include('function_name: "${{ env "DECK_PLUGIN_AWS_LAMBDA_FUNCTION_NAME" }}"')
   end
 
+  it "refuses to record or hand over a file that differs from the one previewed" do
+    expect { export(expected_sha256: "0" * 64) }.to raise_error(described_class::Changed) { |e|
+      expect(e.result.yaml).to include("_info")
+    }
+    expect(AuditEvent.count).to eq(0)
+    digest = Digest::SHA256.hexdigest(export(record: false).yaml)
+    expect(export(expected_sha256: digest).yaml).to be_present
+    expect(AuditEvent.count).to eq(1)
+  end
+
   it "refuses bad tags before decK runs" do
     expect { export(select_tags: %w[kong-admin-path]) }.to raise_error(Kong::ExportSanitizer::Refused)
     expect(Kong::DeckCli).not_to have_received(:dump)

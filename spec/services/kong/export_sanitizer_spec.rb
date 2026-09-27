@@ -84,10 +84,142 @@ RSpec.describe Kong::ExportSanitizer do
     expect(yaml).to include('Authorization: "${{ env "DECK_PLUGIN_HTTP_LOG_HEADERS_AUTHORIZATION" }}"')
   end
 
-  it "gives two plugins with the same secret field their own variables" do
-    result = run
-    expect(result.env_placeholders).to include("DECK_PLUGIN_AWS_LAMBDA_AWS_SECRET", "DECK_PLUGIN_AWS_LAMBDA_AWS_SECRET_2")
-    expect(result.yaml).not_to include("route-level")
+  def sanitize(doc, tags: %w[x], paths: secret_paths) = described_class.call(doc, connection: connection, select_tags: tags, secret_paths_for: paths)
+
+  # Final review I3: a variable is named after what it belongs to, so adding a
+  # plugin can never slide one plugin's secret onto another.
+  it "names each variable after its plugin's scope when one plugin kind appears more than once" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      services:
+      - name: orders
+        plugins:
+        - config: { aws_secret: service-level }
+          name: aws-lambda
+        routes:
+        - name: orders-route
+          plugins:
+          - config: { aws_secret: route-level }
+            name: aws-lambda
+    YAML
+    result = sanitize(doc)
+    expect(result.env_placeholders).to contain_exactly("DECK_PLUGIN_SERVICE_ORDERS_AWS_LAMBDA_AWS_SECRET", "DECK_PLUGIN_ROUTE_ORDERS_ROUTE_AWS_LAMBDA_AWS_SECRET")
+    expect(result.yaml).not_to include("service-level", "route-level")
+    expect(result.removed.map { _1[:name] }).to include(
+      "aws-lambda (service orders): config.aws_secret", "aws-lambda (route orders-route): config.aws_secret"
+    )
+  end
+
+  # Final review C2: the read-model names a plugin by its kind, so its admin-path
+  # plugin rows must never match a business service's plugin of the same kind.
+  it "keeps a business service's basic-auth plugin when the admin route has one too" do
+    create(:kong_entity, kong_connection: connection, entity_type: "plugin", name: "basic-auth", is_admin_path: true)
+    doc = <<~YAML
+      _format_version: "3.0"
+      services:
+      - name: payments
+        plugins:
+        - config: { hide_credentials: true }
+          name: basic-auth
+    YAML
+    result = sanitize(doc)
+    expect(result.yaml).to include("name: basic-auth")
+    expect(result.removed).to be_empty
+  end
+
+  # Final review C3: fail-closed goes inside lists of records as well.
+  it "fails closed inside a list of records on a plugin whose schema is unknown" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      plugins:
+      - config:
+          clients:
+          - client_secret: list-secret
+            id: a
+        name: team-oidc
+    YAML
+    yaml = sanitize(doc).yaml
+    expect(yaml).not_to include("list-secret")
+    expect(yaml).to include('"${{ env "DECK_PLUGIN_TEAM_OIDC_CLIENTS_1_CLIENT_SECRET" }}"', "id: a")
+  end
+
+  # Final review I1: a sync of this file deletes what it leaves out under the tags.
+  it "warns in the file itself when it leaves out admin-path entities or credentials under these tags" do
+    yaml = run.yaml
+    expect(yaml.lines.first(8).join).to include("# WARNING: 6 entities under these select_tags are left out of this file")
+  end
+
+  it "does not call an export that matched only the admin path 'matched nothing'" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      services:
+      - name: admin-api
+        tags: [kong-admin-path, x]
+    YAML
+    result = sanitize(doc)
+    expect(result.matched_nothing).to be(false)
+    expect(result.removed).to include(include(type: "service", reason: :admin_path))
+  end
+
+  # Final review I4.
+  it "replaces an upstream's health-check headers" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      upstreams:
+      - healthchecks:
+          active:
+            headers:
+              Authorization: ["Bearer probe-token"]
+            http_path: /health
+        name: orders-up
+    YAML
+    yaml = sanitize(doc).yaml
+    expect(yaml).not_to include("probe-token")
+    expect(yaml).to include("DECK_UPSTREAM_ORDERS_UP_HEALTHCHECKS_ACTIVE_HEADERS_AUTHORIZATION_1", "http_path: \"/health\"")
+  end
+
+  it "replaces a key's private JWK and PEM" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      keys:
+      - jwk: '{"kty":"RSA","d":"private-d"}'
+        kid: k1
+        name: signing
+        pem:
+          private_key: pem-private
+          public_key: pem-public
+    YAML
+    yaml = sanitize(doc).yaml
+    expect(yaml).not_to include("private-d", "pem-private")
+    expect(yaml).to include("pem-public", "kid: k1")
+  end
+
+  it "fails closed on a collection it does not know" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      custom_things:
+      - name: t
+        api_token: unknown-secret
+        size: small
+    YAML
+    yaml = sanitize(doc).yaml
+    expect(yaml).not_to include("unknown-secret")
+    expect(yaml).to include("size: small")
+  end
+
+  it "still replaces a secret-named field a plugin's schema did not mark" do
+    doc = <<~YAML
+      _format_version: "3.0"
+      plugins:
+      - config:
+          redis:
+            password: redis-pw
+          limit_by: consumer
+        name: rate-limiting
+    YAML
+    yaml = sanitize(doc, paths: ->(_) { [] }).yaml
+    expect(yaml).not_to include("redis-pw")
+    expect(yaml).to include("limit_by: consumer")
   end
 
   it "keeps a non-secret value whose name only looks secret when it is not a string" do

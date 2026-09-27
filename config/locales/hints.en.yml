@@ -396,6 +396,12 @@ en:
       export_sync:
         title: "Syncing this file deletes what it leaves out"
         body: "deck gateway sync makes an env hold exactly this file under %{tags}: anything it has under these tags that the file lacks is deleted. A PR-mode env takes the file through a pull request to its project repo, never a manual sync."
+      # R7.5 (final review I1): what never leaves Kong can still carry the tags.
+      export_left_out:
+        title:
+          one: "1 entity under these tags is left out of this file"
+          other: "%{count} entities under these tags are left out of this file"
+        body: "Kongsole's admin route and consumer credentials are never exported, yet they carry %{tags}. A sync of this file deletes them wherever they exist, the way into the Admin API included. Export by a tag they do not carry, or keep this file away from deck gateway sync."
       # R7.5: the same, when the export matched nothing -- a sync would empty the tags.
       export_matched_nothing:
         title: "No entity on %{env} carries %{tags}"

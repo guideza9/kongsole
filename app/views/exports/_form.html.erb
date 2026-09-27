@@ -5,7 +5,9 @@
 <% errors = @export_errors.to_h[:select_tags].to_a %>
 <% described = [ hint_describedby(:export, :select_tags), ("error-select-tags" if errors.any?) ].compact.join(" ") %>
 <% again = local_assigns.fetch(:again, false) %>
-<%= form_with url: preview_export_path, method: :post, class: "export-form panel p-4" do %>
+<%# data-turbo=false: the preview answers the POST with a page (200), which
+    Turbo would drop -- it only follows a redirect or shows a 4xx/5xx. %>
+<%= form_with url: preview_export_path, method: :post, class: "export-form panel p-4", data: { turbo: false } do %>
   <label for="select_tags" class="block text-sm font-medium text-ink">Select tags</label>
   <div class="export-form__row mt-1">
     <%= text_field_tag :select_tags, Array(@select_tags).join(", "), required: true, autocapitalize: "off", autocomplete: "off", spellcheck: false,

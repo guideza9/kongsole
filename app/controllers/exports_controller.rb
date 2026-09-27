@@ -26,11 +26,19 @@ class ExportsController < ApplicationController
 
   private
 
+  # The download carries the preview's digest (preview_sha256): if Kong moved
+  # in between, the new file is shown for review instead of sent.
   def run_export(record:)
     Kong::ConfigExport.call(
       connection: current_connection, secret: current_secret, select_tags: @select_tags,
-      actor_username: current_connection.auth_username, actor_operator: current_operator, record: record
+      actor_username: current_connection.auth_username, actor_operator: current_operator, record: record,
+      expected_sha256: record ? previewed_sha256 : nil
     )
+  rescue Kong::ConfigExport::Changed => e
+    @result = e.result
+    flash.now[:alert] = "Kong changed since your preview, so nothing was downloaded. This is the file as it is now: review it, then download again."
+    render :preview, status: :conflict
+    nil
   rescue Kong::ExportSanitizer::Refused => e
     @export_errors = { select_tags: [ e.message ] }
     render_form(:unprocessable_entity)
@@ -47,6 +55,11 @@ class ExportsController < ApplicationController
     @select_tags_default = Array(current_connection.select_tags)
     render :new, status: status
     nil
+  end
+
+  def previewed_sha256
+    digest = params[:preview_sha256]
+    digest.is_a?(String) && digest.match?(/\A\h{64}\z/) ? digest : nil
   end
 
   # One field, comma- or space-separated, in the order typed. Anything but a

@@ -3,7 +3,8 @@
     strip (source, tags, what the file holds, variables to set) -> the sync
     warning, always -> what was removed or replaced -> the variables to copy ->
     the file itself -> the sticky Download bar. The download is the same bytes
-    as the YAML shown here: ExportsController#create re-runs the same export. %>
+    as the YAML shown here: it carries this file's digest, and
+    ExportsController#create sends nothing if a fresh export differs. %>
 <% content_for :title, "Export preview" %>
 <% result = @result %>
 <% tags = @select_tags %>
@@ -12,6 +13,7 @@
 <% lines = result.yaml.lines.map(&:chomp) %>
 <% entity_total = result.summary.values.sum %>
 <% vars = result.env_placeholders %>
+<% left_out = result.removed.count { |row| Kong::ExportSanitizer::LEFT_OUT.include?(row[:reason]) } %>
 
 <p class="page-back"><%= link_to "Export", new_export_path %></p>
 <% lede = page_lede("hints.pages.export_preview.intro") %>
@@ -49,6 +51,11 @@
   <% if result.matched_nothing %>
     <%= risk_notice(:export_matched_nothing, tone: :danger, env: current_connection.name, tags: tags_text) %>
   <% else %>
+    <%# The admin route and credentials can carry these tags yet never leave: a
+        sync of this file deletes them where they exist (final review I1). %>
+    <% if left_out.positive? %>
+      <%= risk_notice(:export_left_out, tone: :danger, count: left_out, tags: tags_text) %>
+    <% end %>
     <%= risk_notice(:export_sync, tags: tags_text) %>
   <% end %>
 
@@ -99,11 +106,12 @@
       <span class="text-xs text-ink-soft"><%= pluralize(lines.size, "line") %> · <%= number_to_human_size(result.yaml.bytesize) %></span>
     </div>
     <%# One block per line so CSS can number them; no newline between the spans or the <pre> would print blank lines. %>
-    <pre class="export-yaml" tabindex="0" aria-label="Exported decK YAML, <%= pluralize(lines.size, "line") %>"><% lines.each do |line| %><span class="export-yaml__line"><%= line.presence || " " %></span><% end %></pre>
+    <pre class="export-yaml" tabindex="0" aria-label="Exported decK YAML, <%= pluralize(lines.size, "line") %>"><% lines.each do |line| %><span class="export-yaml__line<%= " export-yaml__line--comment" if line.start_with?("#") %>"><%= line.presence || " " %></span><% end %></pre>
   </section>
 
   <%= form_with url: export_path, method: :post, class: "action-bar", data: { turbo: false } do %>
     <%= hidden_field_tag :select_tags, tags.join(","), id: nil %>
+    <%= hidden_field_tag :preview_sha256, Digest::SHA256.hexdigest(result.yaml), id: nil %>
     <p class="action-bar__what">
       <strong>Download the file above</strong>
       <span>decK YAML from <%= env_name %> · recorded in Audit by its digest</span>

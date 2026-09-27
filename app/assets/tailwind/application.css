@@ -2673,7 +2673,7 @@ a.env-switcher__item:hover {
 }
 
 /* The header comment is what the file says about itself; it reads as such. */
-.export-yaml__line:nth-child(-n + 6) {
+.export-yaml__line--comment {
   color: var(--color-ink-soft);
 }
 

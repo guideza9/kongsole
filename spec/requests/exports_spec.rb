@@ -37,6 +37,31 @@ RSpec.describe "Export", type: :request do
     expect(event.context.to_json).not_to include("service")
   end
 
+  # Final review I2: the download is the file that was previewed, or nothing.
+  describe "a download after a preview" do
+    def previewed_digest
+      post preview_export_path, params: { select_tags: "managed-by-kongctl" }
+      Nokogiri::HTML(response.body).at_css("form[action='#{export_path}'] input[name=preview_sha256]")["value"]
+    end
+
+    it "sends the same bytes the preview showed" do
+      digest = previewed_digest
+      post export_path, params: { select_tags: "managed-by-kongctl", preview_sha256: digest }
+      expect(response.headers["Content-Disposition"]).to start_with("attachment")
+      expect(Digest::SHA256.hexdigest(response.body)).to eq(digest)
+    end
+
+    it "shows the new file instead of sending it when Kong changed since the preview" do
+      digest = previewed_digest
+      allow(Kong::DeckCli).to receive(:dump).and_return(dump.sub("orders.internal", "orders-v2.internal"))
+      post export_path, params: { select_tags: "managed-by-kongctl", preview_sha256: digest }
+      expect(response).to have_http_status(:conflict)
+      expect(response.headers["Content-Disposition"]).to be_nil
+      expect(response.body).to include("orders-v2.internal", "Kong changed since your preview")
+      expect(AuditEvent.where(operation: "export")).to be_empty
+    end
+  end
+
   it "reads several tags, comma- or space-separated, in the order given" do
     post export_path, params: { select_tags: "managed-by-kongctl, team-a" }
     expect(Kong::DeckCli).to have_received(:dump).with(hash_including(select_tags: %w[managed-by-kongctl team-a]))
@@ -94,6 +119,23 @@ RSpec.describe "Export", type: :request do
       allow(Kong::DeckCli).to receive(:dump).and_return("_format_version: \"3.0\"\n")
       post preview_export_path, params: { select_tags: "no-such-tag" }
       notice = page.css(".risk-notice").find { _1.text.include?(I18n.t("hints.risks.export_matched_nothing.title", env: connection.name, tags: "no-such-tag")) }
+      expect(notice).to be_present
+      expect(notice["class"]).to include("danger")
+    end
+
+    # Final review C1: Turbo shows nothing for a 200 answer to a POST, so the
+    # preview form is a plain browser submit.
+    it "submits the tags form outside Turbo, on the export page and on the preview" do
+      get new_export_path
+      expect(page.at_css("form[action='#{preview_export_path}']")["data-turbo"]).to eq("false")
+      post preview_export_path, params: { select_tags: "managed-by-kongctl" }
+      expect(Nokogiri::HTML(response.body).at_css("form[action='#{preview_export_path}']")["data-turbo"]).to eq("false")
+    end
+
+    # Final review I1.
+    it "says in danger tone that the file leaves out the admin route and credentials under these tags" do
+      post preview_export_path, params: { select_tags: "managed-by-kongctl" }
+      notice = page.css(".risk-notice").find { _1.text.include?(I18n.t("hints.risks.export_left_out.title", count: 6)) }
       expect(notice).to be_present
       expect(notice["class"]).to include("danger")
     end

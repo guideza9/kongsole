@@ -5,9 +5,22 @@ module Kong
   # web page and the agent API (kong_export) both come through here, so there
   # is one sanitizer for both.
   class ConfigExport
-    def self.call(connection:, secret:, select_tags:, actor_username:, actor_operator:, actor_kind: "human", record: true)
+    # Kong changed between the preview and the download: the new file is
+    # carried so it can be shown, and nothing was recorded or handed over.
+    class Changed < StandardError
+      attr_reader :result
+
+      def initialize(result)
+        super("Kong changed since the preview")
+        @result = result
+      end
+    end
+
+    def self.call(connection:, secret:, select_tags:, actor_username:, actor_operator:, actor_kind: "human", record: true,
+                  expected_sha256: nil)
       new(connection: connection, secret: secret, select_tags: select_tags).call(
-        actor_username: actor_username, actor_operator: actor_operator, actor_kind: actor_kind, record: record
+        actor_username: actor_username, actor_operator: actor_operator, actor_kind: actor_kind, record: record,
+        expected_sha256: expected_sha256
       )
     end
 
@@ -18,9 +31,12 @@ module Kong
     end
 
     # `record: false` is the preview: nothing leaves the page, so nothing is logged.
-    def call(actor_username:, actor_operator:, actor_kind:, record:)
+    # `expected_sha256` is the preview's digest: the download is that file or nothing.
+    def call(actor_username:, actor_operator:, actor_kind:, record:, expected_sha256: nil)
       text = Kong::DeckCli.dump(connection: @connection, secret: @secret, select_tags: @select_tags)
       result = Kong::ExportSanitizer.call(text, connection: @connection, select_tags: @select_tags, secret_paths_for: secret_paths_for)
+      raise Changed, result if expected_sha256 && Digest::SHA256.hexdigest(result.yaml) != expected_sha256
+
       audit(result, actor_username, actor_operator, actor_kind) if record
       result
     end
