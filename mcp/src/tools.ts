@@ -108,6 +108,34 @@ export function registerTools(server: McpServer, client: KongctlClient): void {
   );
 
   server.registerTool(
+    "kong_export",
+    {
+      title: "Export Kong config as decK YAML",
+      description:
+        "decK YAML of everything one connection's Kong tags with select_tags (deck gateway dump), after Kongsole's " +
+        "sanitizer: credentials and admin-path entities are removed, private keys and plugin secrets become " +
+        '"${{ env "DECK_..." }}" placeholders (env_placeholders lists them), and `removed` says what went and why. ' +
+        "A snapshot, not a source of truth: `deck gateway sync` of this file deletes whatever the target env holds " +
+        "under these tags and the file lacks. A PR-mode env gets it through a PR to its project repo, never a manual sync. " +
+        "matched_nothing = true means no entity carries these tags.",
+      inputSchema: {
+        connection: CONNECTION,
+        select_tags: z
+          .array(z.string())
+          .min(1)
+          .describe('At least one tag, e.g. ["managed-by-kongctl"]; kong-admin-path is refused')
+      }
+    },
+    async (params) => {
+      try {
+        return ok(await client.exportConfig(params));
+      } catch (error) {
+        return fail(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "kong_plan",
     {
       title: "Propose a Kong entity change",

@@ -45,6 +45,20 @@ describe("KongctlClient", () => {
     expect(url).toContain("limit=3");
   });
 
+  it("exportConfig sends connection and each select tag as a GET to /exports", async () => {
+    const fetchMock = stubFetch(200, { yaml: "", summary: {}, removed: [], env_placeholders: [], matched_nothing: true });
+    const client = new KongctlClient(config);
+
+    await client.exportConfig({ connection: "project-a/dev", select_tags: ["managed-by-kongctl", "team-a"] });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe("GET");
+    expect(url).toContain("/exports?");
+    expect(url).toContain("connection=project-a%2Fdev");
+    expect(url).toContain("select_tags%5B%5D=managed-by-kongctl");
+    expect(url).toContain("select_tags%5B%5D=team-a");
+  });
+
   it("planChange carries parent_kong_id in the JSON body", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 1 }) });
     vi.stubGlobal("fetch", fetchMock);

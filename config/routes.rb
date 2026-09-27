@@ -74,6 +74,7 @@ Rails.application.routes.draw do
       resources :change_plans, only: %i[create] do
         member { post :apply }
       end
+      resources :exports, only: %i[index]
     end
   end
 

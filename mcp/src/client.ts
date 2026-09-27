@@ -46,6 +46,11 @@ export interface PlanChangeParams {
   attributes?: Record<string, unknown>;
 }
 
+export interface ExportConfigParams {
+  connection: string;
+  select_tags: string[];
+}
+
 export class KongctlClient {
   constructor(private readonly config: Config) {}
 
@@ -64,6 +69,12 @@ export class KongctlClient {
       }
     }
     return this.request("GET", `/entities?${query.toString()}`);
+  }
+
+  exportConfig(params: ExportConfigParams): Promise<unknown> {
+    const query = new URLSearchParams({ connection: params.connection });
+    for (const tag of params.select_tags) query.append("select_tags[]", tag);
+    return this.request("GET", `/exports?${query.toString()}`);
   }
 
   planChange(params: PlanChangeParams): Promise<unknown> {

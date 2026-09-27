@@ -14,6 +14,13 @@ apply) lives server-side and this just relays its exact error messages.
 | `kong_search` | `GET /entities` |
 | `kong_plan` | `POST /change_plans` |
 | `kong_apply` | `POST /change_plans/:id/apply` |
+| `kong_export` | `GET /exports` |
+
+`kong_export` needs `select_tags` (at least one; `kong-admin-path` is refused)
+and returns `{ yaml, summary, removed, env_placeholders, matched_nothing }`:
+the same sanitized decK YAML as the web export page. Credentials and
+admin-path entities are removed; private keys and plugin secrets become
+`DECK_*` env placeholders.
 
 Every tool that acts on a connection takes it as `project/env` (for example
 `project-a/uat`), with no default — a bare env name like `uat` is ambiguous

@@ -221,6 +221,37 @@ describe("registerTools", () => {
     });
   });
 
+  // R7.4: the same sanitized export the web page gives, never a raw dump.
+  describe("kong_export", () => {
+    it("requires connection and at least one select tag", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+      const schema = z.object(configs.get("kong_export")!.inputSchema!);
+
+      expect(() => schema.parse({ connection: "project-a/dev", select_tags: ["managed-by-kongctl"] })).not.toThrow();
+      expect(() => schema.parse({ select_tags: ["a"] })).toThrow();
+      expect(() => schema.parse({ connection: "project-a/dev" })).toThrow();
+      expect(() => schema.parse({ connection: "project-a/dev", select_tags: [] })).toThrow();
+    });
+
+    it("calls client.exportConfig with what it was given", async () => {
+      const { server, tools } = fakeServer();
+      const exportConfig = vi.fn().mockResolvedValue({ yaml: "_format_version: '3.0'\n", summary: {}, removed: [], env_placeholders: [], matched_nothing: true });
+      registerTools(server, { exportConfig } as unknown as KongctlClient);
+
+      await tools.get("kong_export")!({ connection: "project-a/dev", select_tags: ["a", "b"] });
+
+      expect(exportConfig).toHaveBeenCalledWith({ connection: "project-a/dev", select_tags: ["a", "b"] });
+    });
+
+    it("warns, in its description, that syncing the file deletes what it lacks", () => {
+      const { server, configs } = fakeServer();
+      registerTools(server, {} as unknown as KongctlClient);
+
+      expect(configs.get("kong_export")!.description).toContain("deletes");
+    });
+  });
+
   // R1.6: connections are named project/env; a bare env name is ambiguous
   // across projects and the API refuses it, so every tool says so up front.
   describe("connection naming", () => {
@@ -230,7 +261,7 @@ describe("registerTools", () => {
 
       const withConnection = [...configs.entries()].filter(([, c]) => c.inputSchema?.connection);
       expect(withConnection.map(([name]) => name).sort()).toEqual(
-        ["kong_apply", "kong_certs_expiring", "kong_plan", "kong_search"]
+        ["kong_apply", "kong_certs_expiring", "kong_export", "kong_plan", "kong_search"]
       );
       for (const [name, config] of withConnection) {
         expect(config.inputSchema!.connection.description, name).toContain("project/env");
@@ -241,7 +272,7 @@ describe("registerTools", () => {
       const { server, configs } = fakeServer();
       registerTools(server, {} as unknown as KongctlClient);
 
-      for (const name of ["kong_search", "kong_plan", "kong_apply"]) {
+      for (const name of ["kong_search", "kong_plan", "kong_apply", "kong_export"]) {
         expect(configs.get(name)!.inputSchema!.connection.isOptional(), name).toBe(false);
       }
     });
