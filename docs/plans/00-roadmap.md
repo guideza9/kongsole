@@ -179,7 +179,7 @@ R2, R3, R5, R7, T0 ไม่มี migration
 - [x] R2 — `docs/plans/R2-create-service-route.md` (ปิด 2026-09-26: R2.1–R2.8 + final review + distill ตาม R3.7 รอบที่ 1, rspec 1240/0, vitest 31/31 — เจ้าของงานยืนยัน)
 - [ ] R4 — `docs/plans/R4-plugins.md` (R4.1–R4.10 + final review เสร็จ 2026-09-26, rspec 1339/0, vitest 31/31 · R4.10 = secret ของ plugin ใน plan ถูกปิดผนึก (ตามที่เจ้าของงานสั่ง) · รอเจ้าของงานยืนยันปิด)
 - [ ] R5 — `docs/plans/R5-project-understanding.md` (R5.0–R5.9 + final review เสร็จ 2026-09-27, rspec 1433/0 · spec `docs/superpowers/specs/2026-09-27-r5-project-understanding-design.md` + canvas ที่อนุมัติ · fixture จาก compose Kong: path_handling v1 = v0 บน traditional_compatible · รอ: สคริปต์ทดสอบ 5 นาทีของเจ้าของงาน + เจ้าของงานยืนยันปิด)
-- [ ] R7 — `docs/plans/R7-export-config.md`
+- [ ] R7 — `docs/plans/R7-export-config.md` (R7.1–R7.5 + final review เสร็จ 2026-09-27, rspec 1492/0, vitest 35/35 · final review: แก้ 3 Critical + 4 Important (preview ใต้ Turbo, plugin basic-auth/acl ถูกตัดเพราะชื่อใน read-model, secret ใน list, admin path/credential ที่ถูกตัดแต่ติด tag, download ต้องตรงกับ preview, ชื่อตัวแปรตาม scope, header ของ upstream/keys/collection ที่ไม่รู้จัก) · minor 7 ข้อบันทึกไว้ · รอ: spike `deck gateway dump` + R7.6 ตรวจ flow จริงบน compose (auto-mode ไม่อนุญาตให้ส่ง credential ro ให้ decK จาก session นี้) + ภาพ 390px บนอุปกรณ์จริง + เจ้าของงานยืนยันปิด)
 - [ ] R6 — `docs/plans/R6-traffic-dashboard.md`
 
 ## กติกาการทำงานในช่วงที่ 2 (ย้ำจาก kickoff)
